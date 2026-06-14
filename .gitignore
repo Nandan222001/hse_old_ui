@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Environment / secrets
+.env
+*.env
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Node / Frontend
+node_modules/
+FrontendNew/dist/
+FrontendNew/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Database files
+*.sqlite
+*.db
+
+# Compiled assets
+*.pyc
+*.pyd
