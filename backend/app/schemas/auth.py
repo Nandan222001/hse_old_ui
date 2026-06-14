@@ -1,0 +1,21 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
+class LoginRequest(BaseModel):
+    username: str  # accepts username or email
+    password: str
+
+
+class TokenData(BaseModel):
+    user_id: int
+    username: str
+    email: str
+    role: str
+    role_level: int
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: TokenData
