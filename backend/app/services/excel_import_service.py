@@ -438,6 +438,63 @@ SHEET_STEPS = [
 ]
 
 
+def import_excel_stream(file_bytes: bytes, db: Session):
+    """Generator version — yields SSE-formatted strings as each sheet is processed.
+
+    Yields dicts serialised as JSON inside SSE 'data:' lines.
+    On success the final event has type='complete'.
+    On any error the sheet event has type='error' and the session is rolled back.
+    """
+    if openpyxl is None:
+        yield _sse({"type": "fatal", "error": "openpyxl is not installed on the server"})
+        return
+
+    try:
+        wb = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+    except Exception as exc:
+        yield _sse({"type": "fatal", "error": f"Cannot open Excel file: {exc}"})
+        return
+
+    yield _sse({"type": "start", "total": len(SHEET_STEPS)})
+
+    results: dict[str, int] = {}
+    errors: dict[str, str] = {}
+
+    for idx, (sheet_label, table_key, fn) in enumerate(SHEET_STEPS):
+        yield _sse({"type": "processing", "index": idx, "key": table_key, "label": sheet_label})
+        try:
+            count = fn(db, wb)
+            db.flush()
+            results[table_key] = count
+            logger.info("Imported %s rows into %s", count, table_key)
+            yield _sse({"type": "done", "index": idx, "key": table_key, "label": sheet_label, "count": count})
+        except Exception as exc:
+            msg = str(exc)
+            logger.error("Error importing %s: %s", sheet_label, exc, exc_info=True)
+            errors[table_key] = msg
+            db.rollback()
+            yield _sse({"type": "error", "index": idx, "key": table_key, "label": sheet_label, "error": msg})
+
+    if not errors:
+        db.commit()
+    else:
+        db.rollback()
+
+    wb.close()
+    yield _sse({
+        "type": "complete",
+        "results": results,
+        "errors": errors,
+        "total_rows": sum(results.values()),
+        "has_errors": bool(errors),
+    })
+
+
+def _sse(data: dict) -> str:
+    import json
+    return f"data: {json.dumps(data)}\n\n"
+
+
 def import_excel(file_bytes: bytes, db: Session) -> dict:
     """Parse the uploaded Excel workbook and insert all sheets into the DB.
 
