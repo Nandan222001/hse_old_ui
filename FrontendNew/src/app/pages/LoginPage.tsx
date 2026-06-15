@@ -55,7 +55,9 @@ export function LoginPage() {
     try {
       const result = await login(email.trim(), password);
 
-      if (result === "success") {
+      if (result === "org_setup_required") {
+        navigate("/org-setup", { replace: true });
+      } else if (result === "success") {
         navigate(
           PRODUCT_ADMIN_EMAILS.has(email.trim().toLowerCase())
             ? "/auth/onboarding/admin"

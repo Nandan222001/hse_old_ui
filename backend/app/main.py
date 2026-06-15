@@ -21,6 +21,7 @@ from app.controllers import (
     near_miss, safety_walk, capa_action, shift_schedule,
     auth as auth_controller, dashboard as dashboard_controller,
     superadmin as superadmin_controller,
+    organisation_setup as organisation_setup_controller,
 )
 
 settings = get_settings()
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_controller.router, prefix=prefix)
     app.include_router(dashboard_controller.router, prefix=prefix)
     app.include_router(superadmin_controller.router, prefix=prefix)
+    app.include_router(organisation_setup_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():
