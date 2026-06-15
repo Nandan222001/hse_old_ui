@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { KpiCard } from "../shared/KpiCard";
 import { SeverityBadge, StatusBadge } from "../shared/StatusBadge";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell } from "recharts";
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { MapPin, ArrowRight, Bot, Wrench, AlertTriangle, FileCheck, Wrench as WrenchIcon } from "lucide-react";
 import { useNavigate } from "react-router";
-
-// Mock Data
-const maintenanceTrend = Array.from({ length: 14 }, (_, i) => ({
-    date: `Feb ${i + 1}`,
-    hours: Math.floor(Math.random() * 8) + 2,
-}));
+import {
+  getDashboardStats,
+  getCapaActions,
+  getActivePermits,
+  type DashboardStats,
+  type CapaAction,
+  type ActivePermit,
+} from "../../../services/dashboard.service";
 
 const equipmentStatus = [
     { name: "Operational", value: 85, fill: "#2E7D32" },
@@ -17,20 +19,70 @@ const equipmentStatus = [
     { name: "Out of Service", value: 5, fill: "#DC2626" },
 ];
 
-const pendingActions = [
-    { id: "CAPA-102", desc: "Repair Scaffolding Guardrails", zone: "Zone A", severity: "High", due: "Today", assignedBy: "Tom Harris" },
-    { id: "CAPA-105", desc: "Replace Filter on Generator #1", zone: "Zone D", severity: "Medium", due: "Tomorrow", assignedBy: "Auto-System" },
-    { id: "CAPA-108", desc: "Clear blocked drainage", zone: "Zone C", severity: "Medium", due: "Feb 10", assignedBy: "Sarah Connor" },
-];
+function formatDueDate(dateStr: string | null): string {
+    if (!dateStr) return 'No Date';
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-const activePermits = [
-    { id: "PTW-4012", type: "Hot Work", zone: "Boiler Room", worker: "Mike Vance", expiry: "2h 15m left" },
-    { id: "PTW-4015", type: "Confined Space", zone: "Tank 4", worker: "John Doe", expiry: "4h 30m left" },
-];
+function formatPermitExpiry(isoString: string | null): string {
+    if (!isoString) return 'N/A';
+    const end = new Date(isoString);
+    const now = new Date();
+    const diffMs = end.getTime() - now.getTime();
+    if (diffMs < 0) return 'Expired';
+    const diffHrs = Math.floor(diffMs / 3600000);
+    if (diffHrs < 24) {
+        const mins = Math.floor((diffMs % 3600000) / 60000);
+        return `${diffHrs}h ${mins}m left`;
+    }
+    const days = Math.floor(diffHrs / 24);
+    return `${days} day${days !== 1 ? 's' : ''} left`;
+}
 
 export function SiteEngineerDashboard() {
     const navigate = useNavigate();
-    const [loading] = useState(false);
+
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [apiCapaActions, setApiCapaActions] = useState<CapaAction[]>([]);
+    const [apiPermits, setApiPermits] = useState<ActivePermit[]>([]);
+
+    useEffect(() => {
+        Promise.all([
+            getDashboardStats(),
+            getCapaActions(5),
+            getActivePermits(5),
+        ])
+            .then(([s, capas, permits]) => {
+                setStats(s);
+                setApiCapaActions(capas);
+                setApiPermits(permits);
+            })
+            .catch(console.error);
+    }, []);
+
+    const pendingActions = apiCapaActions.map((c) => ({
+        id: `CAPA-${c.id}`,
+        desc: c.description || c.action_type || 'CAPA Action',
+        zone: c.incident_id ? `Incident #${c.incident_id}` : 'General',
+        severity: c.priority,
+        due: formatDueDate(c.due_date),
+        assignedBy: c.assignee,
+    }));
+
+    const activePermits = apiPermits.map((p) => ({
+        id: p.permit_ref,
+        type: p.permit_type,
+        zone: p.location,
+        worker: p.number_of_workers ? `${p.number_of_workers} worker${p.number_of_workers !== 1 ? 's' : ''}` : 'N/A',
+        expiry: formatPermitExpiry(p.validity_end),
+    }));
 
     return (
         <div className="space-y-6">
@@ -62,14 +114,14 @@ export function SiteEngineerDashboard() {
             <div className="grid grid-cols-4 gap-4">
                 <KpiCard
                     label="Open Corrective Actions"
-                    value="7"
-                    trend={{ value: 12, positive: false }}
+                    value={stats ? String(stats.open_capa_actions) : "—"}
+                    trend={{ value: 0, positive: false }}
                     trendLabel="vs last week"
                 />
                 <KpiCard
                     label="Active Permits"
-                    value="12"
-                    trend={{ value: 2, positive: true }}
+                    value={stats ? String(stats.active_permits) : "—"}
+                    trend={{ value: 0, positive: true }}
                     trendLabel="today"
                 />
                 <KpiCard
@@ -79,10 +131,10 @@ export function SiteEngineerDashboard() {
                     trendLabel="improvement"
                 />
                 <KpiCard
-                    label="Pending Certs Review"
-                    value="4"
-                    trend={{ value: 0, positive: true }}
-                    trendLabel="this week"
+                    label="Overdue CAPA"
+                    value={stats ? String(stats.overdue_capa) : "—"}
+                    trend={{ value: 0, positive: false }}
+                    trendLabel="overdue items"
                 />
             </div>
 
@@ -167,7 +219,7 @@ export function SiteEngineerDashboard() {
                                         <span className="text-[13px] font-bold text-gray-900">{permit.id} - {permit.type}</span>
                                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 font-bold">{permit.expiry}</span>
                                     </div>
-                                    <div className="text-[12px] text-gray-500">Worker: {permit.worker} • Zone: {permit.zone}</div>
+                                    <div className="text-[12px] text-gray-500">Workers: {permit.worker} • Zone: {permit.zone}</div>
                                 </div>
                                 <button className="px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-semibold hover:bg-gray-50 transition-colors">
                                     Revoke

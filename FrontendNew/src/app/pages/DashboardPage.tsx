@@ -1,38 +1,30 @@
+import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router";
 import { SiteInspectorDashboard } from "../components/dashboard/SiteInspectorDashboard";
 import { SiteEngineerDashboard } from "../components/dashboard/SiteEngineerDashboard";
 import { WorkerDashboard } from "../components/dashboard/WorkerDashboard";
 import { useAuth } from "../context/AuthContext";
+import {
+  getDashboardStats,
+  getIncidentsByCategory,
+  getCapaActions,
+  getOverdueCapa,
+  type DashboardStats,
+  type IncidentByCategory,
+  type CapaAction,
+  type OverdueCapa as OverdueCapaItem,
+} from "../../services/dashboard.service";
 
-const demoKpis = [
-  { title: "Predictive Injury Risk Score", value: "85%", sub: "Leading Indicator", accent: "#E9EDFF", border: "#6173C5", inline: "85%" },
-  { title: "TRIR/LTIF", value: "0.45 / 1.2", sub: "Leading Indicator", accent: "#FFFFFF", border: "#E5E7EB", inline: "" },
-  { title: "Contractor Risk Score", value: "High / 92%", sub: "Limiting Indicator", accent: "#FFFFFF", border: "#E5E7EB", inline: "" },
-  { title: "Audit Readiness Score", value: "96% / Ready", sub: "Ready", accent: "#FFFFFF", border: "#E5E7EB", inline: "" },
-];
-
-const riskBars = [
-  { name: "Risk Risk", data: 86, intelligence: 69 },
-  { name: "Demeior Impact", data: 50, intelligence: 57 },
-  { name: "Risk Categories", data: 82, intelligence: 33 },
-  { name: "Risk Hooming", data: 73, intelligence: 46 },
-  { name: "Intelligence", data: 31, intelligence: 24 },
-  { name: "Other", data: 45, intelligence: 29 },
-];
-
-const rankedActions = [
-  { action: "Predictive Injury Risk Score", priority: "High", dueDate: "Jun 13, 2024", assignee: "Mason Bovest" },
-  { action: "Contractor Risk Score", priority: "High", dueDate: "Jun 12, 2024", assignee: "Anne Rerdy" },
-  { action: "Ranked Action Table", priority: "Low", dueDate: "Jun 12, 2024", assignee: "Mason Bovest" },
-];
-
-const overdueCapa = [
-  "Incident #1234 - High Priority - 3 Days Overdue",
-  "Incident #1234 - High Priority - 3 Days Overdue",
-  "Incident #1234 - High Priority - 3 Days Overdue",
-  "Incident #1234 - High Priority - 3 Days Overdue",
-];
+function formatDueDate(dateStr: string | null): string {
+  if (!dateStr) return 'No Date';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
 
 function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold: string }>) {
   const angle = Math.round((Math.max(0, Math.min(value, 100)) / 100) * 240);
@@ -64,6 +56,65 @@ export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const firstName = (user?.name || "User").trim().split(" ")[0] || "User";
+
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [riskBars, setRiskBars] = useState<IncidentByCategory[]>([]);
+  const [capaActions, setCapaActions] = useState<CapaAction[]>([]);
+  const [overdueCapa, setOverdueCapa] = useState<OverdueCapaItem[]>([]);
+
+  useEffect(() => {
+    if (user?.role !== "Admin") return;
+    Promise.all([
+      getDashboardStats(),
+      getIncidentsByCategory(),
+      getCapaActions(5),
+      getOverdueCapa(4),
+    ])
+      .then(([s, cats, capas, overdue]) => {
+        setStats(s);
+        setRiskBars(cats);
+        setCapaActions(capas);
+        setOverdueCapa(overdue);
+      })
+      .catch(console.error);
+  }, [user?.role]);
+
+  const demoKpis = stats
+    ? [
+        {
+          title: "Total Incidents",
+          value: String(stats.total_incidents),
+          sub: "Leading Indicator",
+          accent: "#E9EDFF",
+          border: "#6173C5",
+          inline: `${stats.critical_incidents} Critical`,
+        },
+        {
+          title: "Near Misses / Incidents",
+          value: `${stats.near_misses_count} / ${stats.total_incidents}`,
+          sub: "Safety Observations",
+          accent: "#FFFFFF",
+          border: "#E5E7EB",
+          inline: "",
+        },
+        {
+          title: "CAPA Completion Rate",
+          value: `${stats.capa_completion_rate}%`,
+          sub: "Corrective Actions",
+          accent: "#FFFFFF",
+          border: "#E5E7EB",
+          inline: "",
+        },
+        {
+          title: "Active Permits / Sites",
+          value: `${stats.active_permits} / ${stats.total_sites}`,
+          sub: "Live Operations",
+          accent: "#FFFFFF",
+          border: "#E5E7EB",
+          inline: "",
+        },
+      ]
+    : [];
 
   let content = <WorkerDashboard />;
   if (user?.role === "Site Inspector") {
@@ -110,7 +161,7 @@ export function DashboardPage() {
               <BarChart data={riskBars} barGap={6}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
                 <Tooltip />
                 <Bar dataKey="data" fill="#5E7992" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="intelligence" fill="#5A63A8" radius={[4, 4, 0, 0]} />
@@ -121,8 +172,16 @@ export function DashboardPage() {
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
             <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Exposure Index & Competency Coverage (Intelligence-Based)</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <GaugeCard value={78} label="Exposure Index" threshold="78%" />
-              <GaugeCard value={82} label="Competency Coverage" threshold="82%" />
+              <GaugeCard
+                value={stats ? Math.round(stats.avg_compliance_rating * 20) : 0}
+                label="Exposure Index"
+                threshold={stats ? `${Math.round(stats.avg_compliance_rating * 20)}%` : '0%'}
+              />
+              <GaugeCard
+                value={stats ? Math.round(stats.capa_completion_rate) : 0}
+                label="Competency Coverage"
+                threshold={stats ? `${Math.round(stats.capa_completion_rate)}%` : '0%'}
+              />
             </div>
           </div>
         </div>
@@ -141,11 +200,11 @@ export function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rankedActions.map((row) => (
-                    <tr key={`${row.action}-${row.assignee}`} className="border-b last:border-b-0" style={{ borderColor: '#F1F5F9' }}>
-                      <td className="py-2 text-[13px]" style={{ color: '#111827' }}>{row.action}</td>
+                  {capaActions.map((row) => (
+                    <tr key={row.id} className="border-b last:border-b-0" style={{ borderColor: '#F1F5F9' }}>
+                      <td className="py-2 text-[13px]" style={{ color: '#111827' }}>{row.description || row.action_type}</td>
                       <td className="py-2 text-[13px]" style={{ color: row.priority === 'High' ? '#B45309' : '#4B5563', fontWeight: 600 }}>{row.priority}</td>
-                      <td className="py-2 text-[13px]" style={{ color: '#374151' }}>{row.dueDate}</td>
+                      <td className="py-2 text-[13px]" style={{ color: '#374151' }}>{formatDueDate(row.due_date)}</td>
                       <td className="py-2 text-[13px]" style={{ color: '#374151' }}>{row.assignee}</td>
                     </tr>
                   ))}
@@ -157,10 +216,10 @@ export function DashboardPage() {
           <div className="xl:col-span-3 rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
             <h2 className="mb-3 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Overdue CAPA</h2>
             <div className="space-y-3">
-              {overdueCapa.map((item, index) => (
-                <div key={`${item}-${index}`} className="text-[14px] leading-[1.45]" style={{ color: '#374151' }}>
-                  <span>{item.split(" - 3 Days Overdue")[0]} - </span>
-                  <span style={{ color: '#B45309', fontWeight: 700 }}>3 Days Overdue</span>
+              {overdueCapa.map((item) => (
+                <div key={item.id} className="text-[14px] leading-[1.45]" style={{ color: '#374151' }}>
+                  <span>Incident #{item.incident_id} - {item.action_type || 'Action'} - </span>
+                  <span style={{ color: '#B45309', fontWeight: 700 }}>{item.days_overdue} Day{item.days_overdue !== 1 ? 's' : ''} Overdue</span>
                 </div>
               ))}
             </div>

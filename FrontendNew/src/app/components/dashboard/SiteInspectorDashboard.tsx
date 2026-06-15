@@ -1,32 +1,80 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { KpiCard } from "../shared/KpiCard";
 import { SeverityBadge, StatusBadge } from "../shared/StatusBadge";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { MapPin, ArrowRight, Bot, Camera, Calendar, CheckSquare, Search, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router";
+import {
+  getDashboardStats,
+  getComplianceTrend,
+  getSafetyWalksRecent,
+  getNearMissesRecent,
+  type DashboardStats,
+  type ComplianceTrend,
+  type RecentSafetyWalk,
+  type RecentNearMiss,
+} from "../../../services/dashboard.service";
 
-// Mock Data
-const complianceData = Array.from({ length: 30 }, (_, i) => ({
-    date: `Feb ${i + 1}`,
-    score: 75 + Math.random() * 20,
-}));
+function formatRelativeTime(isoString: string | null): string {
+  if (!isoString) return 'Unknown';
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs} hr${diffHrs !== 1 ? 's' : ''} ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+}
 
-const upcomingAudits = [
-    { id: "AUD-01", name: "Zone A Scaffolding Check", date: "Today, 14:00", zone: "Zone A", priority: "High" },
-    { id: "AUD-02", name: "Heavy Machinery Permit Verification", date: "Tomorrow, 09:00", zone: "Zone B", priority: "Medium" },
-    { id: "AUD-03", name: "Fire Safety Equipment Audit", date: "Feb 10, 11:00", zone: "Zone C", priority: "Low" },
-    { id: "AUD-04", name: "Electrical PPE Compliance", date: "Feb 12, 10:00", zone: "Zone D", priority: "Critical" },
-];
-
-const recentObservations = [
-    { id: "OBS-1", reporter: "Tom Harris", desc: "Unsecured materials on 3rd-floor edge.", time: "10 mins ago", severity: "High" },
-    { id: "OBS-2", reporter: "Mike Vance", desc: "Spill near the main generator.", time: "1 hr ago", severity: "Medium" },
-    { id: "OBS-3", reporter: "Sarah Connor", desc: "Blocked fire exit path.", time: "3 hrs ago", severity: "Critical" },
-];
+function formatInspectionDate(isoString: string | null): string {
+  if (!isoString) return 'N/A';
+  const date = new Date(isoString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ', ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
 
 export function SiteInspectorDashboard() {
     const navigate = useNavigate();
-    const [loading] = useState(false);
+
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [complianceData, setComplianceData] = useState<ComplianceTrend[]>([]);
+    const [safetyWalks, setSafetyWalks] = useState<RecentSafetyWalk[]>([]);
+    const [nearMisses, setNearMisses] = useState<RecentNearMiss[]>([]);
+
+    useEffect(() => {
+        Promise.all([
+            getDashboardStats(),
+            getComplianceTrend(30),
+            getSafetyWalksRecent(5),
+            getNearMissesRecent(5),
+        ])
+            .then(([s, trend, walks, misses]) => {
+                setStats(s);
+                setComplianceData(trend);
+                setSafetyWalks(walks);
+                setNearMisses(misses);
+            })
+            .catch(console.error);
+    }, []);
+
+    const upcomingAudits = safetyWalks.map((sw) => ({
+        id: `SW-${sw.id}`,
+        name: sw.inspection_type || 'Safety Walk',
+        date: formatInspectionDate(sw.inspection_date_time),
+        zone: sw.location,
+        priority: sw.priority,
+    }));
+
+    const recentObservations = nearMisses.map((nm) => ({
+        id: `NM-${nm.id}`,
+        reporter: nm.reporter || 'Unknown',
+        desc: nm.description || 'Near miss event',
+        time: formatRelativeTime(nm.event_date_time),
+        severity: nm.severity,
+    }));
 
     return (
         <div className="space-y-6">
@@ -57,28 +105,28 @@ export function SiteInspectorDashboard() {
             {/* KPI Row */}
             <div className="grid grid-cols-4 gap-4">
                 <KpiCard
-                    label="Today's Active Audits"
-                    value="4"
-                    trend={{ value: 2, positive: true }}
-                    trendLabel="vs yesterday"
+                    label="Total Safety Walks"
+                    value={stats ? String(stats.safety_walks_count) : "—"}
+                    trend={{ value: 0, positive: true }}
+                    trendLabel="total recorded"
                 />
                 <KpiCard
                     label="Hazards Logged"
-                    value="12"
-                    trend={{ value: 15, positive: false }}
-                    trendLabel="increase"
+                    value={stats ? String(stats.near_misses_count) : "—"}
+                    trend={{ value: 0, positive: false }}
+                    trendLabel="near misses"
                 />
                 <KpiCard
                     label="Current Compliance Score"
-                    value="88%"
-                    trend={{ value: 4, positive: true }}
-                    trendLabel="improvement"
+                    value={stats ? `${Math.round(stats.avg_compliance_rating * 20)}%` : "—"}
+                    trend={{ value: 0, positive: true }}
+                    trendLabel="avg rating"
                 />
                 <KpiCard
                     label="Overdue Actions (CAPA)"
-                    value="3"
-                    trend={{ value: 1, positive: false }}
-                    trendLabel="since yesterday"
+                    value={stats ? String(stats.overdue_capa) : "—"}
+                    trend={{ value: 0, positive: false }}
+                    trendLabel="overdue items"
                 />
             </div>
 

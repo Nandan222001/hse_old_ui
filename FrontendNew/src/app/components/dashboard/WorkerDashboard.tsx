@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { KpiCard } from "../shared/KpiCard";
-import { SeverityBadge, StatusBadge } from "../shared/StatusBadge";
+import { useState, useEffect } from "react";
+import { StatusBadge } from "../shared/StatusBadge";
 import { MapPin, ArrowRight, BookOpen, AlertCircle, HardHat, FileText, Bot } from "lucide-react";
 import { useNavigate } from "react-router";
+import {
+  getNearMissesRecent,
+  type RecentNearMiss,
+} from "../../../services/dashboard.service";
 
-// Mock Data
 const activeCerts = [
     { name: "Scaffolding Level 2", expiry: "Dec 2026", status: "Active" },
     { name: "First Aid & CPR", expiry: "Mar 15, 2026", status: "Due Soon" },
@@ -15,14 +17,31 @@ const assignedTasks = [
     { id: "T-501", desc: "Assist with Zone A guardrail repair", type: "Maintenance", due: "14:00 Today" },
 ];
 
-const myReports = [
-    { id: "REP-91", desc: "Loose cable near main walkway", status: "In Progress", date: "Yesterday" },
-    { id: "REP-88", desc: "Spill in generator room", status: "Closed", date: "Feb 2" },
-];
+function formatReportDate(isoString: string | null): string {
+    if (!isoString) return 'Unknown';
+    const date = new Date(isoString);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 export function WorkerDashboard() {
     const navigate = useNavigate();
-    const [loading] = useState(false);
+    const [nearMisses, setNearMisses] = useState<RecentNearMiss[]>([]);
+
+    useEffect(() => {
+        getNearMissesRecent(3).then(setNearMisses).catch(console.error);
+    }, []);
+
+    const myReports = nearMisses.map((nm) => ({
+        id: `NM-${nm.id}`,
+        desc: nm.description || 'Near miss event',
+        status: nm.capa_escalation ? 'In Progress' : 'Open',
+        date: formatReportDate(nm.report_date || nm.event_date_time),
+    }));
 
     return (
         <div className="space-y-6 max-w-5xl mx-auto">
