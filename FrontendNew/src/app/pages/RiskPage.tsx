@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getRiskSummary, type TaskRow, type AgingBar } from "../../../services/analytics.service";
+import { getRiskSummary, type TaskRow, type AgingBar } from "../../services/analytics.service";
 
 // Static — no quarterly risk model in backend
 const residualTrend = [

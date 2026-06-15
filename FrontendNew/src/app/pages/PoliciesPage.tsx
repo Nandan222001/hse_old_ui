@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { SeverityBadge, StatusBadge } from "../components/shared/StatusBadge";
 import { Plus, X, ChevronRight, ChevronDown, Edit, Trash2, Building2, Factory, MapPin } from "lucide-react";
-import { getPolicies, type PolicyRecord } from "../../../services/analytics.service";
+import { getPolicies, type PolicyRecord } from "../../services/analytics.service";
 
 function policyToRule(p: PolicyRecord) {
   return {

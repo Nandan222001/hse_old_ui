@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -71,7 +71,7 @@ def get_ranked_capa_actions(limit: int = 10, db: Session = Depends(get_db)):
         db.query(CapaAction, Employee)
         .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
         .filter(CapaAction.status != "Completed")
-        .order_by(CapaAction.due_date.asc().nulls_last())
+        .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
         .limit(limit)
         .all()
     )

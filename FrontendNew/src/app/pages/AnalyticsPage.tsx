@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { getViolationsSummary, type RcaItem } from "../../../services/analytics.service";
+import { getViolationsSummary, type RcaItem } from "../../services/analytics.service";
 
 // Static — no backend model for PPE compliance or scheduled reports
 const ppeData = [

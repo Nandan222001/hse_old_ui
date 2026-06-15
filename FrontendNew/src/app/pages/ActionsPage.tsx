@@ -6,7 +6,7 @@ import {
   type PermitViolation,
   type ActiveWorkRow,
   type ExpiryTimelineBar,
-} from "../../../services/analytics.service";
+} from "../../services/analytics.service";
 
 // Static — no backend model for contractor breakdown or missing controls
 const workByContractor = [

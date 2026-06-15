@@ -10,48 +10,6 @@ from fastapi.responses import JSONResponse
 router = APIRouter(tags=["Stubs"])
 
 
-# ── Checklists ────────────────────────────────────────────────────────────────
-
-@router.get("/checklists/templates")
-def list_checklist_templates() -> list:
-    return []
-
-
-@router.post("/checklists/templates/bootstrap")
-def bootstrap_checklist_templates() -> dict:
-    return {"bootstrapped": 0, "templates": []}
-
-
-@router.get("/checklists/submissions")
-def list_checklist_submissions() -> list:
-    return []
-
-
-@router.post("/checklists/submissions")
-def create_checklist_submission(payload: Any = None) -> dict:
-    return {"uuid": None, "template_id": None, "status": "draft", "items": []}
-
-
-@router.get("/checklists/submissions/{uuid}")
-def get_checklist_submission(uuid: str) -> dict:
-    return {"uuid": uuid, "template_id": None, "status": "draft", "items": [], "site": None, "zone": None, "shift": None}
-
-
-@router.put("/checklists/submissions/{uuid}/items")
-def save_checklist_items(uuid: str, payload: Any = None) -> dict:
-    return {"saved": True}
-
-
-@router.post("/checklists/submissions/{uuid}/submit")
-def submit_checklist(uuid: str) -> dict:
-    return {"submitted": True}
-
-
-@router.post("/checklists/submissions/{uuid}/validate")
-def validate_checklist(uuid: str) -> dict:
-    return {"valid": True, "issues": []}
-
-
 # ── Compliance ────────────────────────────────────────────────────────────────
 
 @router.get("/compliance-standards")

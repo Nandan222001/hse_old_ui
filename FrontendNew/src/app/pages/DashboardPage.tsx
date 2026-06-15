@@ -61,6 +61,7 @@ export function DashboardPage() {
   const [riskBars, setRiskBars] = useState<IncidentByCategory[]>([]);
   const [capaActions, setCapaActions] = useState<CapaAction[]>([]);
   const [overdueCapa, setOverdueCapa] = useState<OverdueCapaItem[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     if (user?.role !== "Admin") return;
@@ -75,6 +76,7 @@ export function DashboardPage() {
         setRiskBars(cats);
         setCapaActions(capas);
         setOverdueCapa(overdue);
+        setLastUpdated(new Date());
       })
       .catch(console.error);
   }, [user?.role]);
@@ -248,7 +250,11 @@ export function DashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-[13px]" style={{ color: '#94A3B8' }}>Last updated: 2 min ago</span>
+            <span className="text-[13px]" style={{ color: '#94A3B8' }}>
+              {lastUpdated
+                ? `Updated: ${lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                : 'Loading…'}
+            </span>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#5B6DE8' }} />
           </div>
         </div>

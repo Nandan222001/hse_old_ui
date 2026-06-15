@@ -565,6 +565,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   initials: string;
+  isSuperAdmin?: boolean;
   orgCode?: string;
   companyName?: string;
   allowedModules?: UiModuleLabel[];
@@ -889,6 +890,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: mappedRole,
           initials: data.user.username.slice(0, 2).toUpperCase(),
           allowedModules: ALL_MODULE_LABELS,
+          isSuperAdmin: backendRole === 'superadmin',
         };
 
         setUser(userData);

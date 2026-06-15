@@ -23,6 +23,7 @@ from app.controllers import (
     superadmin as superadmin_controller,
     organisation_setup as organisation_setup_controller,
     analytics as analytics_controller,
+    checklists as checklists_controller,
     stubs as stubs_controller,
 )
 
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(superadmin_controller.router, prefix=prefix)
     app.include_router(organisation_setup_controller.router, prefix=prefix)
     app.include_router(analytics_controller.router, prefix=prefix)
+    app.include_router(checklists_controller.router, prefix=prefix)
     app.include_router(stubs_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])

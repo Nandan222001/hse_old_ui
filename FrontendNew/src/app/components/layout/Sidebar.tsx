@@ -4,7 +4,7 @@ import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
   Lightbulb, ClipboardCheck, BarChart3, Building2,
   FolderClosed, AlertTriangle, Heart,
-  LogOut, Shield, Settings, X, type LucideIcon
+  LogOut, Shield, ShieldCheck, Settings, X, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -163,6 +163,35 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           </div>
         ))}
         </nav>
+
+        {/* SuperAdmin link — only visible when logged in as superadmin */}
+        {user?.isSuperAdmin && (
+          <div style={{ padding: '8px 12px 0' }}>
+            <div style={{ height: 1, background: '#E3E9F6', marginBottom: 8 }} />
+            <button
+              onClick={() => { navigate('/superadmin'); onCloseMobile?.(); }}
+              onMouseEnter={() => setHovered('SuperAdmin')}
+              onMouseLeave={() => setHovered(null)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200"
+              style={
+                isActive('/superadmin')
+                  ? { background: 'linear-gradient(135deg, #4A57B9 0%, #6F80E8 100%)', boxShadow: '0 6px 16px rgba(79, 94, 190, 0.28)' }
+                  : { background: hovered === 'SuperAdmin' ? '#EEF2FB' : 'transparent' }
+              }
+            >
+              <ShieldCheck
+                className="w-[17px] h-[17px] flex-shrink-0"
+                style={{ color: isActive('/superadmin') ? '#ffffff' : '#7C869C' }}
+              />
+              <span
+                className="text-[13px] flex-1 text-left"
+                style={{ color: isActive('/superadmin') ? '#ffffff' : '#2F3A4F', fontWeight: isActive('/superadmin') ? 600 : 500 }}
+              >
+                SuperAdmin
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* User Profile */}
         <div className="px-4 py-4 border-t" style={{ borderColor: '#E4EAF7' }}>
