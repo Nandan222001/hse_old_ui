@@ -1,14 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SeverityBadge, StatusBadge } from "../components/shared/StatusBadge";
 import { Plus, X, ChevronRight, ChevronDown, Edit, Trash2, Building2, Factory, MapPin } from "lucide-react";
+import { getPolicies, type PolicyRecord } from "../../../services/analytics.service";
 
-const rules = [
-  { id: "RUL-001", name: "Helmet Required - All Zones", zone: "All Zones", ppe: "Hard Hat", severity: "Critical" as const, shift: "All", conditions: "Always", status: "Active", version: "v2.1" },
-  { id: "RUL-002", name: "Safety Vest - Loading Areas", zone: "Zone B", ppe: "Safety Vest", severity: "High" as const, shift: "All", conditions: "Working Hours", status: "Active", version: "v1.3" },
-  { id: "RUL-003", name: "Goggles - Welding Bay", zone: "Zone E", ppe: "Safety Goggles", severity: "High" as const, shift: "All", conditions: "During Operations", status: "Active", version: "v1.0" },
-  { id: "RUL-004", name: "Chemical Gloves - Chemical Store", zone: "Zone C", ppe: "Chemical Gloves", severity: "Critical" as const, shift: "All", conditions: "Always", status: "Active", version: "v3.0" },
-  { id: "RUL-005", name: "Full PPE - Restricted Areas", zone: "Zone C", ppe: "Full PPE Kit", severity: "Critical" as const, shift: "All", conditions: "Always", status: "Inactive", version: "v2.0" },
-];
+function policyToRule(p: PolicyRecord) {
+  return {
+    id: `POL-${String(p.id).padStart(3, '0')}`,
+    name: p.policy_name,
+    zone: p.category || "General",
+    ppe: "See Policy",
+    severity: "Medium" as const,
+    shift: "All",
+    conditions: "Always",
+    status: p.status || "Active",
+    version: p.owner ? `By: ${p.owner}` : "v1.0",
+  };
+}
 
 const slaConfig = [
   { severity: "Critical", resolution: "2 hours", warning: "1 hour", escalate: "2 hours" },
@@ -22,6 +29,13 @@ export function PoliciesPage() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [builderStep, setBuilderStep] = useState(1);
   const [showTree, setShowTree] = useState(false);
+  const [policyRecords, setPolicyRecords] = useState<PolicyRecord[]>([]);
+
+  useEffect(() => {
+    getPolicies(100).then(setPolicyRecords).catch(console.error);
+  }, []);
+
+  const rules = policyRecords.map(policyToRule);
 
   const tabs = [
     { id: "active", label: "Active Rules" },

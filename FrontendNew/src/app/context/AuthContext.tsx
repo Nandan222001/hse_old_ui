@@ -4,9 +4,11 @@ import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPass
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getOnboardingAccessProfile } from "../../services/onboarding.service";
 import { loginWithThetaCredentials, loginWithHSEBackend } from "../../services/auth.service";
+import { checkOrgSetupRequired } from "../../services/organisation-setup.service";
 
 export type LoginResult =
   | "success"
+  | "org_setup_required"
   | "invalid_credentials"
   | "user_not_found"
   | "password_setup_required"
@@ -893,6 +895,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(true);
         localStorage.setItem('hse_auth', 'true');
         localStorage.setItem('hse_user', JSON.stringify(userData));
+
+        // Check if this email has a pending org invite → needs data setup
+        try {
+          const setupCheck = await checkOrgSetupRequired(trimmedEmail);
+          if (setupCheck.needs_setup) {
+            // Store org name so the setup page can display it
+            const enriched = { ...userData, orgName: setupCheck.organisation_name };
+            localStorage.setItem('hse_user', JSON.stringify(enriched));
+            return 'org_setup_required';
+          }
+        } catch {
+          // Setup check failed silently; let the user proceed to dashboard
+        }
+
         return 'success';
       }
     } catch (hseErr) {

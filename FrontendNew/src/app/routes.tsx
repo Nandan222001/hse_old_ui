@@ -23,6 +23,8 @@ import { NearMissPage } from "./pages/NearMissPage";
 import { RiskPage } from "./pages/RiskPage";
 import { AssetsPage } from "./pages/AssetsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { SuperAdminDashboardPage } from "./pages/SuperAdminDashboardPage";
+import { OrgSetupPage } from "./pages/OrgSetupPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -126,6 +128,10 @@ export const router = createBrowserRouter([
     Component: () => <Navigate to="/auth/login?mode=signup" replace />,
   },
   {
+    path: "/org-setup",
+    Component: OrgSetupPage,
+  },
+  {
     path: "/auth/onboarding",
     Component: OnboardingPage,
   },
@@ -187,6 +193,7 @@ export const router = createBrowserRouter([
       { path: "near-miss", Component: NearMissRoute },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
+      { path: "superadmin", Component: SuperAdminDashboardPage },
     ],
   },
   {

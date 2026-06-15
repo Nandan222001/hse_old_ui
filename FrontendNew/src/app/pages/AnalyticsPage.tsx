@@ -1,37 +1,16 @@
-import { useState } from "react";
-import { Download, Calendar, BarChart3, Plus, Play, Clock, Edit, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { StatusBadge } from "../components/shared/StatusBadge";
+import { getViolationsSummary, type RcaItem } from "../../../services/analytics.service";
 
+// Static — no backend model for PPE compliance or scheduled reports
 const ppeData = [
   { name: "Hard Hat", compliance: 96 },
   { name: "Safety Vest", compliance: 92 },
   { name: "Safety Shoes", compliance: 89 },
   { name: "Gloves", compliance: 85 },
   { name: "Goggles", compliance: 78 },
-];
-
-const zoneRiskData = [
-  { name: "Zone A", risk: 32, violations: 12 },
-  { name: "Zone B", risk: 67, violations: 28 },
-  { name: "Zone C", risk: 89, violations: 45 },
-  { name: "Zone D", risk: 25, violations: 8 },
-  { name: "Zone E", risk: 71, violations: 32 },
-  { name: "Zone F", risk: 8, violations: 2 },
-];
-
-const trendData = Array.from({ length: 12 }, (_, i) => ({
-  month: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i],
-  violations: Math.floor(Math.random() * 100) + 50,
-  resolved: Math.floor(Math.random() * 80) + 40,
-}));
-
-const pieData = [
-  { name: "Helmet", value: 35, color: "#1B5E20" },
-  { name: "Vest", value: 25, color: "#2E7D32" },
-  { name: "Shoes", value: 20, color: "#43A047" },
-  { name: "Gloves", value: 12, color: "#A5D6A7" },
-  { name: "Goggles", value: 8, color: "#F59E0B" },
 ];
 
 const scheduledReports = [
@@ -42,6 +21,33 @@ const scheduledReports = [
 
 export function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [pieData, setPieData] = useState<RcaItem[]>([]);
+  const [zoneRiskData, setZoneRiskData] = useState<{ name: string; risk: number; violations: number }[]>([]);
+  const [trendData, setTrendData] = useState<{ month: string; violations: number; resolved: number }[]>([]);
+
+  useEffect(() => {
+    getViolationsSummary(12).then((data) => {
+      setPieData(data.by_root_cause);
+
+      setZoneRiskData(
+        data.by_location.map((loc) => ({
+          name: loc.label,
+          risk: loc.value,
+          violations: loc.value,
+        }))
+      );
+
+      const nearMissMap: Record<string, number> = {};
+      data.near_miss_monthly.forEach((nm) => { nearMissMap[nm.month] = nm.value; });
+      setTrendData(
+        data.monthly_trend.map((t) => ({
+          month: t.month,
+          violations: t.value,
+          resolved: nearMissMap[t.month] ?? 0,
+        }))
+      );
+    }).catch(console.error);
+  }, []);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -100,7 +106,7 @@ export function AnalyticsPage() {
                   <div key={d.name} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-sm" style={{ background: d.color }} />
                     <span className="text-[13px]" style={{ color: '#4A5568' }}>{d.name}</span>
-                    <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 600 }}>{d.value}%</span>
+                    <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 600 }}>{d.value}</span>
                   </div>
                 ))}
               </div>
@@ -127,7 +133,7 @@ export function AnalyticsPage() {
 
           {/* Monthly Trend */}
           <div className="bg-white rounded-xl border p-6 xl:col-span-2" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
-            <h2 className="mb-6">Monthly Violations vs Resolved</h2>
+            <h2 className="mb-6">Monthly Violations vs Near Misses</h2>
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#EEF2EE" />
@@ -141,11 +147,11 @@ export function AnalyticsPage() {
             <div className="flex gap-6 mt-4">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-0.5" style={{ background: '#1B5E20' }} />
-                <span className="text-[12px]" style={{ color: '#4A5568' }}>Violations</span>
+                <span className="text-[12px]" style={{ color: '#4A5568' }}>Incidents</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: '#43A047' }} />
-                <span className="text-[12px]" style={{ color: '#4A5568' }}>Resolved</span>
+                <span className="text-[12px]" style={{ color: '#4A5568' }}>Near Misses</span>
               </div>
             </div>
           </div>

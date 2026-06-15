@@ -1,9 +1,12 @@
+import { useState, useEffect } from "react";
 import { AlertTriangle, Sparkles } from "lucide-react";
+import { getPermitsSummary, getRiskSummary, type PermitViolation, type TaskRow } from "../../../services/analytics.service";
 
 type VendorSidebarDashboardProps = {
   currentUserName?: string;
 };
 
+// Static — no backend model for contractor-specific data
 const exposureMonths = [
   { month: "Jan", value: 84 },
   { month: "Feb", value: 128 },
@@ -28,12 +31,6 @@ const highRiskContractors = [
   "Contractor B (88% Risk)",
 ];
 
-const permitViolations = [
-  { label: "Contractor A: Permit Violations", time: "12:35:33 PM" },
-  { label: "Contractor B: Permit Violations", time: "11:33:58 PM" },
-  { label: "Contractor C: Permit Violations", time: "11:33:33 PM" },
-];
-
 const repeatBreaches = [
   "Contractor A (1 Breach)",
   "Contractor B (Breach3)",
@@ -46,18 +43,6 @@ const watchlist = [
   "Contractor C (85% Risk)",
   "Contractor D (85% Risk)",
   "Contractor E (85% Risk)",
-];
-
-const capaClosure = [
-  { item: "Item 1 - Closed", status: "Closed" },
-  { item: "Item 2 - In Progress", status: "Closed" },
-  { item: "Item 3 - In Progress", status: "Closed" },
-];
-
-const openActions = [
-  { action: "Action X - Due Today", due: "Due Today" },
-  { action: "Action Y - Due Next Week", due: "Due Today" },
-  { action: "Action Y - Due Next Week", due: "Due Next Week" },
 ];
 
 function ComplianceDonut() {
@@ -95,6 +80,20 @@ function ComplianceDonut() {
 }
 
 export function VendorSidebarDashboard({ currentUserName }: VendorSidebarDashboardProps) {
+  const [permitViolations, setPermitViolations] = useState<PermitViolation[]>([]);
+  const [capaClosure, setCapaClosure] = useState<TaskRow[]>([]);
+  const [openActions, setOpenActions] = useState<TaskRow[]>([]);
+
+  useEffect(() => {
+    Promise.all([getPermitsSummary(), getRiskSummary()])
+      .then(([permits, risk]) => {
+        setPermitViolations(permits.permit_violations);
+        setCapaClosure(risk.task_rows.slice(0, 3));
+        setOpenActions(risk.task_rows.slice(0, 3));
+      })
+      .catch(console.error);
+  }, []);
+
   return (
     <section className="space-y-4">
       <h2 className="text-2xl leading-tight font-extrabold sm:text-3xl md:text-4xl" style={{ color: "#1F2937" }}>
@@ -190,8 +189,8 @@ export function VendorSidebarDashboard({ currentUserName }: VendorSidebarDashboa
               </h4>
               <div className="space-y-2 text-sm sm:text-base" style={{ color: "#111827" }}>
                 {permitViolations.map((row) => (
-                  <div key={row.label} className="flex items-center justify-between gap-2">
-                    <span>{row.label}</span>
+                  <div key={row.text} className="flex items-center justify-between gap-2">
+                    <span>{row.text}</span>
                     <span className="text-[14px]" style={{ color: "#6B7280" }}>{row.time}</span>
                   </div>
                 ))}
@@ -221,9 +220,9 @@ export function VendorSidebarDashboard({ currentUserName }: VendorSidebarDashboa
             <h4 className="text-base font-bold sm:text-lg" style={{ color: "#1F2937" }}>Contractor CAPA Closure</h4>
             <div className="mt-2 space-y-1 text-sm sm:text-base" style={{ color: "#1F2937" }}>
               {capaClosure.map((row) => (
-                <div key={row.item} className="flex items-center justify-between gap-2">
-                  <span>{row.item}</span>
-                  <span style={{ color: "#2F855A", fontWeight: 700 }}>{row.status}</span>
+                <div key={row.id} className="flex items-center justify-between gap-2">
+                  <span>{row.id} — {row.desc}</span>
+                  <span style={{ color: "#2F855A", fontWeight: 700 }}>{row.status.includes("Overdue") ? "Overdue" : "Open"}</span>
                 </div>
               ))}
             </div>
@@ -231,10 +230,10 @@ export function VendorSidebarDashboard({ currentUserName }: VendorSidebarDashboa
           <div>
             <h4 className="text-base font-bold sm:text-lg" style={{ color: "#1F2937" }}>Open Actions</h4>
             <div className="mt-2 space-y-1 text-sm sm:text-base" style={{ color: "#1F2937" }}>
-              {openActions.map((row, idx) => (
-                <div key={`${row.action}-${idx}`} className="flex items-center justify-between gap-2">
-                  <span>{row.action}</span>
-                  <span style={{ color: row.due.includes("Week") ? "#A94442" : "#C53030", fontWeight: 700 }}>{row.due}</span>
+              {openActions.map((row) => (
+                <div key={`open-${row.id}`} className="flex items-center justify-between gap-2">
+                  <span>{row.desc}</span>
+                  <span style={{ color: row.due.includes("No Date") ? "#A94442" : "#C53030", fontWeight: 700 }}>{row.due}</span>
                 </div>
               ))}
             </div>

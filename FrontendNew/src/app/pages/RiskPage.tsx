@@ -1,17 +1,14 @@
+import { useState, useEffect } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getRiskSummary, type TaskRow, type AgingBar } from "../../../services/analytics.service";
 
+// Static — no quarterly risk model in backend
 const residualTrend = [
   { q: "Q1", risk: 90 },
   { q: "Q2", risk: 64 },
   { q: "Q3", risk: 48 },
   { q: "Q4", risk: 34 },
-];
-
-const zoneRisk = [
-  { zone: "Site A - Ops", value: 26 },
-  { zone: "Site B - Log", value: 14 },
-  { zone: "Team C - Dev", value: 6 },
 ];
 
 const matrixCols = ["Frequent 5", "Probable 4", "Occasional 3", "Remote 2", "Improbable 1"];
@@ -55,19 +52,6 @@ const matrixCells = [
   ],
 ];
 
-const taskRows = [
-  { id: "T-001", desc: "Mitigate High Risk HVAC Issue", owner: "J. Doe", due: "Jun 25, 2024", status: "In Progress (Amber)" },
-  { id: "T-002", desc: "Update Security Protocol", owner: "A. Smith", due: "Jun 30, 2024", status: "Pending (Yellow)" },
-  { id: "T-003", desc: "Resolve High Risk Frosted Invert", owner: "J. Doe", due: "Jun 25, 2024", status: "In Progress (Amber)" },
-];
-
-const agingBars = [
-  { bucket: "0-30 Days", low: 7, medium: 4, high: 2, critical: 1, line: 2 },
-  { bucket: "31-60 Days", low: 5, medium: 6, high: 3, critical: 1, line: 5 },
-  { bucket: "61-90 Days", low: 3, medium: 4, high: 5, critical: 2, line: 6 },
-  { bucket: ">90 Days", low: 2, medium: 5, high: 6, critical: 4, line: 7 },
-];
-
 function toneStyle(tone: string) {
   if (tone === "stop") return { bg: "#E15759", text: "#FFFFFF" };
   if (tone === "urgent") return { bg: "#E9A23B", text: "#111827" };
@@ -87,6 +71,20 @@ function KpiCard({ title, value, subtitle, hint, valueColor = "#1F2937" }: Reado
 }
 
 export function RiskPage() {
+  const [zoneRisk, setZoneRisk] = useState<{ zone: string; value: number }[]>([]);
+  const [taskRows, setTaskRows] = useState<TaskRow[]>([]);
+  const [agingBars, setAgingBars] = useState<AgingBar[]>([]);
+  const [kpis, setKpis] = useState<{ control_effectiveness: string; unverified_controls: number; risk_escalations: number } | null>(null);
+
+  useEffect(() => {
+    getRiskSummary().then((data) => {
+      setZoneRisk(data.zone_risk);
+      setTaskRows(data.task_rows);
+      setAgingBars(data.aging_bars);
+      setKpis(data.kpis);
+    }).catch(console.error);
+  }, []);
+
   return (
     <div className="space-y-4">
       <div>
@@ -94,9 +92,9 @@ export function RiskPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <KpiCard title="Control Effectiveness Score" value="92%" subtitle="Effective" hint="▲ 80%" />
-        <KpiCard title="Unverified Controls" value="14" subtitle="Pending Review" hint="" />
-        <KpiCard title="Risk Escalations ⚠" value="5" subtitle="Requires Immediate Action" hint="" />
+        <KpiCard title="Control Effectiveness Score" value={kpis ? kpis.control_effectiveness : "—"} subtitle="Effective" hint="▲ 80%" />
+        <KpiCard title="Unverified Controls" value={kpis ? String(kpis.unverified_controls) : "—"} subtitle="Pending Review" hint="" />
+        <KpiCard title="Risk Escalations ⚠" value={kpis ? String(kpis.risk_escalations) : "—"} subtitle="Requires Immediate Action" hint="" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.65fr_0.9fr]">
@@ -161,7 +159,7 @@ export function RiskPage() {
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={zoneRisk} layout="vertical" barSize={24}>
               <CartesianGrid stroke="#E2E8F0" vertical={false} />
-              <XAxis type="number" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 30]} />
+              <XAxis type="number" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
               <YAxis type="category" dataKey="zone" tick={{ fill: '#334155', fontSize: 12 }} axisLine={false} tickLine={false} width={88} />
               <Tooltip />
               <Bar dataKey="value" radius={[4, 4, 4, 4]} fill="#E9B13D" />
