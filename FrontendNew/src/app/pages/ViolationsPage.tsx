@@ -1,15 +1,11 @@
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Activity, AlertTriangle, Clock3, HeartPulse, PieChart as PieChartIcon, ShieldAlert, Users, type LucideIcon } from "lucide-react";
 import { BarChart, Bar, Cell, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../../services/analytics.service";
 
-const incidentTypeData = [
-  { label: "First Aid Case", value: 5 },
-  { label: "Lost Time Injury", value: 3 },
-  { label: "Medical Treatment Case", value: 2 },
-  { label: "Fatal Accident", value: 1 },
-];
-
+// Static panels — no backend model for these
 const injuryCategoryData = [
   { label: "Hand/Finger", value: 5 },
   { label: "Multiple", value: 3 },
@@ -20,27 +16,11 @@ const injuryCategoryData = [
   { label: "Foot", value: 2 },
 ];
 
-const causeData = [
-  { name: "Unsafe Act", value: 9, color: "#8BC34A" },
-  { name: "Lack of PPE", value: 7, color: "#FFC107" },
-  { name: "Procedure Gap", value: 4, color: "#607D8B" },
-];
-
 const personInvolvedData = [
   { label: "Green Hand(s)", value: 6 },
   { label: "Contractor(s)", value: 2 },
   { label: "Agency Worker(s)", value: 1 },
   { label: "Own Worker(s)", value: 1 },
-];
-
-const locationData = [
-  { label: "Drill Floor", value: 3 },
-  { label: "Accommodation", value: 3 },
-  { label: "Pipe Deck", value: 3 },
-  { label: "Riser Deck", value: 2 },
-  { label: "Subsea", value: 1 },
-  { label: "Process Deck", value: 1 },
-  { label: "Engine Room", value: 1 },
 ];
 
 const injuryTypeData = [
@@ -51,62 +31,6 @@ const injuryTypeData = [
   { label: "Stap Wound", value: 1 },
   { label: "Open Crack Wound", value: 1 },
   { label: "Dislocation", value: 1 },
-];
-
-const incidentTrend = [
-  { month: "JAN", value: 6 },
-  { month: "FEB", value: 6 },
-  { month: "MAR", value: 6 },
-  { month: "APR", value: 7 },
-  { month: "MAY", value: 14 },
-  { month: "JUN", value: 7 },
-  { month: "JUL", value: 8 },
-  { month: "AUG", value: 18 },
-  { month: "SEPT", value: 30 },
-  { month: "OCT", value: 10 },
-];
-
-const downtimeData = [
-  { label: "Fatal Accident", value: 4.2 },
-  { label: "Medical Treatment Case", value: 4.9 },
-  { label: "Lost Time Injury", value: 14.1 },
-  { label: "First Aid Case", value: 14.1 },
-  { label: "", value: 26.4 },
-];
-
-const monthlyNearMiss = [
-  { month: "JAN", value: 12 },
-  { month: "FEB", value: 28 },
-  { month: "MAR", value: 18 },
-  { month: "APR", value: 22 },
-  { month: "MAY", value: 48 },
-  { month: "JUN", value: 21 },
-  { month: "JUL", value: 24 },
-  { month: "AUG", value: 65 },
-  { month: "SEP", value: 54 },
-  { month: "OCT", value: 8 },
-];
-
-const severityMix = [
-  { label: "Low", critical: 5, high: 20, medium: 50, low: 25 },
-  { label: "Low", critical: 5, high: 20, medium: 45, low: 30 },
-  { label: "Mar", critical: 10, high: 18, medium: 30, low: 42 },
-  { label: "Max", critical: 15, high: 20, medium: 20, low: 45 },
-  { label: "High", critical: 0, high: 20, medium: 20, low: 60 },
-];
-
-const rcaData = [
-  { name: "Non-Work", value: 56, color: "#4F8C2F" },
-  { name: "Technological", value: 18, color: "#F5C116" },
-  { name: "RCA", value: 14, color: "#F59E0B" },
-  { name: "Other", value: 12, color: "#2F3A4F" },
-];
-
-const actionItems = [
-  "Open Actions in requirement 1",
-  "Open Actions in complrcrn 2",
-  "Open Actions in require 3",
-  "Open Actions in subsystem 4",
 ];
 
 const learnings = [
@@ -158,6 +82,30 @@ function DarkPanel({ title, icon, children, className = "" }: Readonly<{ title: 
 
 export function ViolationsPage() {
   const navigate = useNavigate();
+
+  const [incidentTypeData, setIncidentTypeData] = useState<ViolationItem[]>([]);
+  const [causeData, setCauseData] = useState<RcaItem[]>([]);
+  const [locationData, setLocationData] = useState<ViolationItem[]>([]);
+  const [incidentTrend, setIncidentTrend] = useState<{ month: string; value: number }[]>([]);
+  const [downtimeData, setDowntimeData] = useState<ViolationItem[]>([]);
+  const [monthlyNearMiss, setMonthlyNearMiss] = useState<{ month: string; value: number }[]>([]);
+  const [severityMix, setSeverityMix] = useState<SeverityMixItem[]>([]);
+  const [rcaData, setRcaData] = useState<RcaItem[]>([]);
+  const [actionItems, setActionItems] = useState<string[]>([]);
+
+  useEffect(() => {
+    getViolationsSummary(10).then((data) => {
+      setIncidentTypeData(data.by_type);
+      setCauseData(data.cause_data);
+      setLocationData(data.by_location);
+      setIncidentTrend(data.monthly_trend);
+      setDowntimeData(data.downtime_by_type);
+      setMonthlyNearMiss(data.near_miss_monthly);
+      setSeverityMix(data.severity_mix);
+      setRcaData(data.by_root_cause);
+      setActionItems(data.open_capa_items);
+    }).catch(console.error);
+  }, []);
 
   return (
     <div className="space-y-6">

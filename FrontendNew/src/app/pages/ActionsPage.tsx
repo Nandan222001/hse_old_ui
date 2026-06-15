@@ -1,23 +1,17 @@
+import { useState, useEffect } from "react";
 import { AlertTriangle, Clock3, ShieldAlert } from "lucide-react";
 import { Bar, BarChart, Radar, RadarChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  getPermitsSummary,
+  type PermitViolation,
+  type ActiveWorkRow,
+  type ExpiryTimelineBar,
+} from "../../../services/analytics.service";
 
-const riskWorkData = [
-  { subject: "Hot Work", A: 95 },
-  { subject: "Confined Space", A: 84 },
-  { subject: "Electrical", A: 36 },
-  { subject: "Height", A: 68 },
-  { subject: "Excavation", A: 52 },
-];
-
+// Static — no backend model for contractor breakdown or missing controls
 const workByContractor = [
   { name: "Contractor A", construction: 40, maintenance: 24, electrical: 14, mechanical: 22 },
   { name: "Contractor B", construction: 25, maintenance: 35, electrical: 20, mechanical: 20 },
-];
-
-const permitViolations = [
-  { text: "Contractor C: Unauthorized Hot Work", time: "10:15 AM" },
-  { text: "Contractor A: Missing PPE", time: "09:30 AM" },
-  { text: "Contractor B: Invalid Permit", time: "11:45 AM" },
 ];
 
 const missingControls = [
@@ -25,22 +19,6 @@ const missingControls = [
   "Toolbox Talk Pending",
   "Permit to Work Not Signed Off",
   "Emergency Response Plan Not Reviewed",
-];
-
-const activeWorkRows = [
-  { id: "PERM-101", type: "Hot Work", contractor: "Contractor A", location: "Zone 8", status: "Active", expiry: "2h 30m" },
-  { id: "PERM-102", type: "Confined Space", contractor: "Contractor C", location: "Tank 4", status: "Active", expiry: "4h 15m" },
-  { id: "PERM-103", type: "Electrical", contractor: "Contractor B", location: "Substation", status: "Active", expiry: "1h 45m" },
-  { id: "PERM-104", type: "Hot Work", contractor: "Contractor A", location: "Zone 8", status: "Active", expiry: "2h 30m" },
-  { id: "PERM-105", type: "Confined Space", contractor: "Contractor C", location: "Tank 4", status: "Active", expiry: "4h 15m" },
-];
-
-const expiryTimeline = [
-  { label: "PERM-105 (1h 45m)", left: 2, width: 22, color: "#D64545", rightText: "1h 45m" },
-  { label: "PERM-104 (1d 1h)", left: 8, width: 36, color: "#C14B4B", rightText: "1d 45m" },
-  { label: "PERM-103 (10h 30m)", left: 22, width: 44, color: "#E8B441", rightText: "2h 35m" },
-  { label: "PERM-101 (1h 2d 8w)", left: 46, width: 42, color: "#42A5C6", rightText: "4h 42m" },
-  { label: "PERM-101 (1d 12h 26m)", left: 58, width: 36, color: "#5070C9", rightText: "2h 26m" },
 ];
 
 function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A" }: Readonly<{ title: string; value: string; subtitle: string; delta: string; valueColor?: string }>) {
@@ -58,6 +36,22 @@ function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A" }: Reado
 }
 
 export function ActionsPage() {
+  const [activePermits, setActivePermits] = useState<number | null>(null);
+  const [riskWorkData, setRiskWorkData] = useState<{ subject: string; A: number }[]>([]);
+  const [permitViolations, setPermitViolations] = useState<PermitViolation[]>([]);
+  const [activeWorkRows, setActiveWorkRows] = useState<ActiveWorkRow[]>([]);
+  const [expiryTimeline, setExpiryTimeline] = useState<ExpiryTimelineBar[]>([]);
+
+  useEffect(() => {
+    getPermitsSummary().then((data) => {
+      setActivePermits(data.active_permits);
+      setRiskWorkData(data.risk_work_data);
+      setPermitViolations(data.permit_violations);
+      setActiveWorkRows(data.active_work_rows);
+      setExpiryTimeline(data.expiry_timeline);
+    }).catch(console.error);
+  }, []);
+
   return (
     <div className="space-y-5">
       <div>
@@ -67,7 +61,7 @@ export function ActionsPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <KpiBox
           title="Active Permits"
-          value="124"
+          value={activePermits !== null ? String(activePermits) : "—"}
           delta="↑ 8 since yesterday"
           subtitle="Permits Currently in Progress"
           valueColor="#0F766E"
