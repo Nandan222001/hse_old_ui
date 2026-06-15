@@ -20,10 +20,12 @@ from app.models.capa_action import CapaAction
 from app.models.shift_schedule import ShiftSchedule
 from app.models.app_role import AppRole
 from app.models.user import User
+from app.models.organisation_invite import OrganisationInvite
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
+    "OrganisationInvite",
 ]

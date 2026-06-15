@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 24  # 24 hours
 
+    # Twilio SendGrid Email
+    sendgrid_api_key: str = ""
+    email_from_address: str = "noreply@hse-intelligence.com"
+    email_from_name: str = "HSE Intelligence"
+
+    # App
+    frontend_url: str = "http://localhost:5173"
+
     @property
     def database_url(self) -> str:
         return (
