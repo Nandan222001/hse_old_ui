@@ -3,8 +3,13 @@ import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { getViolationsSummary, type RcaItem } from "../../services/analytics.service";
+import { getSites } from "../../services/infrastructure.service";
 
-// Static — no backend model for PPE compliance or scheduled reports
+// ⚠️ DUMMY DATA — REMEMBER: no PPE-tracking table exists anywhere in the
+// schema (checked employees/safety_walks/hazards/policies — nothing records
+// per-PPE-item compliance). Kept as hardcoded placeholder data by explicit
+// request (2026-06-17) rather than wired to a real source. Revisit if a real
+// PPE compliance model/table is ever added.
 const ppeData = [
   { name: "Hard Hat", compliance: 96 },
   { name: "Safety Vest", compliance: 92 },
@@ -13,6 +18,10 @@ const ppeData = [
   { name: "Goggles", compliance: 78 },
 ];
 
+// ⚠️ DUMMY DATA — REMEMBER: no report-scheduling/email table exists anywhere
+// in the schema. Kept as hardcoded placeholder data by explicit request
+// (2026-06-17) rather than wired to a real source. Revisit if a real
+// scheduled-reports feature/table is ever added.
 const scheduledReports = [
   { name: "Weekly Compliance Summary", type: "Compliance", freq: "Weekly", recipients: "safety-team@co.com", lastSent: "Feb 14, 2026", nextSend: "Feb 21, 2026", status: "Active" },
   { name: "Monthly Incident Report", type: "Incident", freq: "Monthly", recipients: "management@co.com", lastSent: "Jan 31, 2026", nextSend: "Feb 28, 2026", status: "Active" },
@@ -24,15 +33,25 @@ export function AnalyticsPage() {
   const [pieData, setPieData] = useState<RcaItem[]>([]);
   const [zoneRiskData, setZoneRiskData] = useState<{ name: string; risk: number; violations: number }[]>([]);
   const [trendData, setTrendData] = useState<{ month: string; violations: number; resolved: number }[]>([]);
+  const [siteNames, setSiteNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    getSites().then((sites) => setSiteNames(sites.map((s) => s.Site_Name))).catch(console.error);
+  }, []);
 
   useEffect(() => {
     getViolationsSummary(12).then((data) => {
       setPieData(data.by_root_cause);
 
+      // Normalize to 0-100 relative to the busiest location — the risk-color
+      // thresholds below (40/70) are calibrated for a percentage scale, and
+      // raw incident counts here are small (single digits), so using the
+      // raw count directly left every bar permanently green.
+      const maxLocationCount = Math.max(1, ...data.by_location.map((loc) => loc.value));
       setZoneRiskData(
         data.by_location.map((loc) => ({
           name: loc.label,
-          risk: loc.value,
+          risk: Math.round((loc.value / maxLocationCount) * 100),
           violations: loc.value,
         }))
       );
@@ -208,7 +227,7 @@ export function AnalyticsPage() {
               <div>
                 <label className="block mb-1.5">Sites</label>
                 <div className="space-y-1.5">
-                  {["Plant Alpha", "Plant Beta", "Plant Gamma"].map(s => (
+                  {siteNames.map(s => (
                     <label key={s} className="flex items-center gap-2 cursor-pointer" style={{ textTransform: 'none', color: '#0A0A0A', fontWeight: 400, fontSize: '13px' }}>
                       <input type="checkbox" className="w-4 h-4 accent-[#2E7D32]" /> {s}
                     </label>

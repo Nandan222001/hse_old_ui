@@ -25,7 +25,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { getUsers, type User as ApiUser } from "../../services/personnel.service";
+import { getUsers, getPeopleOverview, getEmployeeDirectory, type User as ApiUser, type PeopleOverview, type EmployeeDirectoryRow } from "../../services/personnel.service";
 import { fetchRequestStatusByEmail, savePostApprovalSetup, deletePostApprovalFile, type RequestStatusResponse } from "../../services/onboarding.service";
 import { fetchOrgAccessRequests, reviewOrgAccessRequest, type OrgAccessRequestItem } from "../../services/auth.service";
 
@@ -46,96 +46,9 @@ const ROLES: UserRole[] = [
 
 const ONBOARDING_USER_ROLE_OPTIONS = ["Admin", "Site Engineer", "Site Inspector", "Worker/Contractor"] as const;
 
-const activityLog = [
-  { action: "Acknowledged violation VIO-0839", time: "10:15 AM" },
-  { action: "Closed action ACT-0234", time: "09:45 AM" },
-  { action: "Updated rule RUL-003", time: "Yesterday, 3:30 PM" },
-  { action: "Exported compliance report", time: "Yesterday, 2:00 PM" },
-  { action: "Assigned violation VIO-0835", time: "Feb 16, 11:20 AM" },
-];
-
-const peopleKpis = [
-  {
-    title: "Competency Coverage %",
-    value: "88%",
-    subtitle: "Excellent",
-    change: "▲ 80%",
-    tone: "green",
-    visual: "spark",
-    sparkline: [45, 49, 53, 60, 58, 64, 69, 72, 79, 88],
-  },
-  {
-    title: "Worker Exposure Index",
-    value: "12%",
-    subtitle: "Medium Risk",
-    change: "⚠",
-    tone: "amber",
-    visual: "gauge",
-  },
-  {
-    title: "Supervisor Safety Score",
-    value: "95%",
-    subtitle: "Highly Effective",
-    change: "▲ 90%",
-    tone: "blue",
-    visual: "ring",
-  },
-] as const;
-
-const fatigueTrend = [
-  { week: "1", normal: 2, overtime: 1 },
-  { week: "3", normal: 6, overtime: 10 },
-  { week: "5", normal: 4, overtime: 5 },
-  { week: "7", normal: 8, overtime: 12 },
-  { week: "9", normal: 10, overtime: 12 },
-  { week: "11", normal: 6, overtime: 9 },
-  { week: "13", normal: 6, overtime: 19 },
-  { week: "15", normal: 3, overtime: 6 },
-  { week: "17", normal: 14, overtime: 16 },
-  { week: "29", normal: 7, overtime: 8 },
-];
-
-const toolboxTrend = [
-  { month: "Jan", meetings: 14 },
-  { month: "Feb", meetings: 17 },
-  { month: "Mar", meetings: 18 },
-  { month: "Apr", meetings: 17 },
-  { month: "May", meetings: 21 },
-  { month: "Jun", meetings: 20 },
-  { month: "Jul", meetings: 22 },
-  { month: "Aug", meetings: 27 },
-];
-
-const highRiskRoles = [
-  { role: "Welder (High)", status: "High", tone: "red" as const },
-  { role: "Crane Operator (High)", status: "High", tone: "red" as const },
-  { role: "Scaffold Builder", status: "Medium", tone: "amber" as const },
-  { role: "Electrical Technician", status: "Medium", tone: "amber" as const },
-];
-
-const trainingExpiry = [
-  { label: "Expired", value: 1 },
-  { label: "Due <30 Days", value: 2 },
-  { label: "Due <90 Days", value: 3 },
-];
-
-const behaviourBreakdown = [
-  { label: "Safe", value: 75, color: "#50B46A" },
-  { label: "At-Risk", value: 15, color: "#F3B548" },
-  { label: "Near Miss", value: 10, color: "#4D74C1" },
-];
-
-const coachingActions = [
-  { title: "Fatigue Management - J. Doe", detail: "Due Tomorrow", tone: "green" as const },
-  { title: "Ergonomics - A. Smith", detail: "Due Next Week", tone: "green" as const },
-  { title: "PPE Compliance - D. Patel", detail: "Overdue", tone: "red" as const },
-];
-
-const openActions = [
-  { title: "Review Incident Report #456", detail: "Due 29, 2024", tone: "red" as const, priority: "High" },
-  { title: "Approve Training Request #789", detail: "Due Jun 25, 2024", tone: "amber" as const, priority: "Priority" },
-  { title: "Follow up on Observation #123", detail: "Due Jun 25, 2024", tone: "blue" as const, priority: "Priority" },
-];
+// Per-user activity log has no real backing data (no link between Firebase
+// admin accounts and the employees table), so it intentionally stays empty.
+const activityLog: { action: string; time: string }[] = [];
 
 function toneChipStyles(tone: "green" | "amber" | "red" | "blue") {
   if (tone === "green") {
@@ -213,7 +126,48 @@ function RingStat({ value, color }: { value: number; color: string }) {
   );
 }
 
-function PeopleDashboardSection({ currentUserName }: { currentUserName?: string }) {
+function PeopleDashboardSection({ currentUserName, overview }: { currentUserName?: string; overview: PeopleOverview | null }) {
+  const peopleKpis = overview
+    ? ([
+        {
+          title: "Competency Coverage %",
+          value: `${overview.competency_coverage.value}%`,
+          subtitle: overview.competency_coverage.subtitle,
+          change: overview.competency_coverage.change,
+          tone: overview.competency_coverage.tone,
+          visual: "spark",
+          sparkline: overview.competency_coverage.sparkline ?? [],
+        },
+        {
+          title: "Worker Exposure Index",
+          value: `${overview.worker_exposure_index.value}%`,
+          subtitle: overview.worker_exposure_index.subtitle,
+          change: overview.worker_exposure_index.change,
+          tone: overview.worker_exposure_index.tone,
+          visual: "gauge",
+        },
+        {
+          title: "Supervisor Safety Score",
+          value: `${overview.supervisor_safety_score.value}%`,
+          subtitle: overview.supervisor_safety_score.subtitle,
+          change: overview.supervisor_safety_score.change,
+          tone: overview.supervisor_safety_score.tone,
+          visual: "ring",
+        },
+      ] as const)
+    : ([] as const);
+  const fatigueTrend = overview?.fatigue_trend ?? [];
+  const toolboxTrend = overview?.toolbox_trend ?? [];
+  const highRiskRoles = overview?.high_risk_roles ?? [];
+  const trainingExpiry = overview?.training_expiry ?? [];
+  const behaviourBreakdown = overview?.behaviour_breakdown ?? [];
+  const coachingActions = overview?.coaching_actions ?? [];
+  const openActions = overview?.open_actions ?? [];
+  const expiringSoonCount = overview?.expiring_soon_count ?? 0;
+  const toolboxMoM = toolboxTrend.length >= 2
+    ? Math.round(((toolboxTrend[toolboxTrend.length - 1].meetings - toolboxTrend[toolboxTrend.length - 2].meetings) / (toolboxTrend[toolboxTrend.length - 2].meetings || 1)) * 100)
+    : null;
+
   return (
     <div
       className="rounded-3xl border p-4 md:p-6 overflow-hidden"
@@ -236,7 +190,7 @@ function PeopleDashboardSection({ currentUserName }: { currentUserName?: string 
               </p>
             </div>
             <div className="rounded-full px-3 py-1.5 text-[12px] font-semibold" style={{ background: "#EEF4FF", color: "#3957C5" }}>
-              Demo data only
+              Live data
             </div>
           </div>
 
@@ -260,10 +214,10 @@ function PeopleDashboardSection({ currentUserName }: { currentUserName?: string 
                       </div>
                     ) : metric.visual === "gauge" ? (
                       <div className="pt-1">
-                        <GaugeDial value={12} />
+                        <GaugeDial value={overview?.worker_exposure_index.value ?? 0} />
                       </div>
                     ) : (
-                      <RingStat value={95} color="#2F73B8" />
+                      <RingStat value={overview?.supervisor_safety_score.value ?? 0} color="#2F73B8" />
                     )}
                   </div>
                 </div>
@@ -306,7 +260,8 @@ function PeopleDashboardSection({ currentUserName }: { currentUserName?: string 
                 <div>
                   <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>Safety Toolbox Meetings Trend</h3>
                   <div className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px]" style={{ background: "#EEF4FF", color: "#3957C5", fontWeight: 600 }}>
-                    <ArrowUpRight className="w-3.5 h-3.5" /> Increased 10% MoM
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    {toolboxMoM === null ? "Not enough data yet" : `${toolboxMoM >= 0 ? "Increased" : "Decreased"} ${Math.abs(toolboxMoM)}% MoM`}
                   </div>
                 </div>
               </div>
@@ -356,7 +311,7 @@ function PeopleDashboardSection({ currentUserName }: { currentUserName?: string 
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-[30px] leading-none font-bold" style={{ color: "#111827" }}>3</div>
+                  <div className="text-[30px] leading-none font-bold" style={{ color: "#111827" }}>{expiringSoonCount}</div>
                   <div className="mt-1 text-[13px]" style={{ color: "#374151" }}>Expiring Soon</div>
                 </div>
               </div>
@@ -428,7 +383,7 @@ function PeopleDashboardSection({ currentUserName }: { currentUserName?: string 
                         <div className="truncate text-[13px] font-semibold" style={{ color: "#111827" }}>{item.title}</div>
                         <div className="mt-0.5 text-[12px]" style={{ color: "#6B7280" }}>{item.detail}</div>
                       </div>
-                      <ToneChip tone={item.tone}>{item.priority}</ToneChip>
+                      <ToneChip tone={item.tone}>{item.priority ?? ""}</ToneChip>
                     </div>
                   </div>
                 ))}
@@ -479,6 +434,8 @@ export function UsersPage() {
   };
 
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [employeeDirectory, setEmployeeDirectory] = useState<EmployeeDirectoryRow[]>([]);
+  const [peopleOverview, setPeopleOverview] = useState<PeopleOverview | null>(null);
   const [loadingUid, setLoadingUid] = useState<string | null>(null);
   const [roleMenuUid, setRoleMenuUid] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -614,6 +571,14 @@ export function UsersPage() {
 
   useEffect(() => {
     loadAppUsers();
+  }, []);
+
+  useEffect(() => {
+    getPeopleOverview().then(setPeopleOverview).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    getEmployeeDirectory().then(setEmployeeDirectory).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -819,14 +784,19 @@ export function UsersPage() {
 
   const pendingUsers = appUsers.filter(u => !u.approved);
   const totalPendingRequests = pendingUsers.length + orgAccessRequests.length;
-  const approvedUsers = appUsers
-    .filter(u => u.approved)
-    .filter(u => !search || u.displayName?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
-    .filter(u => filterRole === "All Roles" || u.role === filterRole)
-    .filter(u => filterStatus === "All Statuses" || (filterStatus === "Active" ? u.approved : !u.approved));
+  const employeeRoleOptions = Array.from(
+    new Set(employeeDirectory.map(e => e.role_name).filter((r): r is string => Boolean(r)))
+  ).sort();
+  const filteredEmployees = employeeDirectory
+    .filter(e => !search || e.full_name.toLowerCase().includes(search.toLowerCase()))
+    .filter(e => filterRole === "All Roles" || e.role_name === filterRole)
+    .filter(e => filterStatus === "All Statuses" || e.active_status === filterStatus);
 
   const initials = (u: AppUser) =>
     (u.displayName || u.email || "?").split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+
+  const employeeInitials = (e: EmployeeDirectoryRow) =>
+    e.full_name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
 
   const orgUploadedFiles: UploadedFileMeta[] = onboardingStatus?.post_approval_setup?.uploaded_files ?? [];
   const workerUploadedFiles: UploadedFileMeta[] = onboardingStatus?.post_approval_setup?.worker_uploaded_files ?? [];
@@ -1540,15 +1510,12 @@ export function UsersPage() {
         </button> */}
       </div>
 
-      <PeopleDashboardSection currentUserName={currentUser?.name} />
+      <PeopleDashboardSection currentUserName={currentUser?.name} overview={peopleOverview} />
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1>Users</h1>
-          <span className="px-2.5 py-1 rounded-full text-[12px]" style={{ background: '#E8F5E9', color: '#1B5E20', fontWeight: 600 }}>
-            {appUsers.length} users
-          </span>
           {totalPendingRequests > 0 && (
             <span className="px-2.5 py-1 rounded-full text-[12px]" style={{ background: '#FFF3E0', color: '#E65100', fontWeight: 600 }}>
               {totalPendingRequests} pending
@@ -1647,7 +1614,7 @@ export function UsersPage() {
           style={{ borderColor: '#E2E8E2', color: '#4A5568' }}
         >
           <option>All Roles</option>
-          {ROLES.map(r => <option key={r}>{r}</option>)}
+          {employeeRoleOptions.map(r => <option key={r}>{r}</option>)}
         </select>
         <select
           value={filterStatus}
@@ -1657,22 +1624,22 @@ export function UsersPage() {
         >
           <option>All Statuses</option>
           <option>Active</option>
-          <option>Inactive</option>
+          <option>On Leave</option>
         </select>
       </div>
 
-      {/* ── Approved Users Table ── */}
+      {/* ── Employees Table ── */}
       <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
         <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: '#EEF2EE', background: '#F4F7F4' }}>
           <ShieldCheck className="w-4 h-4" style={{ color: '#2E7D32' }} />
           <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#2E7D32' }}>
-            Approved Users — {approvedUsers.length}
+            Employees — {filteredEmployees.length}
           </span>
         </div>
         <table className="w-full">
           <thead>
             <tr style={{ background: '#F4F7F4' }}>
-              {["Name", "Email", "Role", "Status", "Actions"].map(h => (
+              {["Name", "Role", "Department", "Site", "Employment Type", "Status"].map(h => (
                 <th key={h} className="px-4 py-3 text-left">
                   <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</span>
                 </th>
@@ -1680,91 +1647,33 @@ export function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {approvedUsers.length === 0 ? (
+            {filteredEmployees.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center">
+                <td colSpan={6} className="px-4 py-10 text-center">
                   <UsersIcon className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: '#9CA3AF' }} />
-                  <p className="text-[13px]" style={{ color: '#9CA3AF' }}>No approved users yet</p>
+                  <p className="text-[13px]" style={{ color: '#9CA3AF' }}>No employees found</p>
                 </td>
               </tr>
-            ) : approvedUsers.map(u => (
-              <tr key={u.uid} className="group hover:bg-[#F9FBF9] transition-colors" style={{ borderBottom: '1px solid #EEF2EE' }}>
+            ) : filteredEmployees.map(e => (
+              <tr key={e.id} className="group hover:bg-[#F9FBF9] transition-colors" style={{ borderBottom: '1px solid #EEF2EE' }}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
-                    {u.photoURL
-                      ? <img src={u.photoURL} className="w-8 h-8 rounded-full object-cover" />
-                      : (
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #43A047)', fontWeight: 600 }}>
-                          {initials(u)}
-                        </div>
-                      )}
-                    <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{u.displayName || "—"}</span>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #43A047)', fontWeight: 600 }}>
+                      {employeeInitials(e)}
+                    </div>
+                    <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{e.full_name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{u.email}</td>
                 <td className="px-4 py-3">
-                  {/* Inline role dropdown for Admin */}
-                  {isAdmin ? (
-                    <div className="relative" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => setRoleMenuUid(roleMenuUid === u.uid + "_t" ? null : u.uid + "_t")}
-                        className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[12px] font-medium border"
-                        style={{ borderColor: '#E2E8E2', color: '#374151', background: '#F9FBF9' }}
-                      >
-                        {u.role ?? "—"} <ChevronDown className="w-3 h-3" />
-                      </button>
-                      {roleMenuUid === u.uid + "_t" && (
-                        <div className="absolute top-8 left-0 z-10 bg-white shadow-xl rounded-xl border py-1 min-w-[150px]" style={{ borderColor: '#E2E8E2' }}>
-                          {ROLES.map(r => (
-                            <button key={r}
-                              onClick={() => handleRoleChange(u.uid, r)}
-                              className={`w-full text-left px-4 py-2 text-[12px] hover:bg-[#F4F7F4] ${r === u.role ? 'font-semibold' : ''}`}
-                              style={{ color: r === u.role ? '#1B5E20' : '#374151' }}>
-                              {r}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <RoleBadge role={u.role ?? "Worker"} />
-                  )}
+                  <RoleBadge role={e.role_name ?? "Worker"} />
                 </td>
+                <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{e.department_name ?? "—"}</td>
+                <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{e.site_name ?? "—"}</td>
+                <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{e.employment_type ?? "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: '#2E7D32' }} />
-                    <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>Active</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => { setSelectedUser(u); setShowDetail(true); }}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#E8F5E9]"
-                    >
-                      <Edit className="w-4 h-4" style={{ color: '#4A5568' }} />
-                    </button>
-                    {isAdmin && (
-                      <button
-                        disabled={loadingUid === u.uid}
-                        onClick={() => handleRevoke(u.uid)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 disabled:opacity-60"
-                      >
-                        {loadingUid === u.uid
-                          ? <span className="w-3.5 h-3.5 border border-gray-300 border-t-red-500 rounded-full animate-spin" />
-                          : <Ban className="w-4 h-4" style={{ color: '#DC2626' }} />}
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        disabled={loadingUid === u.uid}
-                        onClick={() => handleDeleteUser(u.uid)}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-red-50 disabled:opacity-60"
-                        title="Delete user"
-                      >
-                        <Trash2 className="w-4 h-4" style={{ color: '#DC2626' }} />
-                      </button>
-                    )}
+                    <div className="w-2 h-2 rounded-full" style={{ background: e.active_status === 'Active' ? '#2E7D32' : '#C78800' }} />
+                    <span className="text-[13px]" style={{ color: e.active_status === 'Active' ? '#2E7D32' : '#C78800', fontWeight: 500 }}>{e.active_status ?? "Unknown"}</span>
                   </div>
                 </td>
               </tr>

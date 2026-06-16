@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
-  Lightbulb, ClipboardCheck, BarChart3, Building2,
+  Lightbulb, ClipboardCheck, BarChart3,
   FolderClosed, AlertTriangle, Heart,
   LogOut, Shield, ShieldCheck, Settings, X, type LucideIcon
 } from "lucide-react";
@@ -30,7 +30,6 @@ const navGroups: NavGroup[] = [
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },
       { name: "Reports", icon: BarChart3, path: "/analytics" },
-      { name: "Vendors", icon: Building2, path: "/vendors" },
       { name: "Assets", icon: FolderClosed, path: "/equipment-certification" },
       { name: "Incidents", icon: AlertTriangle, path: "/violations" },
       { name: "Engagement", icon: Heart, path: "/engagement" },

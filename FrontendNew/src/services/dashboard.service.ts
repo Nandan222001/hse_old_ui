@@ -77,6 +77,17 @@ export interface RecentNearMiss {
   severity: string;
 }
 
+export interface LeadingIndicators {
+  predictive_injury_risk_score: number;
+  predictive_injury_risk_trend: number;
+  trir: number;
+  ltif: number;
+  contractor_risk_label: string;
+  contractor_risk_score: number;
+  audit_readiness_score: number;
+  audit_readiness_label: string;
+}
+
 export interface ActivePermit {
   id: number;
   permit_ref: string;
@@ -91,6 +102,9 @@ export interface ActivePermit {
 
 export const getDashboardStats = () =>
   axiosInstance.get<DashboardStats>('/dashboard/stats').then((r) => r.data);
+
+export const getLeadingIndicators = () =>
+  axiosInstance.get<LeadingIndicators>('/dashboard/leading-indicators').then((r) => r.data);
 
 export const getCapaActions = (limit = 10) =>
   axiosInstance.get<CapaAction[]>('/dashboard/capa-actions', { params: { limit } }).then((r) => r.data);

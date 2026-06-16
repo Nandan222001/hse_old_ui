@@ -62,6 +62,13 @@ export interface ExpiryTimelineBar {
   rightText: string;
 }
 
+export interface WorkByType {
+  name: string;
+  active: number;
+  closed: number;
+  expired: number;
+}
+
 export interface PermitsSummary {
   active_permits: number;
   total_workers_on_site: number;
@@ -69,10 +76,44 @@ export interface PermitsSummary {
   permit_violations: PermitViolation[];
   active_work_rows: ActiveWorkRow[];
   expiry_timeline: ExpiryTimelineBar[];
+  work_exposure_hours: number;
+  permit_compliance_pct: number;
+  missing_controls: string[];
+  work_by_type: WorkByType[];
+  contractor_compliant_pct: number;
+  contractor_non_compliant_pct: number;
 }
 
 export const getPermitsSummary = () =>
   axiosInstance.get<PermitsSummary>('/analytics/permits-summary').then((r) => r.data);
+
+// ── Compliance Summary ──────────────────────────────────────────────────────────
+
+export interface NonConformanceRow {
+  id: string;
+  action: string;
+  owner: string;
+  due: string;
+  criticality: string;
+}
+
+export interface ComplianceSummary {
+  compliance_score: number;
+  compliance_label: string;
+  legal_register_coverage_pct: number;
+  legal_register_label: string;
+  audit_readiness_pct: number;
+  audit_readiness_label: string;
+  permit_compliance_pct: number;
+  policy_review_pct: number;
+  compliance_trend: { month: string; value: number }[];
+  compliance_trend_mom: number | null;
+  findings_by_severity: { name: string; value: number; color: string }[];
+  non_conformance_rows: NonConformanceRow[];
+}
+
+export const getComplianceSummary = () =>
+  axiosInstance.get<ComplianceSummary>('/analytics/compliance-summary').then((r) => r.data);
 
 // ── Risk Summary ──────────────────────────────────────────────────────────────
 
@@ -205,70 +246,14 @@ export interface RCAFilters {
   status?: string;
 }
 
-interface RawIncident {
-  id: number;
-  report_date: string | null;
-  incident_date_time: string | null;
-  location_station_id: number | null;
-  incident_type: string | null;
-  severity: string | null;
-  description: string | null;
-  immediate_cause: string | null;
-  root_cause: string | null;
-  root_cause_category: string | null;
-  reported_by: number | null;
-  investigation_status: string | null;
-  capa_generated: string | null;
-}
-
-function mapIncidentToRCA(r: RawIncident): RootCauseAnalysis {
-  const invStatus = r.investigation_status?.toLowerCase() ?? '';
-  const status = invStatus.includes('complete') || invStatus.includes('closed')
-    ? 'Closed'
-    : invStatus.includes('progress')
-    ? 'In Progress'
-    : 'Pending';
-  const sev = (r.severity ?? '').toLowerCase();
-  const priority = sev.includes('critical') || sev.includes('significant')
-    ? 'Critical'
-    : sev.includes('high') || sev.includes('major')
-    ? 'High'
-    : sev.includes('medium') || sev.includes('moderate')
-    ? 'Medium'
-    : 'Low';
-  return {
-    RCA_ID: `RCA-${String(r.id).padStart(4, '0')}`,
-    Incident_ID: `INC-${String(r.id).padStart(4, '0')}`,
-    Incident_Type: r.incident_type ?? 'Unknown',
-    Site_ID: r.location_station_id ? `Station-${r.location_station_id}` : '—',
-    Zone_ID: '—',
-    Conducted_By: r.reported_by ? `Employee #${r.reported_by}` : 'Unknown',
-    Start_Date: r.incident_date_time ? r.incident_date_time.split('T')[0] : (r.report_date ?? ''),
-    Completion_Date: status === 'Closed' ? (r.report_date ?? '') : '',
-    Root_Causes: r.root_cause ?? r.root_cause_category ?? 'Under investigation',
-    Contributing_Factors: r.immediate_cause ?? '—',
-    Corrective_Actions: r.capa_generated === 'Yes' ? 'CAPA generated — see Actions page' : '—',
-    Preventive_Measures: '—',
-    Status: status,
-    Priority: priority,
-  };
-}
-
 export async function getRootCauseAnalysis(filters: RCAFilters = {}): Promise<RootCauseAnalysis[]> {
-  const raw = await axiosInstance
-    .get<RawIncident[]>('/incidents/?limit=200')
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.site_id) params.set('site_id', filters.site_id);
+
+  return axiosInstance
+    .get<RootCauseAnalysis[]>(`/analytics/root-cause-analysis?${params.toString()}`)
     .then((r) => r.data);
-
-  let results = raw.map(mapIncidentToRCA);
-
-  if (filters.status) {
-    results = results.filter((r) => r.Status === filters.status);
-  }
-  if (filters.site_id) {
-    results = results.filter((r) => r.Site_ID === filters.site_id);
-  }
-
-  return results;
 }
 
 // ── Equipment Certifications ──────────────────────────────────────────────────
