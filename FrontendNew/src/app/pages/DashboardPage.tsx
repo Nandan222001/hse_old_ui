@@ -1,19 +1,18 @@
 import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router";
-import { SiteInspectorDashboard } from "../components/dashboard/SiteInspectorDashboard";
-import { SiteEngineerDashboard } from "../components/dashboard/SiteEngineerDashboard";
-import { WorkerDashboard } from "../components/dashboard/WorkerDashboard";
 import { useAuth } from "../context/AuthContext";
 import {
   getDashboardStats,
   getIncidentsByCategory,
   getCapaActions,
   getOverdueCapa,
+  getLeadingIndicators,
   type DashboardStats,
   type IncidentByCategory,
   type CapaAction,
   type OverdueCapa as OverdueCapaItem,
+  type LeadingIndicators,
 } from "../../services/dashboard.service";
 
 function formatDueDate(dateStr: string | null): string {
@@ -61,70 +60,70 @@ export function DashboardPage() {
   const [riskBars, setRiskBars] = useState<IncidentByCategory[]>([]);
   const [capaActions, setCapaActions] = useState<CapaAction[]>([]);
   const [overdueCapa, setOverdueCapa] = useState<OverdueCapaItem[]>([]);
+  const [leading, setLeading] = useState<LeadingIndicators | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (user?.role !== "Admin") return;
     Promise.all([
       getDashboardStats(),
       getIncidentsByCategory(),
       getCapaActions(5),
       getOverdueCapa(4),
+      getLeadingIndicators(),
     ])
-      .then(([s, cats, capas, overdue]) => {
+      .then(([s, cats, capas, overdue, lead]) => {
         setStats(s);
         setRiskBars(cats);
         setCapaActions(capas);
         setOverdueCapa(overdue);
+        setLeading(lead);
         setLastUpdated(new Date());
       })
       .catch(console.error);
   }, [user?.role]);
 
-  const demoKpis = stats
+  const demoKpis = leading
     ? [
         {
-          title: "Total Incidents",
-          value: String(stats.total_incidents),
+          title: "Predictive Injury Risk Score",
+          value: `${leading.predictive_injury_risk_score}%`,
           sub: "Leading Indicator",
           accent: "#E9EDFF",
           border: "#6173C5",
-          inline: `${stats.critical_incidents} Critical`,
+          inline: `${Math.abs(leading.predictive_injury_risk_trend)}%`,
+          trendDown: leading.predictive_injury_risk_trend < 0,
         },
         {
-          title: "Near Misses / Incidents",
-          value: `${stats.near_misses_count} / ${stats.total_incidents}`,
-          sub: "Safety Observations",
+          title: "TRIR / LTIF",
+          value: `${leading.trir} / ${leading.ltif}`,
+          sub: "Leading Indicator",
           accent: "#FFFFFF",
           border: "#E5E7EB",
           inline: "",
+          trendDown: false,
         },
         {
-          title: "CAPA Completion Rate",
-          value: `${stats.capa_completion_rate}%`,
-          sub: "Corrective Actions",
+          title: "Contractor Risk Score",
+          value: `${leading.contractor_risk_label} / ${leading.contractor_risk_score}%`,
+          sub: "Limiting Indicator",
           accent: "#FFFFFF",
           border: "#E5E7EB",
           inline: "",
+          trendDown: false,
         },
         {
-          title: "Active Permits / Sites",
-          value: `${stats.active_permits} / ${stats.total_sites}`,
-          sub: "Live Operations",
+          title: "Audit Readiness Score",
+          value: `${leading.audit_readiness_score}% / ${leading.audit_readiness_label}`,
+          sub: leading.audit_readiness_label,
           accent: "#FFFFFF",
           border: "#E5E7EB",
           inline: "",
+          trendDown: false,
         },
       ]
     : [];
 
-  let content = <WorkerDashboard />;
-  if (user?.role === "Site Inspector") {
-    content = <SiteInspectorDashboard />;
-  } else if (user?.role === "Site Engineer") {
-    content = <SiteEngineerDashboard />;
-  } else if (user?.role === "Admin") {
-    content = (
+  const content = (
       <>
         <div
           className="rounded-2xl border p-4 md:p-5"
@@ -148,7 +147,11 @@ export function DashboardPage() {
                 <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
-                  {item.inline && <span className="text-[13px]" style={{ color: '#3C8A52', fontWeight: 600 }}>↗ {item.inline}</span>}
+                  {item.inline && (
+                    <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
+                      {item.trendDown ? '↘' : '↗'} {item.inline}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
               </div>
@@ -159,10 +162,19 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
             <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Risk Chart (Data-Based)</h2>
-            <ResponsiveContainer width="100%" height={340}>
-              <BarChart data={riskBars} barGap={6}>
+            <ResponsiveContainer width="100%" height={380}>
+              <BarChart data={riskBars} barGap={6} margin={{ bottom: 56 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} interval={0} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 12, fill: '#6B7280' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={70}
+                />
                 <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
                 <Tooltip />
                 <Bar dataKey="data" fill="#5E7992" radius={[4, 4, 0, 0]} />
@@ -238,8 +250,7 @@ export function DashboardPage() {
           </div>
         </div>
       </>
-    );
-  }
+  );
 
   return (
     <div className="space-y-6">

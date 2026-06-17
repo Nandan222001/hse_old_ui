@@ -64,6 +64,120 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/leading-indicators")
+def get_leading_indicators(db: Session = Depends(get_db)):
+    """Predictive/leading safety KPIs derived from incidents, employees and safety_walks.
+
+    These are best-effort approximations (documented inline) since the schema does not
+    track actual hours-worked or formal audit records. They move with real data but are
+    not certified OSHA-audited figures.
+    """
+    STANDARD_ANNUAL_HOURS = 2000  # assumed full-time hours/employee/year
+
+    total_employees = db.query(Employee).count() or 0
+    hours_worked = max(total_employees * STANDARD_ANNUAL_HOURS, 1)
+
+    # All "trailing N days/months" windows below are anchored to the latest
+    # *actual* incident/safety_walk date in the data, not the real wall clock
+    # — this is historical test data (activity ends in 2025), so anchoring to
+    # real "today" would make every trailing window read zero.
+    latest_incident_dt = db.query(func.max(Incident.incident_date_time)).scalar()
+    latest_walk_dt = db.query(func.max(SafetyWalk.inspection_date_time)).scalar()
+    today = (latest_incident_dt.date() if latest_incident_dt else date.today())
+
+    # ── TRIR / LTIF (trailing 12 months) ────────────────────────────────────
+    one_year_ago = today - timedelta(days=365)
+    recordable_incidents = db.query(Incident).filter(
+        Incident.incident_date_time.isnot(None),
+        Incident.incident_date_time >= one_year_ago,
+    ).count()
+    lost_time_incidents = db.query(Incident).filter(
+        Incident.incident_date_time.isnot(None),
+        Incident.incident_date_time >= one_year_ago,
+        Incident.days_away > 0,
+    ).count()
+    trir = round((recordable_incidents * 200_000) / hours_worked, 2)
+    ltif = round((lost_time_incidents * 1_000_000) / hours_worked, 2)
+
+    # ── Predictive Injury Risk Score ────────────────────────────────────────
+    # Severity-weighted incident mix, comparing the trailing 90 days against the
+    # prior 90 days to derive both a normalized score and a trend direction.
+    severity_weight = case(
+        (func.lower(Incident.severity).in_(["critical", "significant"]), 3),
+        (func.lower(Incident.severity).in_(["high", "major"]), 2),
+        (func.lower(Incident.severity).in_(["medium", "moderate"]), 1),
+        else_=0.5,
+    )
+
+    def weighted_risk_score(start, end) -> float:
+        rows = (
+            db.query(func.count(Incident.id), func.sum(severity_weight))
+            .filter(Incident.incident_date_time >= start, Incident.incident_date_time < end)
+            .first()
+        )
+        count, weight_sum = rows[0] or 0, float(rows[1] or 0)
+        if not count:
+            return 0.0
+        return min(100.0, (weight_sum / (count * 3)) * 100)
+
+    current_start = today - timedelta(days=90)
+    previous_start = today - timedelta(days=180)
+    current_score = weighted_risk_score(current_start, today)
+    previous_score = weighted_risk_score(previous_start, current_start)
+    injury_risk_score = round(current_score)
+    injury_risk_trend = round(current_score - previous_score)
+
+    # ── Contractor Risk Score ───────────────────────────────────────────────
+    # Relative incident rate of contractors vs. permanent staff (incidents per head).
+    is_contractor = func.lower(Employee.employment_type).like("%contract%")
+    contractor_employees = db.query(Employee).filter(is_contractor).count()
+    permanent_employees = max(total_employees - contractor_employees, 0)
+
+    contractor_incidents = (
+        db.query(func.count(Incident.id))
+        .join(Employee, Incident.reported_by == Employee.id)
+        .filter(is_contractor)
+        .scalar() or 0
+    )
+    total_attributed_incidents = (
+        db.query(func.count(Incident.id)).filter(Incident.reported_by.isnot(None)).scalar() or 0
+    )
+    permanent_incidents = max(total_attributed_incidents - contractor_incidents, 0)
+
+    contractor_rate = (contractor_incidents / contractor_employees) if contractor_employees else 0
+    permanent_rate = (permanent_incidents / permanent_employees) if permanent_employees else 0
+    relative_risk = (contractor_rate / permanent_rate) if permanent_rate else (contractor_rate if contractor_rate else 0)
+
+    contractor_risk_score = round(min(100, relative_risk * 50))
+    contractor_risk_label = "High" if relative_risk >= 1.5 else ("Medium" if relative_risk >= 1 else "Low")
+
+    # ── Audit Readiness Score ───────────────────────────────────────────────
+    # Average safety_walk compliance_rating (1-5 scale) over the trailing 90
+    # days, anchored to safety_walks' own latest real date (independent of
+    # the incident anchor above, since the two tables' date ranges needn't
+    # line up exactly).
+    walk_anchor = latest_walk_dt.date() if latest_walk_dt else today
+    walk_window_start = walk_anchor - timedelta(days=90)
+    avg_compliance = (
+        db.query(func.avg(SafetyWalk.compliance_rating))
+        .filter(SafetyWalk.inspection_date_time >= walk_window_start)
+        .scalar()
+    )
+    audit_readiness_score = round(float(avg_compliance) / 5 * 100) if avg_compliance else 0
+    audit_readiness_label = "Ready" if audit_readiness_score >= 80 else ("Needs Attention" if audit_readiness_score >= 60 else "Not Ready")
+
+    return {
+        "predictive_injury_risk_score": injury_risk_score,
+        "predictive_injury_risk_trend": injury_risk_trend,
+        "trir": trir,
+        "ltif": ltif,
+        "contractor_risk_label": contractor_risk_label,
+        "contractor_risk_score": contractor_risk_score,
+        "audit_readiness_score": audit_readiness_score,
+        "audit_readiness_label": audit_readiness_label,
+    }
+
+
 @router.get("/capa-actions")
 def get_ranked_capa_actions(limit: int = 10, db: Session = Depends(get_db)):
     today = date.today()
@@ -159,7 +273,11 @@ def get_incidents_by_severity(db: Session = Depends(get_db)):
 
 @router.get("/compliance-trend")
 def get_compliance_trend(days: int = 30, db: Session = Depends(get_db)):
-    cutoff = date.today() - timedelta(days=days)
+    # Anchored to the latest real safety_walk date, not today (historical
+    # test data — see get_leading_indicators for the same reasoning).
+    latest_walk_dt = db.query(func.max(SafetyWalk.inspection_date_time)).scalar()
+    anchor = latest_walk_dt.date() if latest_walk_dt else date.today()
+    cutoff = anchor - timedelta(days=days)
     rows = (
         db.query(
             func.date(SafetyWalk.inspection_date_time).label("day"),

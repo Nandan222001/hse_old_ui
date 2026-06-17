@@ -8,7 +8,6 @@ import { PoliciesPage } from "./pages/PoliciesPage";
 import { SitesZonesPage } from "./pages/SitesZonesPage";
 import { CamerasDevicesPage } from "./pages/CamerasDevicesPage";
 import { UsersPage } from "./pages/UsersPage";
-import { VendorsPage } from "./pages/VendorsPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AIAgentPage } from "./pages/AIAgentPage";
@@ -110,7 +109,6 @@ function hiddenForOnboarding<T extends object>(Component: ComponentType<T>) {
 
 const PoliciesRoute = hiddenForOnboarding(PoliciesPage);
 const UsersRoute = UsersPage;
-const VendorsRoute = VendorsPage;
 const BillingRoute = hiddenForOnboarding(BillingPage);
 const NotificationsRoute = NotificationsPage;
 const EngagementRoute = NotificationsPage;
@@ -182,7 +180,6 @@ export const router = createBrowserRouter([
       { path: "cameras-devices", Component: CamerasDevicesRoute },
       { path: "policies", Component: PoliciesRoute },
       { path: "users", Component: UsersRoute },
-      { path: "vendors", Component: VendorsRoute },
       { path: "analytics", Component: AnalyticsRoute },
       { path: "ai-agent", Component: AIAgentRoute },
       { path: "billing", Component: BillingRoute },

@@ -6,20 +6,9 @@ import {
   type PermitViolation,
   type ActiveWorkRow,
   type ExpiryTimelineBar,
+  type WorkByType,
 } from "../../services/analytics.service";
-
-// Static — no backend model for contractor breakdown or missing controls
-const workByContractor = [
-  { name: "Contractor A", construction: 40, maintenance: 24, electrical: 14, mechanical: 22 },
-  { name: "Contractor B", construction: 25, maintenance: 35, electrical: 20, mechanical: 20 },
-];
-
-const missingControls = [
-  "Site Induction Not Completed",
-  "Toolbox Talk Pending",
-  "Permit to Work Not Signed Off",
-  "Emergency Response Plan Not Reviewed",
-];
+import { useAuth } from "../context/AuthContext";
 
 function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A" }: Readonly<{ title: string; value: string; subtitle: string; delta: string; valueColor?: string }>) {
   const deltaColor = delta.includes("↓") ? "#B45309" : "#0F766E";
@@ -36,11 +25,16 @@ function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A" }: Reado
 }
 
 export function ActionsPage() {
+  const { user } = useAuth();
   const [activePermits, setActivePermits] = useState<number | null>(null);
   const [riskWorkData, setRiskWorkData] = useState<{ subject: string; A: number }[]>([]);
   const [permitViolations, setPermitViolations] = useState<PermitViolation[]>([]);
   const [activeWorkRows, setActiveWorkRows] = useState<ActiveWorkRow[]>([]);
   const [expiryTimeline, setExpiryTimeline] = useState<ExpiryTimelineBar[]>([]);
+  const [workExposureHours, setWorkExposureHours] = useState<number | null>(null);
+  const [permitCompliancePct, setPermitCompliancePct] = useState<number | null>(null);
+  const [missingControls, setMissingControls] = useState<string[]>([]);
+  const [workByType, setWorkByType] = useState<WorkByType[]>([]);
 
   useEffect(() => {
     getPermitsSummary().then((data) => {
@@ -49,35 +43,39 @@ export function ActionsPage() {
       setPermitViolations(data.permit_violations);
       setActiveWorkRows(data.active_work_rows);
       setExpiryTimeline(data.expiry_timeline);
+      setWorkExposureHours(data.work_exposure_hours);
+      setPermitCompliancePct(data.permit_compliance_pct);
+      setMissingControls(data.missing_controls);
+      setWorkByType(data.work_by_type);
     }).catch(console.error);
   }, []);
 
   return (
     <div className="space-y-5">
       <div>
-        <h1>Welcome , User</h1>
+        <h1>Welcome, {user?.name || "User"}</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <KpiBox
           title="Active Permits"
           value={activePermits !== null ? String(activePermits) : "—"}
-          delta="↑ 8 since yesterday"
+          delta=""
           subtitle="Permits Currently in Progress"
           valueColor="#0F766E"
         />
         <KpiBox
           title="Work Exposure Hours"
-          value="1,450"
-          delta="↓ 2% from last week"
-          subtitle="Total Hours Spent on Site"
+          value={workExposureHours !== null ? workExposureHours.toLocaleString() : "—"}
+          delta=""
+          subtitle="Total Hours Across Active Permits"
           valueColor="#A16207"
         />
         <KpiBox
           title="Permit Compliance %"
-          value="96.5%"
-          delta="↑ 1.2% MoM"
-          subtitle="Overall Compliance Rate"
+          value={permitCompliancePct !== null ? `${permitCompliancePct}%` : "—"}
+          delta=""
+          subtitle="No Deviation or Incident Reported"
           valueColor="#39498F"
         />
       </div>
@@ -97,16 +95,15 @@ export function ActionsPage() {
 
         <div className="space-y-4">
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
-            <div className="mb-2 text-[24px]" style={{ color: '#111827', fontWeight: 700 }}>Work by Contractor</div>
+            <div className="mb-2 text-[24px]" style={{ color: '#111827', fontWeight: 700 }}>Work by Permit Type</div>
             <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={workByContractor} layout="vertical" barSize={22}>
+              <BarChart data={workByType} layout="vertical" barSize={22}>
                 <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} />
                 <YAxis type="category" dataKey="name" tick={{ fill: '#111827', fontSize: 12 }} axisLine={false} tickLine={false} width={88} />
                 <Tooltip />
-                <Bar dataKey="construction" stackId="a" fill="#415A98" />
-                <Bar dataKey="maintenance" stackId="a" fill="#5D74B7" />
-                <Bar dataKey="electrical" stackId="a" fill="#63B5D1" />
-                <Bar dataKey="mechanical" stackId="a" fill="#9FD5E7" />
+                <Bar dataKey="active" stackId="a" fill="#415A98" />
+                <Bar dataKey="closed" stackId="a" fill="#63B5D1" />
+                <Bar dataKey="expired" stackId="a" fill="#9FD5E7" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -131,7 +128,9 @@ export function ActionsPage() {
                 Missing Work Controls
               </div>
               <div className="space-y-2 text-[13px]" style={{ color: '#78350F' }}>
-                {missingControls.map((item) => (
+                {missingControls.length === 0 ? (
+                  <p style={{ color: '#9CA3AF' }}>No active permits with reported deviations.</p>
+                ) : missingControls.map((item) => (
                   <div key={item} className="flex items-center gap-2">
                     <ShieldAlert className="h-4 w-4" />
                     <span>{item}</span>

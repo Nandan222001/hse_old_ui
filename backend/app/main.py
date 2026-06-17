@@ -25,6 +25,7 @@ from app.controllers import (
     analytics as analytics_controller,
     checklists as checklists_controller,
     stubs as stubs_controller,
+    people as people_controller,
 )
 
 settings = get_settings()
@@ -78,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_controller.router, prefix=prefix)
     app.include_router(checklists_controller.router, prefix=prefix)
     app.include_router(stubs_controller.router, prefix=prefix)
+    app.include_router(people_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():
