@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, useRouteError } from "react-router";
 import { AppLayout } from "./components/layout/AppLayout";
+import { SuperAdminLayout } from "./components/layout/SuperAdminLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ViolationsPage } from "./pages/ViolationsPage";
@@ -24,6 +25,14 @@ import { AssetsPage } from "./pages/AssetsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { SuperAdminDashboardPage } from "./pages/SuperAdminDashboardPage";
 import { OrgSetupPage } from "./pages/OrgSetupPage";
+import { OrgSetupWizardPage } from "./pages/OrgSetupWizardPage";
+import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
+import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
+import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
+import { SuperAdminRolesPage } from "./pages/SuperAdminRolesPage";
+import { SuperAdminSubscriptionsPage } from "./pages/SuperAdminSubscriptionsPage";
+import { SuperAdminAnalyticsPage } from "./pages/SuperAdminAnalyticsPage";
+import { SuperAdminNotificationsPage } from "./pages/SuperAdminNotificationsPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -190,7 +199,22 @@ export const router = createBrowserRouter([
       { path: "near-miss", Component: NearMissRoute },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
-      { path: "superadmin", Component: SuperAdminDashboardPage },
+      { path: "org-setup-wizard", Component: OrgSetupWizardPage },
+    ],
+  },
+  {
+    path: "/superadmin",
+    Component: SuperAdminLayout,
+    errorElement: <RouteErrorFallback />,
+    children: [
+      { index: true, Component: SuperAdminDashboardPage },
+      { path: "invitations", Component: SuperAdminInvitationsPage },
+      { path: "tenants", Component: SuperAdminTenantsPage },
+      { path: "users", Component: SuperAdminUsersPage },
+      { path: "roles", Component: SuperAdminRolesPage },
+      { path: "subscriptions", Component: SuperAdminSubscriptionsPage },
+      { path: "analytics", Component: SuperAdminAnalyticsPage },
+      { path: "notifications", Component: SuperAdminNotificationsPage },
     ],
   },
   {

@@ -902,9 +902,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const setupCheck = await checkOrgSetupRequired(trimmedEmail);
           if (setupCheck.needs_setup) {
-            // Store org name so the setup page can display it
-            const enriched = { ...userData, orgName: setupCheck.organisation_name };
-            localStorage.setItem('hse_user', JSON.stringify(enriched));
+            const enriched: AuthUser = {
+              ...userData,
+              onboardingSetupRequired: true,
+              onboardingSetupCompleted: false,
+            };
+            setUser(enriched);
+            localStorage.setItem('hse_user', JSON.stringify({
+              ...enriched,
+              orgName: setupCheck.organisation_name,
+            }));
             return 'org_setup_required';
           }
         } catch {
@@ -914,7 +921,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return 'success';
       }
     } catch (hseErr) {
-      // HSE backend unavailable or returned 401 — fall through to Firebase/Theta auth
+      const hseErrMsg = (hseErr as Error)?.message ?? '';
+      // 401 means the backend is reachable but credentials are wrong — stop here.
+      if (hseErrMsg.includes('401')) return 'invalid_credentials';
+      // 404/network means backend is unavailable — fall through to Firebase/Theta.
       console.warn('HSE backend login unavailable, falling back to Firebase/Theta auth:', hseErr);
     }
 

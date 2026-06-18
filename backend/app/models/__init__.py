@@ -21,11 +21,13 @@ from app.models.shift_schedule import ShiftSchedule
 from app.models.app_role import AppRole
 from app.models.user import User
 from app.models.organisation_invite import OrganisationInvite
+from app.models.subscription import Subscription
+from app.models.notification import Notification
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
-    "OrganisationInvite",
+    "OrganisationInvite", "Subscription", "Notification",
 ]

@@ -32,10 +32,11 @@ export function LoginPage() {
 
   useEffect(() => {
     if (!isAuthenticated || forceLoginView) return;
+    if (user?.isSuperAdmin) { navigate("/superadmin", { replace: true }); return; }
     const normalizedEmail = user?.email?.trim().toLowerCase() || "";
     const isProductAdmin = PRODUCT_ADMIN_EMAILS.has(normalizedEmail);
     navigate(isProductAdmin ? "/auth/onboarding/admin" : "/", { replace: true });
-  }, [isAuthenticated, user?.email, navigate, forceLoginView]);
+  }, [isAuthenticated, user?.email, user?.isSuperAdmin, navigate, forceLoginView]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,14 +57,18 @@ export function LoginPage() {
       const result = await login(email.trim(), password);
 
       if (result === "org_setup_required") {
-        navigate("/org-setup", { replace: true });
+        navigate("/org-setup-wizard", { replace: true });
       } else if (result === "success") {
-        navigate(
-          PRODUCT_ADMIN_EMAILS.has(email.trim().toLowerCase())
-            ? "/auth/onboarding/admin"
-            : "/",
-          { replace: true },
-        );
+        if (user?.isSuperAdmin) {
+          navigate("/superadmin", { replace: true });
+        } else {
+          navigate(
+            PRODUCT_ADMIN_EMAILS.has(email.trim().toLowerCase())
+              ? "/auth/onboarding/admin"
+              : "/",
+            { replace: true },
+          );
+        }
       } else if (result === "pending_approval") {
         setInfoMessage("Your account is pending admin approval. You will be notified once access is granted.");
       } else if (result === "user_not_found") {
