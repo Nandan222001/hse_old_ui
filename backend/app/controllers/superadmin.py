@@ -2,6 +2,7 @@ import re
 import secrets
 import string
 from collections import defaultdict
+from pathlib import Path
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -584,10 +585,6 @@ def delete_subscription(sub_id: int, db: Session = Depends(get_db)):
 def platform_analytics(db: Session = Depends(get_db)):
     from sqlalchemy import func as sqlfunc, text
     from app.models.subscription import Subscription as SubModel
-    from app.models.incident import Incident
-    from app.models.capa_action import CapaAction
-    from app.models.employee import Employee
-    from app.models.site import Site
 
     # ── Core counts ──────────────────────────────────────────────────────────
     total_users    = db.query(sqlfunc.count(User.id)).scalar() or 0
@@ -656,12 +653,6 @@ def platform_analytics(db: Session = Depends(get_db)):
     """)).fetchall()
     user_growth = [{"month": r[0], "users": r[1]} for r in user_growth_q]
 
-    # ── Platform activity counts ──────────────────────────────────────────────
-    total_incidents = db.query(sqlfunc.count(Incident.id)).scalar() or 0
-    total_actions   = db.query(sqlfunc.count(CapaAction.id)).scalar() or 0
-    total_employees = db.query(sqlfunc.count(Employee.id)).scalar() or 0
-    total_sites     = db.query(sqlfunc.count(Site.id)).scalar() or 0
-
     # ── Recent tenants ────────────────────────────────────────────────────────
     recent_invites = (
         db.query(OrganisationInvite)
@@ -690,10 +681,6 @@ def platform_analytics(db: Session = Depends(get_db)):
             "active_subs":     active_subs,
             "mrr":             mrr,
             "arr":             arr,
-            "total_incidents": total_incidents,
-            "total_actions":   total_actions,
-            "total_employees": total_employees,
-            "total_sites":     total_sites,
         },
         "role_distribution":   role_distribution,
         "plan_distribution":   plan_distribution,
@@ -702,6 +689,142 @@ def platform_analytics(db: Session = Depends(get_db)):
         "user_growth":         user_growth,
         "recent_tenants":      recent_tenants,
     }
+
+
+# ── System Settings ────────────────────────────────────────────────────────────
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+_EDITABLE_KEYS = {
+    "app_name", "debug", "frontend_base_url", "log_level",
+    "access_token_expire_minutes",
+    "email_backend",
+    "sendgrid_api_key", "sendgrid_from_email", "sendgrid_from_name",
+    "smtp_host", "smtp_port", "smtp_user", "smtp_password",
+    "smtp_from_email", "smtp_from_name",
+    "smtp_use_tls", "smtp_use_ssl",
+    "allowed_origins",
+}
+
+
+def _read_env_file() -> dict:
+    result: dict[str, str] = {}
+    if _ENV_FILE.exists():
+        for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                key, _, val = stripped.partition("=")
+                result[key.strip()] = val.strip()
+    return result
+
+
+def _write_env_file(env_dict: dict) -> None:
+    lines = [f"{k}={v}" for k, v in env_dict.items()]
+    _ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+@router.get("/settings", summary="Get platform system settings")
+def get_platform_settings():
+    import re as _re
+    s = get_settings()
+    masked_sg = ""
+    if s.sendgrid_api_key:
+        masked_sg = ("*" * 8 + s.sendgrid_api_key[-4:]) if len(s.sendgrid_api_key) > 4 else "****"
+
+    masked_smtp_pw = ""
+    if s.smtp_password:
+        masked_smtp_pw = "*" * min(len(s.smtp_password), 10)
+
+    # Derive effective backend for display
+    mode = (s.email_backend or "auto").strip().lower()
+    if mode == "sendgrid":
+        effective_backend = "sendgrid"
+    elif mode == "smtp":
+        effective_backend = "smtp"
+    elif s.sendgrid_api_key:
+        effective_backend = "sendgrid"
+    elif s.smtp_host:
+        effective_backend = "smtp"
+    else:
+        effective_backend = "none"
+
+    # Parse DATABASE_URL to extract display components
+    db_host, db_port_n, db_name_str, db_user_str = "localhost", 3306, "hse_db", "root"
+    m = _re.match(r"[^:]+://([^:@]*)(?::[^@]*)?@([^:/?]+)(?::(\d+))?/([^?]*)", s.database_url)
+    if m:
+        db_user_str  = m.group(1) or db_user_str
+        db_host      = m.group(2) or db_host
+        db_port_n    = int(m.group(3)) if m.group(3) else db_port_n
+        db_name_str  = m.group(4) or db_name_str
+
+    return {
+        "platform": {
+            "app_name":    s.app_name,
+            "app_env":     s.app_env,
+            "app_version": s.app_version,
+            "app_debug":   s.debug,
+            "frontend_url": s.frontend_base_url,
+            "log_level":   s.log_level,
+        },
+        "database": {
+            "db_host":        db_host,
+            "db_port":        db_port_n,
+            "db_name":        db_name_str,
+            "db_user":        db_user_str,
+            "db_pool_size":   s.db_pool_size,
+            "db_max_overflow": s.db_max_overflow,
+            "db_pool_timeout": s.db_pool_timeout,
+        },
+        "auth": {
+            "jwt_algorithm":                   s.jwt_algorithm,
+            "jwt_access_token_expire_minutes": s.access_token_expire_minutes,
+            "jwt_secret_configured":           s.jwt_secret != "hse-local-dev-secret-change-in-production",
+        },
+        "email": {
+            "email_backend":           s.email_backend,
+            "effective_backend":       effective_backend,
+            "sendgrid_from_email":     s.sendgrid_from_email,
+            "sendgrid_from_name":      s.sendgrid_from_name,
+            "smtp_from_email":         s.smtp_from_email,
+            "smtp_from_name":          s.smtp_from_name,
+            "sendgrid_configured":     bool(s.sendgrid_api_key),
+            "sendgrid_api_key_masked": masked_sg,
+            "smtp_host":               s.smtp_host,
+            "smtp_port":               s.smtp_port,
+            "smtp_user":               s.smtp_user,
+            "smtp_password_set":       bool(s.smtp_password),
+            "smtp_password_masked":    masked_smtp_pw,
+            "smtp_use_tls":            s.smtp_use_tls,
+            "smtp_use_ssl":            s.smtp_use_ssl,
+        },
+        "security": {
+            "allowed_origins":       s.cors_origins,
+            "secret_key_configured": s.jwt_secret != "hse-local-dev-secret-change-in-production",
+        },
+    }
+
+
+@router.patch("/settings", summary="Update editable platform settings (restart required)")
+def update_platform_settings(payload: dict):
+    env_dict = _read_env_file()
+    updated: list[str] = []
+    rejected: list[str] = []
+
+    for key, value in payload.items():
+        if key not in _EDITABLE_KEYS:
+            rejected.append(key)
+            continue
+        env_key = key.upper()
+        if isinstance(value, bool):
+            env_dict[env_key] = str(value).lower()
+        elif isinstance(value, list):
+            env_dict[env_key] = ",".join(str(v) for v in value)
+        else:
+            env_dict[env_key] = str(value)
+        updated.append(key)
+
+    _write_env_file(env_dict)
+    return {"updated": updated, "rejected": rejected, "restart_required": True}
 
 
 # ── Notifications ──────────────────────────────────────────────────────────────

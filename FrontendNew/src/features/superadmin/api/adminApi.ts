@@ -296,8 +296,6 @@ export interface PlatformAnalytics {
     total_tenants: number; active_tenants: number; pending_tenants: number;
     total_subs: number; active_subs: number;
     mrr: number; arr: number;
-    total_incidents: number; total_actions: number;
-    total_employees: number; total_sites: number;
   };
   role_distribution:  { role: string; count: number }[];
   plan_distribution:  { plan: string; count: number; revenue: number }[];

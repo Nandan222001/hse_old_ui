@@ -1,7 +1,6 @@
 import { useNavigate } from "react-router";
 import {
   ChevronLeft, RefreshCw, Users, Building2, CreditCard,
-  TrendingUp, AlertTriangle, Briefcase, Globe, UserCheck,
   DollarSign, Activity, CheckCircle2, Clock, XCircle, Loader2,
 } from "lucide-react";
 import {
@@ -203,13 +202,6 @@ export function PlatformAnalyticsPage() {
             <KpiCard icon={Users}       label="Platform Users"  value={ov?.total_users     ?? 0} sub={`${ov?.active_users ?? 0} active`}       color="#059669" />
             <KpiCard icon={DollarSign}  label="MRR"             value={fmt$(ov?.mrr ?? 0)}         sub={`ARR ${fmt$(ov?.arr ?? 0)}`}            color="#7C3AED" />
             <KpiCard icon={CreditCard}  label="Subscriptions"   value={ov?.total_subs      ?? 0} sub={`${ov?.active_subs ?? 0} active`}        color="#0891B2" />
-          </div>
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard icon={AlertTriangle} label="Total Incidents" value={ov?.total_incidents ?? 0} color="#EF4444" />
-            <KpiCard icon={Briefcase}     label="CAPA Actions"    value={ov?.total_actions   ?? 0} color="#F59E0B" />
-            <KpiCard icon={UserCheck}     label="Employees"       value={ov?.total_employees ?? 0} color="#DB2777" />
-            <KpiCard icon={Globe}         label="Sites"           value={ov?.total_sites     ?? 0} color="#0891B2" />
           </div>
 
           {/* ── Growth charts ─────────────────────────────────────────────── */}

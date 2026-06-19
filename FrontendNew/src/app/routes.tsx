@@ -26,6 +26,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { SuperAdminDashboardPage } from "./pages/SuperAdminDashboardPage";
 import { OrgSetupPage } from "./pages/OrgSetupPage";
 import { OrgSetupWizardPage } from "./pages/OrgSetupWizardPage";
+import { DataManagementPage } from "./pages/DataManagementPage";
 import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
 import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
 import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
@@ -33,6 +34,7 @@ import { SuperAdminRolesPage } from "./pages/SuperAdminRolesPage";
 import { SuperAdminSubscriptionsPage } from "./pages/SuperAdminSubscriptionsPage";
 import { SuperAdminAnalyticsPage } from "./pages/SuperAdminAnalyticsPage";
 import { SuperAdminNotificationsPage } from "./pages/SuperAdminNotificationsPage";
+import { SuperAdminSystemSettingsPage } from "./pages/SuperAdminSystemSettingsPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -200,6 +202,7 @@ export const router = createBrowserRouter([
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
+      { path: "data-management", Component: DataManagementPage },
     ],
   },
   {
@@ -215,6 +218,7 @@ export const router = createBrowserRouter([
       { path: "subscriptions", Component: SuperAdminSubscriptionsPage },
       { path: "analytics", Component: SuperAdminAnalyticsPage },
       { path: "notifications", Component: SuperAdminNotificationsPage },
+      { path: "settings", Component: SuperAdminSystemSettingsPage },
     ],
   },
   {

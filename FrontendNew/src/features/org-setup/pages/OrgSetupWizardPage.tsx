@@ -703,15 +703,25 @@ function Step6({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const [apiUrl, setApiUrl] = useState("");
   const [manualFormData, setManualFormData] = useState<Record<string, string>>({});
   const [bulkResult, setBulkResult] = useState<{ count: number; errors?: string[] } | null>(null);
+  const [localDocs, setLocalDocs] = useState<{ id: string; name: string; type: string; uploadedAt: string; size: string }[]>([]);
+  const allDocs = [...localDocs.filter(ld => !documents.find(d => d.id === ld.id)), ...documents];
 
   const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     setDocUploadStatus("idle"); setDocUploadMsg("");
     const fd = new FormData(); fd.append("file", file); fd.append("name", docForm.name || file.name); fd.append("doc_type", docForm.type || "Other");
     const result = await uploadKnowledge(fd);
-    if ("data" in result) { setDocUploadStatus("success"); setDocUploadMsg(`"${docForm.name || file.name}" uploaded successfully`); setDocForm({ name: "", type: "" }); }
-    else { setDocUploadStatus("error"); setDocUploadMsg("Upload failed. Please try again."); }
-    refetchDocs(); if (docFileRef.current) docFileRef.current.value = "";
+    if ("data" in result && result.data) {
+      setLocalDocs(prev => [...prev, result.data as { id: string; name: string; type: string; uploadedAt: string; size: string }]);
+      setDocUploadStatus("success");
+      setDocUploadMsg(`"${docForm.name || file.name}" uploaded successfully`);
+      setDocForm({ name: "", type: "" });
+    } else {
+      setDocUploadStatus("error");
+      setDocUploadMsg("Upload failed. Please try again.");
+    }
+    void refetchDocs();
+    if (docFileRef.current) docFileRef.current.value = "";
   };
 
   const handleImport = async (e?: React.ChangeEvent<HTMLInputElement>) => {
@@ -747,10 +757,10 @@ function Step6({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
             </label>
           </div>
           <div className={cardCls} style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-            <div className="px-5 py-3 border-b" style={{ borderColor: "#E3E9F6" }}><h2 className="text-base font-bold" style={{ color: "#111827" }}>Documents ({documents.length})</h2></div>
-            {docsLoading ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" style={{ color: "#4A57B9" }} /></div>
-              : documents.length === 0 ? <div className="text-center py-10 text-sm" style={{ color: "#9CA3AF" }}>No documents uploaded yet</div>
-              : <table className="w-full text-sm"><thead><tr style={{ background: "#F9FAFB" }}><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Name</th><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Type</th><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Uploaded</th></tr></thead><tbody>{documents.map((doc) => (<tr key={doc.id} className="border-t" style={{ borderColor: "#F3F4F6" }}><td className="px-5 py-3 font-medium" style={{ color: "#111827" }}>{doc.name}</td><td className="px-5 py-3"><span className="px-2.5 py-0.5 rounded-full text-xs font-semibold" style={{ background: "#EEF2FF", color: "#4A57B9" }}>{doc.type}</span></td><td className="px-5 py-3" style={{ color: "#6B7280" }}>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : "—"}</td></tr>))}</tbody></table>}
+            <div className="px-5 py-3 border-b" style={{ borderColor: "#E3E9F6" }}><h2 className="text-base font-bold" style={{ color: "#111827" }}>Documents ({allDocs.length})</h2></div>
+            {docsLoading && allDocs.length === 0 ? <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" style={{ color: "#4A57B9" }} /></div>
+              : allDocs.length === 0 ? <div className="text-center py-10 text-sm" style={{ color: "#9CA3AF" }}>No documents uploaded yet</div>
+              : <table className="w-full text-sm"><thead><tr style={{ background: "#F9FAFB" }}><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Name</th><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Type</th><th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: "#6B7280" }}>Uploaded</th></tr></thead><tbody>{allDocs.map((doc) => (<tr key={doc.id} className="border-t" style={{ borderColor: "#F3F4F6" }}><td className="px-5 py-3 font-medium" style={{ color: "#111827" }}>{doc.name}</td><td className="px-5 py-3"><span className="px-2.5 py-0.5 rounded-full text-xs font-semibold" style={{ background: "#EEF2FF", color: "#4A57B9" }}>{doc.type}</span></td><td className="px-5 py-3" style={{ color: "#6B7280" }}>{doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : "—"}</td></tr>))}</tbody></table>}
           </div>
         </>
       )}

@@ -1,19 +1,95 @@
-"""Common Twilio SendGrid email service.
+"""Email service with dual-backend support: SendGrid and SMTP.
 
-Usage:
-    from app.services.email_service import send_email, send_organisation_invite
+Backend selection via EMAIL_BACKEND env var:
+  auto      → SendGrid if SENDGRID_API_KEY is set, otherwise SMTP
+  sendgrid  → always use SendGrid
+  smtp      → always use SMTP
 """
 
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
-
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
 
 from app.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+
+
+def _resolve_backend(s) -> str:
+    mode = (s.email_backend or "auto").strip().lower()
+    if mode == "sendgrid":
+        return "sendgrid"
+    if mode == "smtp":
+        return "smtp"
+    # auto: prefer SendGrid when key is present
+    if s.sendgrid_api_key:
+        return "sendgrid"
+    if s.smtp_host:
+        return "smtp"
+    return "none"
+
+
+def _send_via_sendgrid(s, to_email: str, to_name: Optional[str], subject: str, html_content: str) -> bool:
+    from_email = s.sendgrid_from_email or "noreply@hse-platform.com"
+    from_name  = s.sendgrid_from_name  or "HSE Platform"
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail, Email, To, Content
+
+        message = Mail(
+            from_email=Email(from_email, from_name),
+            to_emails=To(to_email, to_name or to_email),
+            subject=subject,
+            html_content=Content("text/html", html_content),
+        )
+        sg = SendGridAPIClient(s.sendgrid_api_key)
+        response = sg.send(message)
+        logger.info("SendGrid: sent to %s | status=%s", to_email, response.status_code)
+        return response.status_code in (200, 202)
+    except Exception as exc:
+        logger.error("SendGrid send failed to %s: %s", to_email, exc, exc_info=True)
+        return False
+
+
+def _send_via_smtp(s, to_email: str, to_name: Optional[str], subject: str, html_content: str) -> bool:
+    if not s.smtp_host:
+        logger.error("SMTP_HOST is not configured — email not sent to %s", to_email)
+        return False
+
+    # SMTP has its own from address / name; fall back to SendGrid values if not set
+    from_email = s.smtp_from_email or s.sendgrid_from_email or "noreply@hse-platform.com"
+    from_name  = s.smtp_from_name  or s.sendgrid_from_name  or "HSE Platform"
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = f"{to_name} <{to_email}>" if to_name else to_email
+        msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+        if s.smtp_use_ssl:
+            server = smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, timeout=15)
+        else:
+            server = smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=15)
+            if s.smtp_use_tls:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+
+        # smtp_user is the correct field name (maps to SMTP_USER env var)
+        username = s.smtp_user or s.smtp_username
+        if username and s.smtp_password:
+            server.login(username, s.smtp_password)
+
+        server.sendmail(from_email, [to_email], msg.as_string())
+        server.quit()
+        logger.info("SMTP: sent to %s via %s:%s as <%s>", to_email, s.smtp_host, s.smtp_port, from_email)
+        return True
+    except Exception as exc:
+        logger.error("SMTP send failed to %s: %s", to_email, exc, exc_info=True)
+        return False
 
 
 def send_email(
@@ -22,35 +98,29 @@ def send_email(
     html_content: str,
     to_name: Optional[str] = None,
 ) -> bool:
-    """Send a transactional email via Twilio SendGrid.
+    """Send a transactional email via the configured backend (SendGrid or SMTP).
 
-    Returns True on success, False on failure (logs the error).
+    Returns True on success, False on failure.
     """
-    if not settings.sendgrid_api_key:
-        logger.error("SENDGRID_API_KEY is not configured — email not sent to %s", to_email)
-        return False
+    s = get_settings()
+    backend = _resolve_backend(s)
 
-    try:
-        message = Mail(
-            from_email=Email(settings.email_from_address, settings.email_from_name),
-            to_emails=To(to_email, to_name or to_email),
-            subject=subject,
-            html_content=Content("text/html", html_content),
-        )
+    if backend == "sendgrid":
+        if not s.sendgrid_api_key:
+            logger.error("EMAIL_BACKEND=sendgrid but SENDGRID_API_KEY is not set — email not sent to %s", to_email)
+            return False
+        return _send_via_sendgrid(s, to_email, to_name, subject, html_content)
 
-        sg = SendGridAPIClient(settings.sendgrid_api_key)
-        response = sg.send(message)
-        logger.info(
-            "Email sent to %s | subject=%r | status=%s",
-            to_email,
-            subject,
-            response.status_code,
-        )
-        return response.status_code in (200, 202)
+    if backend == "smtp":
+        return _send_via_smtp(s, to_email, to_name, subject, html_content)
 
-    except Exception as exc:
-        logger.error("Failed to send email to %s: %s", to_email, exc, exc_info=True)
-        return False
+    logger.error(
+        "No email backend configured (EMAIL_BACKEND=%r). "
+        "Set SENDGRID_API_KEY or SMTP_HOST in .env — email not sent to %s",
+        s.email_backend,
+        to_email,
+    )
+    return False
 
 
 def send_organisation_invite(
@@ -62,14 +132,14 @@ def send_organisation_invite(
 ) -> bool:
     """Send an organisation invitation email with login credentials."""
     subject = f"You're invited to join {organisation_name} on HSE Intelligence"
-    html_content = _build_invite_html(
+    html = _build_invite_html(
         admin_name=admin_name,
         organisation_name=organisation_name,
         email=admin_email,
         temp_password=temp_password,
         login_url=login_url,
     )
-    return send_email(to_email=admin_email, subject=subject, html_content=html_content, to_name=admin_name)
+    return send_email(to_email=admin_email, subject=subject, html_content=html, to_name=admin_name)
 
 
 def _build_invite_html(
@@ -79,8 +149,7 @@ def _build_invite_html(
     temp_password: str,
     login_url: str,
 ) -> str:
-    return f"""
-<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -121,8 +190,7 @@ def _build_invite_html(
 
               <!-- Credentials box -->
               <table width="100%" cellpadding="0" cellspacing="0"
-                     style="background:#F0F4FF;border:1px solid #C7D7FD;border-radius:8px;
-                            margin-bottom:28px;">
+                     style="background:#F0F4FF;border:1px solid #C7D7FD;border-radius:8px;margin-bottom:28px;">
                 <tr>
                   <td style="padding:24px;">
                     <p style="margin:0 0 4px;color:#6B7280;font-size:12px;
@@ -135,24 +203,17 @@ def _build_invite_html(
                           <strong>Login URL</strong>
                         </td>
                         <td style="padding:6px 0;">
-                          <a href="{login_url}"
-                             style="color:#1D4ED8;font-size:14px;text-decoration:none;">
+                          <a href="{login_url}" style="color:#1D4ED8;font-size:14px;text-decoration:none;">
                             {login_url}
                           </a>
                         </td>
                       </tr>
                       <tr>
-                        <td style="padding:6px 0;color:#374151;font-size:14px;">
-                          <strong>Email</strong>
-                        </td>
-                        <td style="padding:6px 0;color:#0A0A0A;font-size:14px;">
-                          {email}
-                        </td>
+                        <td style="padding:6px 0;color:#374151;font-size:14px;"><strong>Email</strong></td>
+                        <td style="padding:6px 0;color:#0A0A0A;font-size:14px;">{email}</td>
                       </tr>
                       <tr>
-                        <td style="padding:6px 0;color:#374151;font-size:14px;">
-                          <strong>Password</strong>
-                        </td>
+                        <td style="padding:6px 0;color:#374151;font-size:14px;"><strong>Password</strong></td>
                         <td style="padding:6px 0;">
                           <code style="background:#E0E7FF;color:#1D4ED8;padding:3px 8px;
                                        border-radius:4px;font-size:14px;font-weight:600;">
@@ -170,7 +231,7 @@ def _build_invite_html(
                 This invitation was sent by the HSE Intelligence Super Admin team.
               </p>
 
-              <!-- CTA Button -->
+              <!-- CTA -->
               <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
                 <tr>
                   <td style="border-radius:8px;overflow:hidden;">
@@ -195,8 +256,7 @@ def _build_invite_html(
 
           <!-- Footer -->
           <tr>
-            <td style="background:#F9FAFB;border-top:1px solid #E5E7EB;
-                        padding:20px 40px;text-align:center;">
+            <td style="background:#F9FAFB;border-top:1px solid #E5E7EB;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#9CA3AF;font-size:12px;">
                 &copy; 2026 HSE Intelligence. All rights reserved.
               </p>
@@ -208,5 +268,4 @@ def _build_invite_html(
     </tr>
   </table>
 </body>
-</html>
-"""
+</html>"""
