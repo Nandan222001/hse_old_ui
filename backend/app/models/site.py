@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String
 from app.models.base import Base
 
 
 class Site(Base):
     __tablename__ = "sites"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     site_name = Column(String(255), nullable=False)
     address = Column(String(255))
     postcode = Column(String(20))

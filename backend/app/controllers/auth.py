@@ -51,9 +51,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     token_payload = {
         "sub": str(user.id),
         "username": user.username,
+        "full_name": user.full_name,
         "email": user.email,
         "role": app_role.name,
         "role_level": app_role.level,
+        "org_id": user.organisation_id,
     }
 
     access_token = create_access_token(token_payload)
@@ -64,6 +66,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         user=TokenData(
             user_id=user.id,
             username=user.username,
+            full_name=user.full_name,
             email=user.email,
             role=app_role.name,
             role_level=app_role.level,

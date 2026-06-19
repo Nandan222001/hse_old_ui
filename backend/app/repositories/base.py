@@ -26,10 +26,28 @@ class BaseRepository(IRepository[T], Generic[T]):
             .all()
         )
 
+    def get_all_by_org(self, org_id: int, skip: int = 0, limit: int = 100) -> list[T]:
+        """Return records scoped to a specific organisation."""
+        return (
+            self._db.query(self.model_class)
+            .filter(self.model_class.organisation_id == org_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
     def get_by_id(self, id: int) -> Optional[T]:
         return (
             self._db.query(self.model_class)
             .filter(self.model_class.id == id)
+            .first()
+        )
+
+    def get_by_id_and_org(self, id: int, org_id: int) -> Optional[T]:
+        """Return a record only if it belongs to the given organisation."""
+        return (
+            self._db.query(self.model_class)
+            .filter(self.model_class.id == id, self.model_class.organisation_id == org_id)
             .first()
         )
 
@@ -50,8 +68,26 @@ class BaseRepository(IRepository[T], Generic[T]):
         self._db.refresh(obj)
         return obj
 
+    def update_by_org(self, id: int, org_id: int, data: dict) -> Optional[T]:
+        obj = self.get_by_id_and_org(id, org_id)
+        if obj is None:
+            return None
+        for key, value in data.items():
+            setattr(obj, key, value)
+        self._db.flush()
+        self._db.refresh(obj)
+        return obj
+
     def delete(self, id: int) -> bool:
         obj = self.get_by_id(id)
+        if obj is None:
+            return False
+        self._db.delete(obj)
+        self._db.flush()
+        return True
+
+    def delete_by_org(self, id: int, org_id: int) -> bool:
+        obj = self.get_by_id_and_org(id, org_id)
         if obj is None:
             return False
         self._db.delete(obj)

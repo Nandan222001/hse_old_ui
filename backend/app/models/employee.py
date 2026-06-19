@@ -5,6 +5,7 @@ from app.models.base import Base
 class Employee(Base):
     __tablename__ = "employees"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     full_name = Column(String(255), nullable=False)
     date_of_birth = Column(Date)
     gender = Column(String(1))

@@ -271,6 +271,7 @@ async def full_import(
     db: Session = Depends(get_db),
 ) -> dict:
     from app.services.excel_import_service import SHEET_STEPS
+    from sqlalchemy import text as _text
 
     content = await file.read()
     try:
@@ -283,34 +284,43 @@ async def full_import(
     total_processed = 0
     total_failed = 0
 
-    for sheet_label, table_key, fn in SHEET_STEPS:
-        processed = 0
-        failed = 0
-        errors: list[str] = []
-        agent = _SHEET_AGENT.get(sheet_label, "MasterDataAgent")
-        try:
-            processed = fn(db, wb)
-            db.flush()
-        except Exception as exc:
-            logger.error("full-import: error in %s: %s", sheet_label, exc, exc_info=True)
-            errors.append(str(exc))
-            failed = 1
-            db.rollback()
-        per_sheet.append({
-            "sheet": sheet_label,
-            "agent": agent,
-            "processed": processed,
-            "failed": failed,
-            "errors": errors,
-        })
-        total_processed += processed
-        total_failed += failed
+    # Disable FK checks so cross-sheet references work regardless of insert order.
+    # Each sheet commits independently so a later failure can't roll back earlier sheets.
+    try:
+        db.execute(_text("SET FOREIGN_KEY_CHECKS=0"))
+        db.commit()
+    except Exception:
+        pass
 
     try:
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Commit failed: {exc}")
+        for sheet_label, table_key, fn in SHEET_STEPS:
+            processed = 0
+            failed = 0
+            errors: list[str] = []
+            agent = _SHEET_AGENT.get(sheet_label, "MasterDataAgent")
+            try:
+                processed = fn(db, wb)
+                db.commit()
+            except Exception as exc:
+                logger.error("full-import: error in %s: %s", sheet_label, exc, exc_info=True)
+                errors.append(str(exc))
+                failed = 1
+                db.rollback()
+            per_sheet.append({
+                "sheet": sheet_label,
+                "agent": agent,
+                "processed": processed,
+                "failed": failed,
+                "errors": errors,
+            })
+            total_processed += processed
+            total_failed += failed
+    finally:
+        try:
+            db.execute(_text("SET FOREIGN_KEY_CHECKS=1"))
+            db.commit()
+        except Exception:
+            pass
 
     # Log the import
     import_row = DataImport(

@@ -5,6 +5,7 @@ from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 from app.models.capa_action import CapaAction
 from app.models.department import Department
 from app.models.employee import Employee
@@ -37,7 +38,6 @@ def _fmt_due(due_date) -> str:
 
 
 def _add_months_preserve_day(d: date, months: int) -> date:
-    """Advance d by `months`, clamping the day for shorter target months."""
     month_index = d.month - 1 + months
     year = d.year + month_index // 12
     month = month_index % 12 + 1
@@ -46,44 +46,49 @@ def _add_months_preserve_day(d: date, months: int) -> date:
         try:
             return date(year, month, day)
         except ValueError:
-            day -= 1  # roll back for months with fewer days (e.g. Feb 30 -> 28)
+            day -= 1
+
+
+def _of(query, model, org_id):
+    if org_id is not None:
+        return query.filter(model.organisation_id == org_id)
+    return query
 
 
 @router.get("/overview")
-def get_people_overview(db: Session = Depends(get_db)):
+def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     today = date.today()
-    total_employees = db.query(Employee).count() or 0
+    org_id = current_user.org_id
 
-    # ── Competency Coverage % ───────────────────────────────────────────────
-    # Employees are not flagged as "competency gaps" unless a real incident or
-    # CAPA finding documents a training-related root cause against them.
-    # (employees.induction_date is unpopulated in this dataset, so it can't be
-    # used as the coverage signal.)
+    total_employees = _of(db.query(Employee), Employee, org_id).count() or 0
+
     training_incident_rows = (
-        db.query(Incident.reported_by, Incident.incident_date_time)
-        .filter(
-            Incident.reported_by.isnot(None),
-            or_(
-                func.lower(Incident.root_cause).like("%train%"),
-                func.lower(Incident.root_cause_category).like("%train%"),
+        _of(
+            db.query(Incident.reported_by, Incident.incident_date_time)
+            .filter(
+                Incident.reported_by.isnot(None),
+                or_(
+                    func.lower(Incident.root_cause).like("%train%"),
+                    func.lower(Incident.root_cause_category).like("%train%"),
+                ),
             ),
-        )
-        .all()
+            Incident, org_id,
+        ).all()
     )
     training_capa_employee_ids = {
         row[0]
-        for row in db.query(CapaAction.responsible_person_id)
-        .filter(
-            CapaAction.responsible_person_id.isnot(None),
-            func.lower(CapaAction.root_cause_addressed).like("%train%"),
-        )
-        .all()
+        for row in _of(
+            db.query(CapaAction.responsible_person_id)
+            .filter(
+                CapaAction.responsible_person_id.isnot(None),
+                func.lower(CapaAction.root_cause_addressed).like("%train%"),
+            ),
+            CapaAction, org_id,
+        ).all()
     }
     flagged_now = training_capa_employee_ids | {r[0] for r in training_incident_rows}
     competency_pct = round((total_employees - len(flagged_now)) / total_employees * 100) if total_employees else 0
 
-    # 10-point trailing-month sparkline of the same coverage metric, growing the
-    # flagged set only as each real incident's date is reached.
     sparkline = []
     window_start = _add_months(today, -9)
     for i in range(10):
@@ -98,54 +103,47 @@ def get_people_overview(db: Session = Depends(get_db)):
     competency_tone = "green" if competency_pct >= 80 else ("amber" if competency_pct >= 60 else "red")
     competency_subtitle = "Excellent" if competency_pct >= 80 else ("Good" if competency_pct >= 60 else "Needs Improvement")
 
-    # ── Worker Exposure Index ───────────────────────────────────────────────
-    # Recent (90-day) incident + near-miss volume relative to headcount.
-    # Anchored to the latest *actual* incident/near-miss date in the data, not
-    # the real-world "today" — this is historical test data (ends 2025), so a
-    # window anchored to the real calendar date would always read zero.
-    latest_incident_date = db.query(func.max(Incident.incident_date_time)).scalar()
-    latest_near_miss_date = db.query(func.max(NearMiss.event_date_time)).scalar()
+    latest_incident_date = _of(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
+    latest_near_miss_date = _of(db.query(func.max(NearMiss.event_date_time)), NearMiss, org_id).scalar()
     candidates = [d for d in (latest_incident_date, latest_near_miss_date) if d]
     activity_anchor = max(candidates) if candidates else datetime.combine(today, datetime.min.time())
     cutoff_90 = activity_anchor - timedelta(days=90)
-    recent_incidents = db.query(Incident).filter(
-        Incident.incident_date_time.isnot(None), Incident.incident_date_time >= cutoff_90
+    recent_incidents = _of(
+        db.query(Incident).filter(Incident.incident_date_time.isnot(None), Incident.incident_date_time >= cutoff_90),
+        Incident, org_id,
     ).count()
-    recent_near_misses = db.query(NearMiss).filter(
-        NearMiss.event_date_time.isnot(None), NearMiss.event_date_time >= cutoff_90
+    recent_near_misses = _of(
+        db.query(NearMiss).filter(NearMiss.event_date_time.isnot(None), NearMiss.event_date_time >= cutoff_90),
+        NearMiss, org_id,
     ).count()
     exposure_index = round(min(100, (recent_incidents + recent_near_misses) / total_employees * 100)) if total_employees else 0
     exposure_tone = "red" if exposure_index > 30 else ("amber" if exposure_index >= 10 else "green")
     exposure_subtitle = "High Risk" if exposure_index > 30 else ("Medium Risk" if exposure_index >= 10 else "Low Risk")
 
-    # ── Supervisor Safety Score ─────────────────────────────────────────────
-    # Avg compliance_rating of safety_walks performed by employees in
-    # safety-signatory roles (HSE Manager / Safety Officer / Site Inspector).
-    supervisor_role_ids = [r.id for r in db.query(Role).filter(Role.safety_signatory == "Yes").all()]
+    supervisor_role_ids = [r.id for r in _of(db.query(Role).filter(Role.safety_signatory == "Yes"), Role, org_id).all()]
     avg_supervisor_compliance = (
         db.query(func.avg(SafetyWalk.compliance_rating))
         .join(Employee, SafetyWalk.inspector_id == Employee.id)
-        .filter(Employee.role_id.in_(supervisor_role_ids))
+        .filter(
+            Employee.role_id.in_(supervisor_role_ids),
+            *([SafetyWalk.organisation_id == org_id] if org_id is not None else []),
+        )
         .scalar()
     ) if supervisor_role_ids else None
     supervisor_score = round(float(avg_supervisor_compliance) / 5 * 100) if avg_supervisor_compliance else 0
     supervisor_subtitle = "Highly Effective" if supervisor_score >= 90 else ("Effective" if supervisor_score >= 70 else "Needs Coaching")
 
-    # ── Fatigue Risk (overtime vs normal hours) ─────────────────────────────
-    # shift_schedule has no concept of "overtime" recorded directly — every
-    # shift logs actual_hours_worked against a standard 8-hour shift. Hours
-    # beyond 8 per shift are treated as overtime, summed org-wide per week
-    # over the most recent 10 weeks of *actual* shift data (the dataset's
-    # own date range, not "today" — this is historical data, not live shifts).
-    latest_shift_date = db.query(func.max(ShiftSchedule.shift_date)).scalar()
+    latest_shift_date = _of(db.query(func.max(ShiftSchedule.shift_date)), ShiftSchedule, org_id).scalar()
     fatigue_trend: list = []
     if latest_shift_date:
         window_end = latest_shift_date + timedelta(days=1)
         window_start = window_end - timedelta(weeks=10)
         shift_rows = (
-            db.query(ShiftSchedule.shift_date, ShiftSchedule.actual_hours_worked)
-            .filter(ShiftSchedule.shift_date >= window_start, ShiftSchedule.shift_date < window_end)
-            .all()
+            _of(
+                db.query(ShiftSchedule.shift_date, ShiftSchedule.actual_hours_worked)
+                .filter(ShiftSchedule.shift_date >= window_start, ShiftSchedule.shift_date < window_end),
+                ShiftSchedule, org_id,
+            ).all()
         )
         weekly: dict = {}
         for shift_date, hours in shift_rows:
@@ -167,23 +165,20 @@ def get_people_overview(db: Session = Depends(get_db)):
             for i in range(10)
         ]
 
-    # ── Safety Toolbox Meetings Trend ───────────────────────────────────────
-    # No "Toolbox" inspection_type exists; closest real proxy is monthly
-    # safety_walk volume overall (best-effort substitute, documented here).
-    # Anchored to the latest actual safety_walk date, not real-world "today"
-    # (same reasoning as Worker Exposure Index above).
-    latest_walk_date = db.query(func.max(SafetyWalk.inspection_date_time)).scalar()
+    latest_walk_date = _of(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
     walk_anchor = (latest_walk_date.date() if latest_walk_date else today)
     eight_months_ago = _add_months(walk_anchor, -7)
     toolbox_rows = (
-        db.query(
-            func.year(SafetyWalk.inspection_date_time).label("yr"),
-            func.month(SafetyWalk.inspection_date_time).label("mo"),
-            func.count(SafetyWalk.id).label("cnt"),
-        )
-        .filter(
-            SafetyWalk.inspection_date_time.isnot(None),
-            SafetyWalk.inspection_date_time >= eight_months_ago,
+        _of(
+            db.query(
+                func.year(SafetyWalk.inspection_date_time).label("yr"),
+                func.month(SafetyWalk.inspection_date_time).label("mo"),
+                func.count(SafetyWalk.id).label("cnt"),
+            ).filter(
+                SafetyWalk.inspection_date_time.isnot(None),
+                SafetyWalk.inspection_date_time >= eight_months_ago,
+            ),
+            SafetyWalk, org_id,
         )
         .group_by("yr", "mo")
         .order_by("yr", "mo")
@@ -191,11 +186,10 @@ def get_people_overview(db: Session = Depends(get_db)):
     )
     toolbox_trend = [{"month": MONTH_NAMES[int(r.mo) - 1], "meetings": r.cnt} for r in toolbox_rows]
 
-    # ── High Risk Roles ──────────────────────────────────────────────────────
-    # (incidents + near-misses attributed to a role) / headcount in that role.
     role_headcount = dict(
         db.query(Role.role_name, func.count(Employee.id))
         .join(Employee, Employee.role_id == Role.id)
+        .filter(*([Employee.organisation_id == org_id] if org_id is not None else []))
         .group_by(Role.role_name)
         .all()
     )
@@ -203,6 +197,7 @@ def get_people_overview(db: Session = Depends(get_db)):
         db.query(Role.role_name, func.count(Incident.id))
         .join(Employee, Employee.role_id == Role.id)
         .outerjoin(Incident, Incident.reported_by == Employee.id)
+        .filter(*([Employee.organisation_id == org_id] if org_id is not None else []))
         .group_by(Role.role_name)
         .all()
     )
@@ -210,6 +205,7 @@ def get_people_overview(db: Session = Depends(get_db)):
         db.query(Role.role_name, func.count(NearMiss.id))
         .join(Employee, Employee.role_id == Role.id)
         .outerjoin(NearMiss, NearMiss.reported_by == Employee.id)
+        .filter(*([Employee.organisation_id == org_id] if org_id is not None else []))
         .group_by(Role.role_name)
         .all()
     )
@@ -231,13 +227,8 @@ def get_people_overview(db: Session = Depends(get_db)):
             status, tone = "Low", "green"
         high_risk_roles.append({"role": name, "status": status, "tone": tone})
 
-    # ── Training Expiry Status ──────────────────────────────────────────────
-    # There's no per-employee training-assignment table, so this assumes every
-    # employee renews every catalog training on its own recurring cycle
-    # (expiry_months) starting from their real induction_date — the closest
-    # defensible proxy available from real data for "who is due a refresher".
-    programs = db.query(TrainingProgram).filter(TrainingProgram.expiry_months.isnot(None)).all()
-    employees_with_induction = db.query(Employee).filter(Employee.induction_date.isnot(None)).all()
+    programs = _of(db.query(TrainingProgram).filter(TrainingProgram.expiry_months.isnot(None)), TrainingProgram, org_id).all()
+    employees_with_induction = _of(db.query(Employee).filter(Employee.induction_date.isnot(None)), Employee, org_id).all()
     expired_count = due_30_count = due_90_count = 0
     for emp in employees_with_induction:
         for prog in programs:
@@ -258,10 +249,9 @@ def get_people_overview(db: Session = Depends(get_db)):
     ]
     expiring_soon_count = expired_count + due_30_count
 
-    # ── Behaviour Observations ──────────────────────────────────────────────
-    safe_count = db.query(SafetyWalk).filter(SafetyWalk.issues_found == 0).count()
-    at_risk_count = db.query(SafetyWalk).filter(SafetyWalk.issues_found > 0).count()
-    near_miss_count = db.query(NearMiss).count()
+    safe_count = _of(db.query(SafetyWalk).filter(SafetyWalk.issues_found == 0), SafetyWalk, org_id).count()
+    at_risk_count = _of(db.query(SafetyWalk).filter(SafetyWalk.issues_found > 0), SafetyWalk, org_id).count()
+    near_miss_count = _of(db.query(NearMiss), NearMiss, org_id).count()
     behaviour_total = safe_count + at_risk_count + near_miss_count
     behaviour_breakdown = [
         {"label": "Safe", "value": round(safe_count / behaviour_total * 100) if behaviour_total else 0, "color": "#50B46A"},
@@ -269,12 +259,13 @@ def get_people_overview(db: Session = Depends(get_db)):
         {"label": "Near Miss", "value": round(near_miss_count / behaviour_total * 100) if behaviour_total else 0, "color": "#4D74C1"},
     ]
 
-    # ── Coaching Actions ─────────────────────────────────────────────────────
-    # Open CAPA actions specifically addressing a training gap.
     coaching_rows = (
-        db.query(CapaAction, Employee)
-        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
-        .filter(CapaAction.action_type == "Training", CapaAction.status != "Completed")
+        _of(
+            db.query(CapaAction, Employee)
+            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .filter(CapaAction.action_type == "Training", CapaAction.status != "Completed"),
+            CapaAction, org_id,
+        )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
         .limit(3)
         .all()
@@ -300,12 +291,13 @@ def get_people_overview(db: Session = Depends(get_db)):
             "tone": "red" if days_until is not None and days_until < 0 else "green",
         })
 
-    # ── Open Actions ─────────────────────────────────────────────────────────
-    # General open CAPA actions (excluding the ones already shown as coaching).
     open_rows = (
-        db.query(CapaAction, Employee)
-        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
-        .filter(CapaAction.action_type != "Training", CapaAction.status != "Completed")
+        _of(
+            db.query(CapaAction, Employee)
+            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .filter(CapaAction.action_type != "Training", CapaAction.status != "Completed"),
+            CapaAction, org_id,
+        )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
         .limit(3)
         .all()
@@ -354,16 +346,19 @@ def get_people_overview(db: Session = Depends(get_db)):
 
 
 @router.get("/directory")
-def get_employee_directory(db: Session = Depends(get_db)):
-    """Real employee roster with joined role/department/site names."""
-    rows = (
+def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
+    org_id = current_user.org_id
+
+    q = (
         db.query(Employee, Role, Department, Site)
         .outerjoin(Role, Employee.role_id == Role.id)
         .outerjoin(Department, Employee.department_id == Department.id)
         .outerjoin(Site, Department.site_id == Site.id)
-        .order_by(Employee.full_name.asc())
-        .all()
     )
+    if org_id is not None:
+        q = q.filter(Employee.organisation_id == org_id)
+    rows = q.order_by(Employee.full_name.asc()).all()
+
     return [
         {
             "id": emp.id,

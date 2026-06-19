@@ -157,7 +157,7 @@ def org_setup_step1_get(db: Session = Depends(get_db)) -> dict:
     }
 
 @router.post("/org-setup/step1")
-def org_setup_step1_post(payload: dict, db: Session = Depends(get_db)) -> dict:
+def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
     global _wizard_step1
     d = payload.get("data", payload)
     _wizard_step1 = dict(d)
@@ -203,6 +203,21 @@ def org_setup_step1_post(payload: dict, db: Session = Depends(get_db)) -> dict:
         )
         db.add(org)
     db.commit()
+    db.refresh(org)
+
+    # Also link the admin user to this org right away (so dashboard shows data before activate)
+    from app.services.auth_service import decode_access_token
+    from app.models.user import User
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token_data = decode_access_token(auth_header.removeprefix("Bearer ").strip())
+        if token_data:
+            admin_email = (token_data.get("email") or "").strip().lower()
+            admin_user = db.query(User).filter(User.email == admin_email).first()
+            if admin_user and admin_user.organisation_id is None:
+                admin_user.organisation_id = org.id
+                db.commit()
+
     return {"saved": True}
 
 @router.post("/org-setup/step1/parse-excel")
@@ -295,13 +310,23 @@ def org_setup_step1_template() -> dict:
     return {}
 
 @router.get("/org-setup/step2")
-def org_setup_step2_get() -> dict:
+def org_setup_step2_get(db: Session = Depends(get_db)) -> dict:
+    from app.models.organisation import Organisation
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    if org and org.compliance_config:
+        return org.compliance_config
     return _wizard_step2
 
 @router.post("/org-setup/step2")
-def org_setup_step2_post(payload: dict) -> dict:
+def org_setup_step2_post(payload: dict, db: Session = Depends(get_db)) -> dict:
     global _wizard_step2
-    _wizard_step2 = payload.get("data", payload)
+    from app.models.organisation import Organisation
+    d = payload.get("data", payload)
+    _wizard_step2 = dict(d)
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    if org:
+        org.compliance_config = dict(d)
+        db.commit()
     return {"saved": True}
 
 # ── Wizard in-memory state ────────────────────────────────────────────────────
@@ -415,7 +440,9 @@ def org_setup_step3_sites(db: Session = Depends(get_db)) -> list:
 @router.post("/org-setup/step3/site")
 def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) -> dict:
     from app.models.site import Site
-    d = payload.get("data", payload)  # unwrap { data: {...} } envelope
+    from app.models.organisation import Organisation
+    d = payload.get("data", payload)
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
     site = Site(
         site_name=            (d.get("name") or "").strip(),
         type=                 (d.get("type") or "").strip() or None,
@@ -427,6 +454,7 @@ def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) ->
         capacity=             d.get("capacity") or None,
         primary_products=     (d.get("primaryProducts") or "").strip() or None,
         hazard_classification=(d.get("hazardClassification") or "").strip() or None,
+        organisation_id=      org.id if org else None,
     )
     db.add(site)
     db.commit()
@@ -456,6 +484,10 @@ async def org_setup_step3_bulk(file: UploadFile = File(...), db: Session = Depen
     if not site_dicts:
         return {"count": 0, "error": "No site rows found in the file. Check the sheet name and column format."}
 
+    from app.models.organisation import Organisation
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    org_id = org.id if org else None
+
     count = 0
     for d in site_dicts:
         site = Site(
@@ -469,6 +501,7 @@ async def org_setup_step3_bulk(file: UploadFile = File(...), db: Session = Depen
             capacity=             d["capacity"],
             primary_products=     d["primary_products"] or None,
             hazard_classification=d["hazard_classification"] or None,
+            organisation_id=      org_id,
         )
         db.add(site)
         count += 1
@@ -527,28 +560,138 @@ def _parse_users_file(content: bytes, filename: str) -> list[dict]:
     return [u for u in users if u["name"] or u["email"]]
 
 
+
+# Wizard role label → app_role.name mapping
+_WIZARD_ROLE_MAP = {
+    "site hse manager": "safety_manager",
+    "hse manager":      "safety_manager",
+    "safety manager":   "safety_manager",
+    "supervisor":       "supervisor",
+    "worker":           "operator",
+    "operator":         "operator",
+    "auditor":          "viewer",
+    "viewer":           "viewer",
+}
+
+
+def _create_wizard_user(d: dict, db: Session) -> dict:
+    """Create a real DB User from wizard Step-4 data. Returns serialisable dict."""
+    import re, secrets, string, bcrypt
+    from app.models.user import User
+    from app.models.app_role import AppRole
+    from app.models.organisation import Organisation
+
+    name  = (d.get("name") or "").strip()
+    email = (d.get("email") or "").strip().lower()
+    if not email:
+        return {}
+
+    # Skip duplicate
+    if db.query(User).filter(User.email == email).first():
+        return {}
+
+    # Map role label → app_role
+    role_label = (d.get("role") or "").strip().lower()
+    role_name  = _WIZARD_ROLE_MAP.get(role_label, "operator")
+    app_role   = db.query(AppRole).filter(AppRole.name == role_name).first()
+    if not app_role:
+        app_role = db.query(AppRole).filter(AppRole.name == "operator").first()
+
+    # Latest org
+    org    = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    org_id = org.id if org else None
+
+    # Unique username
+    base = re.sub(r"[^a-z0-9_]", "_", email.split("@")[0].lower())
+    username, suffix = base, 1
+    while db.query(User).filter(User.username == username).first():
+        username = f"{base}_{suffix}"; suffix += 1
+
+    # Temp password
+    alphabet     = string.ascii_letters + string.digits + "!@#$%"
+    temp_password = "".join(secrets.choice(alphabet) for _ in range(12))
+    pw_hash       = bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode()
+
+    user = User(
+        username=username, full_name=name, email=email,
+        password_hash=pw_hash, app_role_id=app_role.id,
+        organisation_id=org_id, is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Send invite email with credentials
+    try:
+        from app.services.email_service import send_email, _build_invite_html
+        from app.config.settings import get_settings
+        settings = get_settings()
+        org_name = org.organisation_name if org else "your organisation"
+        html = _build_invite_html(
+            admin_name=name, organisation_name=org_name,
+            email=email, temp_password=temp_password,
+            login_url=f"{settings.frontend_url}/auth/login",
+        )
+        send_email(to_email=email, subject=f"You've been invited to {org_name} — HSE Intelligence",
+                   html_content=html, to_name=name)
+    except Exception:
+        pass
+
+    return {
+        "id":         str(user.id),
+        "name":       name,
+        "email":      email,
+        "role":       d.get("role", role_name),
+        "department": d.get("department", ""),
+        "status":     "active",
+    }
+
+
 @router.get("/org-setup/step4/users")
-def org_setup_step4_users() -> list:
-    return list(_wizard_users)
+def org_setup_step4_users(db: Session = Depends(get_db)) -> list:
+    from app.models.user import User
+    from app.models.app_role import AppRole
+    from app.models.organisation import Organisation
+
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    if not org:
+        return list(_wizard_users)
+
+    role_map = {r.id: r for r in db.query(AppRole).all()}
+    users = db.query(User).filter(
+        User.organisation_id == org.id,
+        User.app_role_id != None,
+    ).all()
+
+    # Exclude superadmin and admin role
+    result = []
+    for u in users:
+        role = role_map.get(u.app_role_id)
+        if role and role.name in ("superadmin", "admin"):
+            continue
+        result.append({
+            "id":         str(u.id),
+            "name":       u.full_name or u.username,
+            "email":      u.email,
+            "role":       role.label if role else "",
+            "department": "",
+            "status":     "active" if u.is_active else "inactive",
+        })
+    return result
 
 
 @router.post("/org-setup/step4/user")
-def org_setup_step4_create_user(payload: dict) -> dict:
+def org_setup_step4_create_user(payload: dict, db: Session = Depends(get_db)) -> dict:
     d = payload.get("data", payload)
-    user = {
-        "id":         _next_user_id(),
-        "name":       (d.get("name") or "").strip(),
-        "email":      (d.get("email") or "").strip(),
-        "role":       (d.get("role") or "").strip(),
-        "department": (d.get("department") or "").strip(),
-        "status":     "active",
-    }
-    _wizard_users.append(user)
-    return user
+    result = _create_wizard_user(d, db)
+    if not result:
+        return {"id": _next_user_id(), "name": d.get("name",""), "email": d.get("email",""),
+                "role": d.get("role",""), "department": d.get("department",""), "status": "active"}
+    return result
 
 
 @router.post("/org-setup/step4/bulk")
-async def org_setup_step4_bulk(file: UploadFile = File(...)) -> dict:
+async def org_setup_step4_bulk(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
     if not file.filename:
         return {"count": 0}
 
@@ -570,15 +713,9 @@ async def org_setup_step4_bulk(file: UploadFile = File(...)) -> dict:
 
     count = 0
     for d in user_dicts:
-        _wizard_users.append({
-            "id":         _next_user_id(),
-            "name":       d["name"],
-            "email":      d["email"],
-            "role":       d["role"],
-            "department": d["department"],
-            "status":     "active",
-        })
-        count += 1
+        result = _create_wizard_user(d, db)
+        if result:
+            count += 1
 
     return {"count": count}
 
@@ -764,20 +901,53 @@ def org_setup_step7_post(payload: dict) -> dict:
 
 @router.post("/org-setup/activate")
 def org_setup_activate(request: Request, payload: Any = None, db: Session = Depends(get_db)) -> dict:
-    # Resolve admin email from JWT header so we can mark the invite accepted
-    email: str = request.headers.get("X-User-Email", "").strip().lower()
-    if email:
+    from app.models.organisation import Organisation
+    from app.models.user import User
+    from app.services.auth_service import decode_access_token
+    from sqlalchemy import text
+
+    # Decode admin email from JWT
+    email = ""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.removeprefix("Bearer ").strip()
+        token_data = decode_access_token(token)
+        if token_data:
+            email = (token_data.get("email") or "").strip().lower()
+
+    # Find the latest org (created in step 1)
+    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+
+    if email and org:
+        # Link admin user to org
+        admin_user = db.query(User).filter(User.email == email).first()
+        if admin_user and admin_user.organisation_id is None:
+            admin_user.organisation_id = org.id
+
+        # Mark invite accepted
         invite = (
             db.query(OrganisationInvite)
-            .filter(
-                OrganisationInvite.admin_email == email,
-                OrganisationInvite.status == "pending",
-            )
+            .filter(OrganisationInvite.admin_email == email)
+            .order_by(OrganisationInvite.id.desc())
             .first()
         )
         if invite:
             invite.status = "accepted"
-            db.commit()
+
+        # Stamp all unlinked data rows with this org_id
+        for tbl in ("sites", "departments", "employees", "incidents", "near_misses",
+                    "safety_walks", "capa_actions", "permits_to_work",
+                    "shift_schedule", "working_stations"):
+            try:
+                db.execute(
+                    text(f"UPDATE {tbl} SET organisation_id = :oid WHERE organisation_id IS NULL"),
+                    {"oid": org.id},
+                )
+            except Exception:
+                pass
+
+        db.commit()
+
     return {"success": True}
 
 _CSV_TEMPLATES: dict[str, tuple[str, str]] = {

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Integer, String
+from sqlalchemy import Column, Date, Integer, JSON, String
 from app.models.base import Base
 
 
@@ -14,3 +14,4 @@ class Organisation(Base):
     iso_45001_status = Column(String(50))
     regulatory_authority = Column(String(255))
     establishment_date = Column(Date)
+    compliance_config = Column(JSON, nullable=True)

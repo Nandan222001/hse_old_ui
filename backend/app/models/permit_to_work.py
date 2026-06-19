@@ -5,6 +5,7 @@ from app.models.base import Base
 class PermitToWork(Base):
     __tablename__ = "permits_to_work"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     permit_type_id = Column(Integer, ForeignKey("permit_types.id"))
     date_issued = Column(Date, nullable=False)
     time_issued = Column(Time)

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
   Building2, Users, ClipboardList, Activity, ArrowRight, CheckCircle2, Clock, XCircle,
-  Globe, Mail as MailIcon, Shield, CreditCard, TrendingUp, Bell, SlidersHorizontal,
+  Globe, Mail as MailIcon, Shield,
   AlertCircle, Send, RefreshCw, Plus, X, Loader2,
 } from "lucide-react";
 import {
@@ -383,10 +383,6 @@ export function SuperAdminDashboard() {
           { label: "Invitations",         path: "/superadmin/invitations",   icon: MailIcon },
           { label: "Users",               path: "/superadmin/users",         icon: Users },
           { label: "Roles & Permissions", path: "/superadmin/roles",         icon: Shield },
-          { label: "Subscriptions",       path: "/superadmin/subscriptions", icon: CreditCard },
-          { label: "Platform Analytics",  path: "/superadmin/analytics",     icon: TrendingUp },
-          { label: "Notifications",       path: "/superadmin/notifications", icon: Bell },
-          { label: "System Settings",     path: "/superadmin/settings",      icon: SlidersHorizontal },
         ].map(({ label, path, icon: Icon }) => (
           <button
             key={path}

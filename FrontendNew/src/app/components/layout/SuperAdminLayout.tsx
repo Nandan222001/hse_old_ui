@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation, Navigate } from "react-router";
 import {
-  LayoutDashboard, Building2, Mail, Users, Shield, CreditCard,
-  TrendingUp, Bell, SlidersHorizontal, LogOut, ShieldCheck,
+  LayoutDashboard, Building2, Mail, Users, Shield,
+  LogOut, ShieldCheck,
   Menu, X, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -15,10 +15,6 @@ const NAV_ITEMS = [
   { name: "Tenant Management",  icon: Building2,         path: "/superadmin/tenants" },
   { name: "Users",              icon: Users,             path: "/superadmin/users" },
   { name: "Roles & Permissions",icon: Shield,            path: "/superadmin/roles" },
-  { name: "Subscriptions",      icon: CreditCard,        path: "/superadmin/subscriptions" },
-  { name: "Platform Analytics", icon: TrendingUp,        path: "/superadmin/analytics" },
-  { name: "Notifications",      icon: Bell,              path: "/superadmin/notifications" },
-  { name: "System Settings",    icon: SlidersHorizontal, path: "/superadmin/settings" },
 ];
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -126,10 +122,6 @@ const BREADCRUMBS: Record<string, string> = {
   "/superadmin/tenants":       "Tenant Management",
   "/superadmin/users":         "Users",
   "/superadmin/roles":         "Roles & Permissions",
-  "/superadmin/subscriptions": "Subscriptions",
-  "/superadmin/analytics":     "Platform Analytics",
-  "/superadmin/notifications": "Notifications",
-  "/superadmin/settings":      "System Settings",
 };
 
 function SuperAdminTopBar({ onOpenSidebar }: { onOpenSidebar: () => void }) {

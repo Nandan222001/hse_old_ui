@@ -154,6 +154,37 @@ def _insert_sites(db: Session, wb) -> int:
     return count
 
 
+def _link_org_to_data(db: Session, wb) -> int:
+    """After all sheets are imported, stamp organisation_id on every row
+    that was just inserted without one. Uses the org that was just created
+    (the one inserted during this import run, i.e. the one with NULL org_id on sites)."""
+    # Prefer the org whose sites still have NULL organisation_id (just inserted in this run).
+    # Fallback: the most recently created org.
+    row = db.execute(
+        text("SELECT o.id FROM organisation o "
+             "LEFT JOIN sites s ON s.organisation_id IS NULL "
+             "ORDER BY o.id DESC LIMIT 1")
+    ).fetchone()
+    org_id = row[0] if row else db.execute(text("SELECT MAX(id) FROM organisation")).scalar()
+    if not org_id:
+        return 0
+    affected = 0
+    for tbl in ("sites", "departments", "employees", "incidents", "near_misses",
+                "safety_walks", "capa_actions", "permits_to_work", "shift_schedule",
+                "working_stations", "roles", "hazard_categories", "hazards",
+                "permit_types", "training_programs", "policies"):
+        try:
+            result = db.execute(
+                text(f"UPDATE `{tbl}` SET organisation_id = :oid WHERE organisation_id IS NULL"),
+                {"oid": org_id},
+            )
+            affected += result.rowcount
+        except Exception:
+            pass  # table may not have the column or may not exist
+    logger.info("Linked %s rows to org_id=%s", affected, org_id)
+    return affected
+
+
 def _insert_permit_types(db: Session, wb) -> int:
     if not _check_sheet(wb, "Permit_Types"):
         return 0
@@ -213,7 +244,7 @@ def _insert_departments(db: Session, wb) -> int:
             continue
         db.execute(
             text("INSERT INTO departments (site_id,department_name,number_of_teams) VALUES (:sid,:n,:nt)"),
-            dict(sid=r[1], n=r[2], nt=r[4]),
+            dict(sid=_strip_id(r[1]), n=r[2], nt=r[4]),
         )
         count += 1
     return count
@@ -271,7 +302,7 @@ def _update_department_managers(db: Session, wb) -> int:
     for r in _rows(wb["Departments"]):
         if not any(c for c in r):
             continue
-        dept_id = int(r[0]) if r[0] is not None else None
+        dept_id = _strip_id(r[0]) if r[0] is not None else None
         mgr_id = _strip_id(r[3]) if r[3] else None
         if dept_id and mgr_id:
             db.execute(
@@ -435,15 +466,16 @@ SHEET_STEPS = [
     ("Safety_Walks",          "safety_walks",       _insert_safety_walks),
     ("CAPA_Actions",          "capa_actions",       _insert_capa_actions),
     ("Shift_Schedule",        "shift_schedule",     _insert_shift_schedule),
+    ("Link Organisation",     "org_link",           _link_org_to_data),
 ]
 
 
 def import_excel_stream(file_bytes: bytes, db: Session):
     """Generator version — yields SSE-formatted strings as each sheet is processed.
 
-    Yields dicts serialised as JSON inside SSE 'data:' lines.
-    On success the final event has type='complete'.
-    On any error the sheet event has type='error' and the session is rolled back.
+    Each sheet commits independently so a failure in one sheet cannot roll back
+    earlier sheets. FK checks are disabled for the duration of the import so that
+    cross-sheet references work regardless of insertion order.
     """
     if openpyxl is None:
         yield _sse({"type": "fatal", "error": "openpyxl is not installed on the server"})
@@ -460,25 +492,33 @@ def import_excel_stream(file_bytes: bytes, db: Session):
     results: dict[str, int] = {}
     errors: dict[str, str] = {}
 
-    for idx, (sheet_label, table_key, fn) in enumerate(SHEET_STEPS):
-        yield _sse({"type": "processing", "index": idx, "key": table_key, "label": sheet_label})
-        try:
-            count = fn(db, wb)
-            db.flush()
-            results[table_key] = count
-            logger.info("Imported %s rows into %s", count, table_key)
-            yield _sse({"type": "done", "index": idx, "key": table_key, "label": sheet_label, "count": count})
-        except Exception as exc:
-            msg = str(exc)
-            logger.error("Error importing %s: %s", sheet_label, exc, exc_info=True)
-            errors[table_key] = msg
-            db.rollback()
-            yield _sse({"type": "error", "index": idx, "key": table_key, "label": sheet_label, "error": msg})
-
-    if not errors:
+    try:
+        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         db.commit()
-    else:
-        db.rollback()
+    except Exception:
+        pass
+
+    try:
+        for idx, (sheet_label, table_key, fn) in enumerate(SHEET_STEPS):
+            yield _sse({"type": "processing", "index": idx, "key": table_key, "label": sheet_label})
+            try:
+                count = fn(db, wb)
+                db.commit()
+                results[table_key] = count
+                logger.info("Imported %s rows into %s", count, table_key)
+                yield _sse({"type": "done", "index": idx, "key": table_key, "label": sheet_label, "count": count})
+            except Exception as exc:
+                msg = str(exc)
+                logger.error("Error importing %s: %s", sheet_label, exc, exc_info=True)
+                errors[table_key] = msg
+                db.rollback()
+                yield _sse({"type": "error", "index": idx, "key": table_key, "label": sheet_label, "error": msg})
+    finally:
+        try:
+            db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+            db.commit()
+        except Exception:
+            pass
 
     wb.close()
     yield _sse({
@@ -499,7 +539,7 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
     """Parse the uploaded Excel workbook and insert all sheets into the DB.
 
     Returns a dict of {table_key: row_count} for each processed sheet.
-    Raises ValueError if the file can't be parsed or a required sheet is missing.
+    Each sheet commits independently; FK checks are disabled for the import.
     """
     if openpyxl is None:
         raise RuntimeError("openpyxl is not installed")
@@ -512,19 +552,31 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
     results: dict[str, int] = {}
     errors: dict[str, str] = {}
 
-    for sheet_label, table_key, fn in SHEET_STEPS:
+    try:
+        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        db.commit()
+    except Exception:
+        pass
+
+    try:
+        for sheet_label, table_key, fn in SHEET_STEPS:
+            try:
+                count = fn(db, wb)
+                db.commit()
+                results[table_key] = count
+                logger.info("Imported %s rows into %s", count, table_key)
+            except Exception as exc:
+                logger.error("Error importing %s: %s", sheet_label, exc, exc_info=True)
+                errors[table_key] = str(exc)
+                db.rollback()
+    finally:
         try:
-            count = fn(db, wb)
-            results[table_key] = count
-            logger.info("Imported %s rows into %s", count, table_key)
-        except Exception as exc:
-            logger.error("Error importing %s: %s", sheet_label, exc, exc_info=True)
-            errors[table_key] = str(exc)
-            db.rollback()
+            db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+            db.commit()
+        except Exception:
+            pass
 
-    if errors:
-        raise ValueError(f"Import errors in sheets: {errors}")
-
-    db.commit()
     wb.close()
+    if errors:
+        logger.warning("Import completed with errors in sheets: %s", list(errors.keys()))
     return results

@@ -5,6 +5,7 @@ from app.models.base import Base
 class Incident(Base):
     __tablename__ = "incidents"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     report_date = Column(Date)
     incident_date_time = Column(DateTime)
     location_station_id = Column(Integer, ForeignKey("working_stations.id"), nullable=True)

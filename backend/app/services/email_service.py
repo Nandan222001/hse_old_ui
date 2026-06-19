@@ -123,6 +123,25 @@ def send_email(
     return False
 
 
+def send_user_invite(
+    user_email: str,
+    user_name: str,
+    organisation_name: str,
+    temp_password: str,
+    login_url: str,
+) -> bool:
+    """Send an invite email to a user invited by an org admin."""
+    subject = f"You've been invited to {organisation_name} on HSE Intelligence"
+    html = _build_invite_html(
+        admin_name=user_name,
+        organisation_name=organisation_name,
+        email=user_email,
+        temp_password=temp_password,
+        login_url=login_url,
+    )
+    return send_email(to_email=user_email, subject=subject, html_content=html, to_name=user_name)
+
+
 def send_organisation_invite(
     admin_email: str,
     admin_name: str,

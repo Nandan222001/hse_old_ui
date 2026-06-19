@@ -3,7 +3,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.models.organisation import Organisation
 from app.models.organisation_invite import OrganisationInvite
+from app.models.user import User
 from app.services.excel_import_service import import_excel, import_excel_stream
 from app.utils.logger import get_logger
 
@@ -27,16 +29,26 @@ def _validate_upload(file: UploadFile, content: bytes) -> None:
 
 
 def _mark_invite_accepted(email: str, db: Session) -> None:
+    email = email.strip().lower()
     invite = (
         db.query(OrganisationInvite)
-        .filter(
-            OrganisationInvite.admin_email == email.strip().lower(),
-            OrganisationInvite.status == "pending",
-        )
+        .filter(OrganisationInvite.admin_email == email)
+        .order_by(OrganisationInvite.id.desc())
         .first()
     )
     if invite:
         invite.status = "accepted"
+
+        # Link the admin user to the org that was just imported from Excel.
+        # The Excel creates an org row; find the most recently created org and
+        # assign it to the admin's user record so their JWT carries org_id.
+        org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+        if org:
+            admin_user = db.query(User).filter(User.email == email).first()
+            if admin_user and admin_user.organisation_id is None:
+                admin_user.organisation_id = org.id
+                logger.info("Linked admin %s → org_id=%s (%s)", email, org.id, org.organisation_name)
+
         db.commit()
         logger.info("Invite id=%s marked accepted for %s", invite.id, email)
 

@@ -1,9 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
-import { auth, googleProvider, db } from "../../config/firebase";
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, fetchSignInMethodsForEmail, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { getOnboardingAccessProfile } from "../../services/onboarding.service";
-import { loginWithThetaCredentials, loginWithHSEBackend } from "../../services/auth.service";
+import { loginWithHSEBackend } from "../../services/auth.service";
 import { checkOrgSetupRequired } from "../../services/organisation-setup.service";
 
 export type LoginResult =
@@ -596,7 +592,9 @@ interface AuthContextType {
   canAccessModuleLabel: (label: UiModuleLabel) => boolean;
   isOnboardingScopedUser: boolean;
   login: (email: string, password: string, orgCode?: string) => Promise<LoginResult>;
+  /** Not supported in backend-auth mode — kept for interface compatibility */
   signup: (email: string, password: string) => Promise<LoginResult>;
+  /** Not supported in backend-auth mode — kept for interface compatibility */
   loginWithGoogle: () => Promise<LoginResult>;
   logout: () => void;
   markOnboardingSetupCompleted: () => void;
@@ -622,21 +620,36 @@ const defaultAuthContextValue: AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>(defaultAuthContextValue);
 
-type AccessResolution = "approved" | "pending" | "denied";
-
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTH PROVIDER
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem("hse_auth") === "true";
+    // Validate stored session: require both the auth flag AND a JWT token
+    return (
+      localStorage.getItem("hse_auth") === "true" &&
+      Boolean(localStorage.getItem("hse_jwt_token"))
+    );
   });
 
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const stored = localStorage.getItem("hse_user");
-      return stored ? JSON.parse(stored) : null;
+      const storedUser = stored ? JSON.parse(stored) : null;
+      // Sync name/initials from the JWT payload in case the token was refreshed
+      const token = localStorage.getItem("hse_jwt_token");
+      if (storedUser && token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          if (payload.full_name) {
+            storedUser.name = payload.full_name;
+            storedUser.initials = payload.full_name
+              .split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+          }
+        } catch { /* malformed token — ignore */ }
+      }
+      return storedUser;
     } catch { return null; }
   });
 
@@ -644,188 +657,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return normalizeSubscriptionPlan(localStorage.getItem("hse_subscription")) ?? "Free";
   });
 
-  const clearLocalAuthState = useCallback(() => {
-    setIsAuthenticated(false);
-    setUser(null);
-    localStorage.removeItem("hse_auth");
-    localStorage.removeItem("hse_user");
-  }, []);
-
-  const currentUserAllowedModules = useMemo<UiModuleLabel[]>(() => {
-    if (!user) return [];
-    if (user.allowedModules && user.allowedModules.length > 0) {
-      return user.allowedModules;
-    }
-    return ALL_MODULE_LABELS;
-  }, [user]);
-
-  // Derive accessible KPIs whenever user / role changes — memoised for perf
-  const accessibleKPIs = useMemo<KPI[]>(() => {
-    if (!user) return [];
-    return getKPIsForRole(user.role);
-  }, [user]);
-
-  const canViewKPI = (kpiId: string): boolean => {
-    if (!user) return false;
-    return hasKPIAccess(user.role, kpiId);
-  };
-
-  const canAccessModuleLabel = (label: UiModuleLabel): boolean => {
-    if (!user) return false;
-    if (label === "AI Agent") {
-      // Legacy / non-onboarding users don't carry onboarding plan metadata.
-      // Keep AI available for them to avoid false Free-plan locks.
-      if (!user.onboardingScoped) {
-        return true;
-      }
-
-      // Accept explicit module entitlements even if plan sync is temporarily stale.
-      const hasExplicitAiModule = currentUserAllowedModules.includes("AI Agent");
-      return hasExplicitAiModule || subscriptionPlan !== "Free";
-    }
-    return currentUserAllowedModules.includes(label);
-  };
-
-  const isOnboardingScopedUser = Boolean(user?.onboardingScoped);
-
-  const mapOnboardingRoleToUserRole = (rawRole: string | undefined): UserRole => {
-    const normalized = (rawRole || "").trim().toLowerCase();
-    if (normalized === "admin") return "Admin";
-    if (normalized === "site engineer") return "Site Engineer";
-    if (normalized === "site inspector") return "Site Inspector";
-    if (normalized === "worker/contractor") return "Contractor";
-    return "Auditor";
-  };
-
-  const isWebAllowedOnboardingRole = (role: UserRole): boolean => role === "Admin";
-
-  const resolveFirestoreUser = useCallback(async (firebaseUser: FirebaseUser, orgCodeHint?: string): Promise<AccessResolution> => {
-    const normalizedEmail = firebaseUser.email?.toLowerCase() ?? "";
-    const isDevAdmin = ENABLE_DEV_TEST_ACCOUNTS && normalizedEmail === ADMIN_EMAIL;
-    const isProductAdmin = PRODUCT_ADMIN_EMAILS.has(normalizedEmail);
-    const isPrivilegedAdmin = isDevAdmin || isProductAdmin;
-    try {
-      const email = normalizedEmail;
-
-      // Onboarding-driven approval + module access profile for org admins.
-      if (email && !isPrivilegedAdmin) {
-        try {
-          const profile = await getOnboardingAccessProfile(email, orgCodeHint);
-          if (profile.found && profile.approved) {
-            const resolvedRole = mapOnboardingRoleToUserRole(profile.user_role);
-            if (!isWebAllowedOnboardingRole(resolvedRole)) {
-              clearLocalAuthState();
-              await signOut(auth);
-              return "denied";
-            }
-
-            const mappedModules = (profile.selected_modules ?? [])
-              .map((m) => normalizeModuleLabel(m))
-              .filter((m): m is UiModuleLabel => Boolean(m));
-
-            const profileName = profile.user_name || profile.display_name || profile.worker_name || profile.admin_name;
-            const name = firebaseUser.displayName || profileName || "Org Admin";
-            const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-            const userData: AuthUser = {
-              name,
-              email,
-              role: resolvedRole,
-              initials,
-              orgCode: profile.org_code,
-              companyName: profile.company_name,
-              allowedModules: mappedModules.length > 0 ? mappedModules : ALL_MODULE_LABELS,
-              onboardingScoped: true,
-              onboardingSetupRequired: Boolean(profile.setup_required),
-              onboardingSetupCompleted: Boolean(profile.setup_completed),
-              onboardingMaxUsers: Number(profile.active_workers ?? 0),
-              onboardingConfiguredUsers: Number(profile.configured_users_count ?? 0),
-            };
-            const normalizedPlan = normalizeSubscriptionPlan(profile.subscription_plan);
-            if (normalizedPlan) {
-              setSubscriptionPlan(normalizedPlan);
-            }
-            setUser(userData);
-            setIsAuthenticated(true);
-            localStorage.setItem("hse_auth", "true");
-            localStorage.setItem("hse_user", JSON.stringify(userData));
-            return "approved";
-          }
-
-          if (profile.found && !profile.approved) {
-            const approvalState = String(profile.approval_state ?? profile.status ?? "").toLowerCase();
-            clearLocalAuthState();
-            await signOut(auth);
-            return approvalState === "archived" ? "denied" : "pending";
-          }
-        } catch (profileErr) {
-          console.warn("Onboarding access profile lookup failed, falling back to Firestore approval:", profileErr);
-        }
-      }
-
-      const ref = doc(db, "app_users", firebaseUser.uid);
-      const snap = await getDoc(ref);
-
-      if (!snap.exists() || (!snap.data().approved && !isPrivilegedAdmin)) {
-        await setDoc(ref, {
-          email: firebaseUser.email ?? "",
-          displayName: isPrivilegedAdmin ? "Product Admin" : (firebaseUser.displayName ?? firebaseUser.email?.split("@")[0] ?? "User"),
-          photoURL: firebaseUser.photoURL ?? null,
-          role: isPrivilegedAdmin ? "Admin" : null,
-          approved: isPrivilegedAdmin,
-          createdAt: snap.exists() ? (snap.data().createdAt ?? serverTimestamp()) : serverTimestamp(),
-        }, { merge: true });
-
-        if (!isPrivilegedAdmin) {
-          clearLocalAuthState();
-          await signOut(auth);
-          return "pending";
-        }
-      }
-
-      const data = (await getDoc(ref)).data()!;
-      const name = isPrivilegedAdmin ? "Product Admin" : (firebaseUser.displayName || data.displayName || "User");
-      const resolvedEmail = firebaseUser.email || "";
-      const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-      const role = isPrivilegedAdmin ? ("Admin" as UserRole) : ((data.role as UserRole) ?? "Auditor");
-      const userData: AuthUser = { name, email: resolvedEmail, role, initials };
-      setUser(userData);
-      setIsAuthenticated(true);
-      localStorage.setItem("hse_auth", "true");
-      localStorage.setItem("hse_user", JSON.stringify(userData));
-      return "approved";
-    } catch (err) {
-      console.error("Firestore user check failed:", err);
-      if (!isPrivilegedAdmin) {
-        clearLocalAuthState();
-        await signOut(auth);
-      }
-      return "denied";
-    }
-  }, [clearLocalAuthState]);
-
-  useEffect(() => {
-    if (localStorage.getItem("hse_auth") !== "true") {
-      setIsAuthenticated(false);
-      setUser(null);
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        await resolveFirestoreUser(firebaseUser, user?.orgCode);
-      } else {
-        const hasLocalThetaSession =
-          localStorage.getItem("hse_auth") === "true"
-          && Boolean(localStorage.getItem("hse_user"));
-        if (hasLocalThetaSession) {
-          return;
-        }
-        clearLocalAuthState();
-      }
-    });
-
-    return () => unsubscribe();
-  }, [clearLocalAuthState, resolveFirestoreUser, user?.orgCode]);
-
+  // Persist auth state changes to localStorage
   useEffect(() => {
     localStorage.setItem("hse_auth", String(isAuthenticated));
     if (user) {
@@ -839,394 +671,178 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("hse_subscription", subscriptionPlan);
   }, [subscriptionPlan]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !user?.email || !user?.onboardingScoped) return;
+  const currentUserAllowedModules = useMemo<UiModuleLabel[]>(() => {
+    if (!user) return [];
+    if (user.allowedModules && user.allowedModules.length > 0) return user.allowedModules;
+    return ALL_MODULE_LABELS;
+  }, [user]);
 
-    let cancelled = false;
-    const refreshPlan = async () => {
-      try {
-        const profile = await getOnboardingAccessProfile(user.email, user.orgCode);
-        const normalizedPlan = normalizeSubscriptionPlan(profile?.subscription_plan);
-        if (!cancelled && normalizedPlan && normalizedPlan !== subscriptionPlan) {
-          setSubscriptionPlan(normalizedPlan);
-        }
-      } catch (error) {
-        console.warn("Unable to refresh onboarding subscription plan:", error);
-      }
-    };
+  const accessibleKPIs = useMemo<KPI[]>(() => {
+    if (!user) return [];
+    return getKPIsForRole(user.role);
+  }, [user]);
 
-    refreshPlan();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, user?.email, user?.orgCode, user?.onboardingScoped, subscriptionPlan]);
+  const canViewKPI = (kpiId: string): boolean => {
+    if (!user) return false;
+    return hasKPIAccess(user.role, kpiId);
+  };
 
-  const login = async (email: string, password: string, orgCode?: string): Promise<LoginResult> => {
+  const canAccessModuleLabel = (label: UiModuleLabel): boolean => {
+    if (!user) return false;
+    if (label === "AI Agent") {
+      if (!user.onboardingScoped) return true;
+      return currentUserAllowedModules.includes("AI Agent") || subscriptionPlan !== "Free";
+    }
+    return currentUserAllowedModules.includes(label);
+  };
+
+  const isOnboardingScopedUser = Boolean(user?.onboardingScoped);
+
+  // ── Role mapping ────────────────────────────────────────────────────────────
+
+  function mapBackendRole(backendRole: string): UserRole {
+    switch (backendRole.toLowerCase()) {
+      case "superadmin":
+      case "admin":        return "Admin";
+      case "hse_manager":  return "HSE Manager";
+      case "safety_manager": return "Safety Manager";
+      case "supervisor":
+      case "operator":     return "Supervisor";
+      case "viewer":       return "Auditor";
+      default:             return "Auditor";
+    }
+  }
+
+  // ── Login ───────────────────────────────────────────────────────────────────
+
+  const login = async (email: string, password: string): Promise<LoginResult> => {
     const trimmedEmail = email.trim().toLowerCase();
-    const normalizedPassword = password.trim();
+    const trimmedPassword = password.trim();
 
-    // ── HSE Backend JWT login (try first) ──────────────────────────────────
-    try {
-      const data = await loginWithHSEBackend(trimmedEmail, normalizedPassword);
-      if (data?.access_token) {
-        localStorage.setItem('hse_jwt_token', data.access_token);
-
-        // Map backend role name to frontend UserRole
-        const backendRole = (data.user.role ?? '').toLowerCase();
-        let mappedRole: UserRole;
-        if (backendRole === 'superadmin' || backendRole === 'admin') {
-          mappedRole = 'Admin';
-        } else if (backendRole === 'safety_manager') {
-          mappedRole = 'Safety Manager';
-        } else if (backendRole === 'supervisor') {
-          mappedRole = 'Supervisor';
-        } else {
-          mappedRole = 'Auditor';
-        }
-
-        const userData: AuthUser = {
-          name: data.user.username,
-          email: data.user.email,
-          role: mappedRole,
-          initials: data.user.username.slice(0, 2).toUpperCase(),
-          allowedModules: ALL_MODULE_LABELS,
-          isSuperAdmin: backendRole === 'superadmin',
-        };
-
-        setUser(userData);
-        setIsAuthenticated(true);
-        localStorage.setItem('hse_auth', 'true');
-        localStorage.setItem('hse_user', JSON.stringify(userData));
-
-        // Check if this email has a pending org invite → needs data setup
-        try {
-          const setupCheck = await checkOrgSetupRequired(trimmedEmail);
-          if (setupCheck.needs_setup) {
-            const enriched: AuthUser = {
-              ...userData,
-              onboardingSetupRequired: true,
-              onboardingSetupCompleted: false,
-            };
-            setUser(enriched);
-            localStorage.setItem('hse_user', JSON.stringify({
-              ...enriched,
-              orgName: setupCheck.organisation_name,
-            }));
-            return 'org_setup_required';
-          }
-        } catch {
-          // Setup check failed silently; let the user proceed to dashboard
-        }
-
-        return 'success';
-      }
-    } catch (hseErr) {
-      const hseErrMsg = (hseErr as Error)?.message ?? '';
-      // 401 means the backend is reachable but credentials are wrong — stop here.
-      if (hseErrMsg.includes('401')) return 'invalid_credentials';
-      // 404/network means backend is unavailable — fall through to Firebase/Theta.
-      console.warn('HSE backend login unavailable, falling back to Firebase/Theta auth:', hseErr);
-    }
-
-    // Optional production fallback for the legacy hardcoded superadmin account.
-    // Keep disabled by default and enable only via explicit environment flag.
-    if (
-      ENABLE_PROD_SUPERADMIN_HARDCODED_LOGIN
-      && trimmedEmail === SUPER_ADMIN_EMAIL
-      && (normalizedPassword === SUPER_ADMIN_PASSWORD || normalizedPassword === SUPER_ADMIN_PASSWORD_ALT)
-    ) {
-      const userData: AuthUser = {
-        name: "Theta HSE Super Admin",
-        email: SUPER_ADMIN_EMAIL,
-        role: "Admin",
-        initials: "SA",
-        allowedModules: ALL_MODULE_LABELS,
-      };
-      setUser(userData);
-      setIsAuthenticated(true);
-      return "success";
-    }
-
-    // Emergency unblock for product admin during local/dev testing.
-    // This preserves testing flow even if Firebase password state is inconsistent.
-    if (ENABLE_DEV_PRODUCT_ADMIN_FALLBACK && PRODUCT_ADMIN_EMAILS.has(trimmedEmail) && normalizedPassword.length > 0) {
-      const userData: AuthUser = {
-        name: "Product Admin",
-        email: trimmedEmail,
-        role: "Admin",
-        initials: "PA",
-        allowedModules: ALL_MODULE_LABELS,
-      };
-      setUser(userData);
-      setIsAuthenticated(true);
-      return "success";
-    }
-
-    // Handle hardcoded mock accounts
+    // Dev test accounts (only active when VITE_ENABLE_DEV_TEST_ACCOUNTS=true in .env)
     if (ENABLE_DEV_TEST_ACCOUNTS) {
-      if (trimmedEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        const userData: AuthUser = { name: "HSE Admin", email: ADMIN_EMAIL, role: "Admin", initials: "AD", allowedModules: ALL_MODULE_LABELS };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return "success";
-      }
-      if (
-        trimmedEmail === SUPER_ADMIN_EMAIL
-        && (normalizedPassword === SUPER_ADMIN_PASSWORD || normalizedPassword === SUPER_ADMIN_PASSWORD_ALT)
-      ) {
-        const userData: AuthUser = { name: "Theta HSE Super Admin", email: SUPER_ADMIN_EMAIL, role: "Admin", initials: "SA", allowedModules: ALL_MODULE_LABELS };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return "success";
-      }
-      if (trimmedEmail === INSPECTOR_EMAIL && password === INSPECTOR_PASSWORD) {
-        const userData: AuthUser = { name: "Site Inspector", email: INSPECTOR_EMAIL, role: "Site Inspector", initials: "SI", allowedModules: ALL_MODULE_LABELS };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return "success";
-      }
-      if (trimmedEmail === ENGINEER_EMAIL && password === ENGINEER_PASSWORD) {
-        const userData: AuthUser = { name: "Site Engineer", email: ENGINEER_EMAIL, role: "Site Engineer", initials: "SE", allowedModules: ALL_MODULE_LABELS };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return "success";
-      }
-      if (trimmedEmail === WORKER_EMAIL && password === WORKER_PASSWORD) {
-        const userData: AuthUser = { name: "Worker", email: WORKER_EMAIL, role: "Worker", initials: "WK", allowedModules: ALL_MODULE_LABELS };
-        setUser(userData);
-        setIsAuthenticated(true);
-        return "success";
-      }
-    }
-
-    const isAdminCreds = ENABLE_DEV_TEST_ACCOUNTS && trimmedEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD;
-
-    try {
-      const thetaResult = await loginWithThetaCredentials(trimmedEmail, normalizedPassword, orgCode);
-      if (thetaResult.status === "success" && thetaResult.access_profile?.approved) {
-        const profile = thetaResult.access_profile;
-        const resolvedRole = mapOnboardingRoleToUserRole(profile.user_role);
-        if (!isWebAllowedOnboardingRole(resolvedRole)) {
-          clearLocalAuthState();
-          return "access_denied";
-        }
-        const mappedModules = (profile.selected_modules ?? [])
-          .map((m) => normalizeModuleLabel(m))
-          .filter((m): m is UiModuleLabel => Boolean(m));
-        const name = profile.user_name || profile.display_name || profile.worker_name || profile.admin_name || "Org Admin";
-        const initials = name
-          .split(" ")
-          .map((w: string) => w[0])
-          .join("")
-          .slice(0, 2)
-          .toUpperCase();
+      const devAccounts: Array<{ email: string; password: string; name: string; role: UserRole; initials: string }> = [
+        { email: ADMIN_EMAIL,      password: ADMIN_PASSWORD,      name: "HSE Admin",        role: "Admin",          initials: "AD" },
+        { email: SUPER_ADMIN_EMAIL, password: SUPER_ADMIN_PASSWORD, name: "Super Admin",     role: "Admin",          initials: "SA" },
+        { email: SUPER_ADMIN_EMAIL, password: SUPER_ADMIN_PASSWORD_ALT, name: "Super Admin", role: "Admin",          initials: "SA" },
+        { email: INSPECTOR_EMAIL,  password: INSPECTOR_PASSWORD,  name: "Site Inspector",   role: "Site Inspector",  initials: "SI" },
+        { email: ENGINEER_EMAIL,   password: ENGINEER_PASSWORD,   name: "Site Engineer",    role: "Site Engineer",   initials: "SE" },
+        { email: WORKER_EMAIL,     password: WORKER_PASSWORD,     name: "Worker",           role: "Worker",          initials: "WK" },
+      ];
+      const match = devAccounts.find(
+        (a) => a.email && a.email === trimmedEmail && a.password && a.password === trimmedPassword,
+      );
+      if (match) {
         const userData: AuthUser = {
-          name,
-          email: trimmedEmail,
-          role: resolvedRole,
-          initials,
-          orgCode: profile.org_code,
-          companyName: profile.company_name,
-          allowedModules: mappedModules.length > 0 ? mappedModules : ALL_MODULE_LABELS,
-          onboardingScoped: true,
-          onboardingSetupRequired: Boolean(profile.setup_required),
-          onboardingSetupCompleted: Boolean(profile.setup_completed),
-          onboardingMaxUsers: Number(profile.active_workers ?? 0),
-          onboardingConfiguredUsers: Number(profile.configured_users_count ?? 0),
+          name: match.name, email: match.email, role: match.role,
+          initials: match.initials, allowedModules: ALL_MODULE_LABELS,
         };
-        const normalizedPlan = normalizeSubscriptionPlan(profile.subscription_plan);
-        if (normalizedPlan) {
-          setSubscriptionPlan(normalizedPlan);
-        }
         setUser(userData);
         setIsAuthenticated(true);
-        localStorage.setItem("hse_auth", "true");
-        localStorage.setItem("hse_user", JSON.stringify(userData));
         return "success";
       }
-      if (thetaResult.status === "password_setup_required") {
-        return "password_setup_required";
-      }
-      if (thetaResult.status === "pending_approval") {
-        return "pending_approval";
-      }
-      if (thetaResult.status === "not_found") {
-        // Product admin accounts may not exist in Theta onboarding submissions.
-        // Fall through to Firebase/hardcoded paths instead of blocking login.
-        if (!PRODUCT_ADMIN_EMAILS.has(trimmedEmail)) {
-          return "user_not_found";
-        }
-      }
-      if (thetaResult.status === "error") {
-        const msg = String(thetaResult.error || thetaResult.reason || "").toLowerCase();
-        if (msg.includes("network") || msg.includes("fetch") || msg.includes("timeout")) {
-          return "network_error";
-        }
-        return "error";
-      }
-      if (thetaResult.status === "invalid_credentials") {
-        // Credentials exist but password is wrong. Do not convert to
-        // password_setup_required, otherwise user gets stuck in a loop.
-        return "invalid_credentials";
-      }
-    } catch (thetaErr) {
-      console.warn("Theta DB login unavailable, falling back to Firebase:", thetaErr);
-      // Continue to Firebase fallback for all users.
-      // This helps admin accounts still sign in when Theta endpoint is temporarily unavailable.
     }
 
+    // Product-admin dev bypass
+    if (ENABLE_DEV_PRODUCT_ADMIN_FALLBACK && PRODUCT_ADMIN_EMAILS.has(trimmedEmail) && trimmedPassword.length > 0) {
+      const userData: AuthUser = {
+        name: "Product Admin", email: trimmedEmail,
+        role: "Admin", initials: "PA", allowedModules: ALL_MODULE_LABELS,
+      };
+      setUser(userData);
+      setIsAuthenticated(true);
+      return "success";
+    }
+
+    // HSE Backend JWT login
     try {
-      let cred;
+      const data = await loginWithHSEBackend(trimmedEmail, trimmedPassword);
+
+      if (!data?.access_token) return "error";
+
+      localStorage.setItem("hse_jwt_token", data.access_token);
+
+      const backendRole = (data.user.role ?? "").toLowerCase();
+      const mappedRole = mapBackendRole(backendRole);
+      const displayName = (data.user as { full_name?: string }).full_name || data.user.username;
+
+      const userData: AuthUser = {
+        name: displayName,
+        email: data.user.email,
+        role: mappedRole,
+        initials: displayName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
+        allowedModules: ALL_MODULE_LABELS,
+        isSuperAdmin: backendRole === "superadmin",
+      };
+
+      setUser(userData);
+      setIsAuthenticated(true);
+      localStorage.setItem("hse_auth", "true");
+      localStorage.setItem("hse_user", JSON.stringify(userData));
+
+      // Check if this email has a pending org invite that needs setup
       try {
-        cred = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-      } catch (err: unknown) {
-        const code = (err as { code?: string })?.code ?? "";
-        // Firebase v9+ collapses user-not-found + wrong-password into invalid-credential.
-        // If admin creds are correct but account doesn't exist yet, create it.
-        if (isAdminCreds && (code === "auth/user-not-found" || code === "auth/invalid-credential")) {
-          try {
-            cred = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
-          } catch (createErr: unknown) {
-            const createCode = (createErr as { code?: string })?.code ?? "";
-            if (createCode === "auth/email-already-in-use") {
-              return "invalid_credentials";
-            }
-            throw createErr;
-          }
-        } else if (code === "auth/user-not-found") {
-          try {
-            const profile = await getOnboardingAccessProfile(trimmedEmail, orgCode);
-            if (profile?.found && profile?.approved) {
-              return "password_setup_required";
-            }
-          } catch {
-            // ignore profile lookup errors; fallback to standard result
-          }
-          return "user_not_found";
-        } else if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
-          // First-time non-Google path:
-          // If onboarding is approved but no email/password sign-in method exists,
-          // force user to set password manually via Create account.
-          try {
-            const signInMethods = await fetchSignInMethodsForEmail(auth, trimmedEmail);
-            if (signInMethods.length > 0) {
-              return "invalid_credentials";
-            }
-
-            const profile = await getOnboardingAccessProfile(trimmedEmail, orgCode);
-            if (profile?.found && profile?.approved) {
-              return "password_setup_required";
-            }
-            return "invalid_credentials";
-          } catch {
-            return "invalid_credentials";
-          }
-        } else {
-          throw err;
+        const setupCheck = await checkOrgSetupRequired(trimmedEmail);
+        if (setupCheck.needs_setup) {
+          const enriched: AuthUser = { ...userData, onboardingSetupRequired: true, onboardingSetupCompleted: false };
+          setUser(enriched);
+          localStorage.setItem("hse_user", JSON.stringify(enriched));
+          return "org_setup_required";
         }
+      } catch {
+        // Non-fatal — let user proceed to dashboard
       }
-      const access = await resolveFirestoreUser(cred.user, orgCode);
-      if (access === "approved") return "success";
-      if (access === "denied") return "access_denied";
-      return "pending_approval";
+
+      return "success";
     } catch (err) {
-      console.error("Login error:", err);
-      const code = (err as { code?: string })?.code ?? "";
-      if (code === "auth/network-request-failed") {
-        return "network_error";
-      }
-      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      const msg = (err as Error)?.message ?? "";
+
+      if (msg.includes("401")) {
+        // Backend is reachable; credentials rejected or account inactive
+        if (msg.toLowerCase().includes("inactive")) return "access_denied";
         return "invalid_credentials";
       }
-      if (code === "auth/user-not-found") {
-        return "user_not_found";
-      }
-      if (code === "auth/too-many-requests") {
-        return "invalid_credentials";
-      }
-      return "error";
+
+      // Backend unreachable (connection refused, timeout, network error)
+      return "network_error";
     }
   };
 
-  const loginWithGoogle = async (): Promise<LoginResult> => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const access = await resolveFirestoreUser(result.user);
-      if (access === "approved") return "success";
-      if (access === "denied") return "access_denied";
-      return "pending_approval";
-    } catch (error) {
-      console.error("Error signing in with Google:", error);
-      const code = (error as { code?: string })?.code ?? "";
-      if (code === "auth/network-request-failed") {
-        return "network_error";
-      }
-      return "error";
-    }
-  };
-
-  const signup = async (email: string, password: string): Promise<LoginResult> => {
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !password.trim()) {
-      return "invalid_credentials";
-    }
-
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
-      const access = await resolveFirestoreUser(cred.user);
-      if (access === "approved") return "success";
-      if (access === "denied") return "access_denied";
-      return "pending_approval";
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code ?? "";
-      if (code === "auth/email-already-in-use") {
-        try {
-          const profile = await getOnboardingAccessProfile(trimmedEmail);
-          if (profile?.found && profile?.approved) {
-            return "password_setup_required";
-          }
-        } catch {
-          // ignore profile lookup errors and fallback to generic handling
-        }
-        return "invalid_credentials";
-      }
-      if (code === "auth/invalid-email" || code === "auth/weak-password") {
-        return "invalid_credentials";
-      }
-      if (code === "auth/network-request-failed") {
-        return "network_error";
-      }
-      console.error("Signup error:", err);
-      return "error";
-    }
-  };
+  // ── Logout ──────────────────────────────────────────────────────────────────
 
   const logout = () => {
-    // Clear JWT token from our FastAPI backend
     localStorage.removeItem("hse_jwt_token");
     localStorage.removeItem("hse_auth");
     localStorage.removeItem("hse_user");
     setIsAuthenticated(false);
     setUser(null);
-    // Attempt Firebase sign-out only if Firebase is configured; ignore errors
-    signOut(auth).catch(() => {});
   };
+
+  // ── Stubs kept for interface compatibility ───────────────────────────────────
+
+  const loginWithGoogle = async (): Promise<LoginResult> => "error";
+
+  const signup = async (): Promise<LoginResult> => "error";
+
+  // ── Onboarding setup helper ──────────────────────────────────────────────────
 
   const markOnboardingSetupCompleted = useCallback(() => {
     setUser((prev) => {
       if (!prev) return prev;
-      const updated: AuthUser = {
-        ...prev,
-        onboardingSetupRequired: false,
-        onboardingSetupCompleted: true,
-      };
+      const updated: AuthUser = { ...prev, onboardingSetupRequired: false, onboardingSetupCompleted: true };
       localStorage.setItem("hse_user", JSON.stringify(updated));
       return updated;
     });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, accessibleKPIs, canViewKPI, canAccessModuleLabel, isOnboardingScopedUser, login, signup, loginWithGoogle, logout, markOnboardingSetupCompleted, subscriptionPlan, setSubscriptionPlan }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated, user, accessibleKPIs, canViewKPI, canAccessModuleLabel,
+        isOnboardingScopedUser, login, signup, loginWithGoogle, logout,
+        markOnboardingSetupCompleted, subscriptionPlan, setSubscriptionPlan,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

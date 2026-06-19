@@ -31,10 +31,6 @@ import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
 import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
 import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
 import { SuperAdminRolesPage } from "./pages/SuperAdminRolesPage";
-import { SuperAdminSubscriptionsPage } from "./pages/SuperAdminSubscriptionsPage";
-import { SuperAdminAnalyticsPage } from "./pages/SuperAdminAnalyticsPage";
-import { SuperAdminNotificationsPage } from "./pages/SuperAdminNotificationsPage";
-import { SuperAdminSystemSettingsPage } from "./pages/SuperAdminSystemSettingsPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -215,10 +211,6 @@ export const router = createBrowserRouter([
       { path: "tenants", Component: SuperAdminTenantsPage },
       { path: "users", Component: SuperAdminUsersPage },
       { path: "roles", Component: SuperAdminRolesPage },
-      { path: "subscriptions", Component: SuperAdminSubscriptionsPage },
-      { path: "analytics", Component: SuperAdminAnalyticsPage },
-      { path: "notifications", Component: SuperAdminNotificationsPage },
-      { path: "settings", Component: SuperAdminSystemSettingsPage },
     ],
   },
   {

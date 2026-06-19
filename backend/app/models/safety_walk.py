@@ -5,6 +5,7 @@ from app.models.base import Base
 class SafetyWalk(Base):
     __tablename__ = "safety_walks"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     inspection_date_time = Column(DateTime)
     location_station_id = Column(Integer, ForeignKey("working_stations.id"), nullable=True)
     inspector_id = Column(Integer, ForeignKey("employees.id"), nullable=True)

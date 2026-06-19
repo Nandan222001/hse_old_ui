@@ -5,6 +5,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
 from app.models.hazard import Hazard
@@ -20,32 +21,43 @@ from app.models.working_station import WorkingStation
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
-@router.get("/stats")
-def get_dashboard_stats(db: Session = Depends(get_db)):
-    today = date.today()
+def _org_filter(query, model, org_id):
+    """Apply organisation_id filter only when org_id is provided."""
+    if org_id is not None:
+        return query.filter(model.organisation_id == org_id)
+    return query
 
-    total_incidents = db.query(Incident).count()
-    open_capa_actions = db.query(CapaAction).filter(CapaAction.status != "Completed").count()
-    overdue_capa = db.query(CapaAction).filter(
+
+@router.get("/stats")
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    today = date.today()
+    org_id = current_user.org_id
+
+    total_incidents = _org_filter(db.query(Incident), Incident, org_id).count()
+    open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status != "Completed").count()
+    overdue_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
         CapaAction.status != "Completed",
         CapaAction.due_date < today,
         CapaAction.due_date.isnot(None),
     ).count()
-    active_permits = db.query(PermitToWork).filter(PermitToWork.status == "Active").count()
-    total_employees = db.query(Employee).count()
-    total_sites = db.query(Site).count()
-    near_misses_count = db.query(NearMiss).count()
-    safety_walks_count = db.query(SafetyWalk).count()
+    active_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).filter(PermitToWork.status == "Active").count()
+    total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
+    total_sites = _org_filter(db.query(Site), Site, org_id).count()
+    near_misses_count = _org_filter(db.query(NearMiss), NearMiss, org_id).count()
+    safety_walks_count = _org_filter(db.query(SafetyWalk), SafetyWalk, org_id).count()
 
-    avg_compliance = db.query(func.avg(SafetyWalk.compliance_rating)).scalar()
-    avg_housekeeping = db.query(func.avg(SafetyWalk.housekeeping_rating)).scalar()
+    avg_compliance = _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id).scalar()
+    avg_housekeeping = _org_filter(db.query(func.avg(SafetyWalk.housekeeping_rating)), SafetyWalk, org_id).scalar()
 
-    critical_incidents = db.query(Incident).filter(
+    critical_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
         func.lower(Incident.severity).in_(["critical", "significant"])
     ).count()
 
-    capa_completed = db.query(CapaAction).filter(CapaAction.status == "Completed").count()
-    capa_total = db.query(CapaAction).count()
+    capa_completed = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status == "Completed").count()
+    capa_total = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
     capa_completion_rate = round((capa_completed / capa_total * 100) if capa_total else 0, 1)
 
     return {
@@ -65,7 +77,10 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/leading-indicators")
-def get_leading_indicators(db: Session = Depends(get_db)):
+def get_leading_indicators(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """Predictive/leading safety KPIs derived from incidents, employees and safety_walks.
 
     These are best-effort approximations (documented inline) since the schema does not
@@ -73,25 +88,26 @@ def get_leading_indicators(db: Session = Depends(get_db)):
     not certified OSHA-audited figures.
     """
     STANDARD_ANNUAL_HOURS = 2000  # assumed full-time hours/employee/year
+    org_id = current_user.org_id
 
-    total_employees = db.query(Employee).count() or 0
+    total_employees = _org_filter(db.query(Employee), Employee, org_id).count() or 0
     hours_worked = max(total_employees * STANDARD_ANNUAL_HOURS, 1)
 
     # All "trailing N days/months" windows below are anchored to the latest
     # *actual* incident/safety_walk date in the data, not the real wall clock
     # — this is historical test data (activity ends in 2025), so anchoring to
     # real "today" would make every trailing window read zero.
-    latest_incident_dt = db.query(func.max(Incident.incident_date_time)).scalar()
-    latest_walk_dt = db.query(func.max(SafetyWalk.inspection_date_time)).scalar()
+    latest_incident_dt = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
+    latest_walk_dt = _org_filter(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
     today = (latest_incident_dt.date() if latest_incident_dt else date.today())
 
     # ── TRIR / LTIF (trailing 12 months) ────────────────────────────────────
     one_year_ago = today - timedelta(days=365)
-    recordable_incidents = db.query(Incident).filter(
+    recordable_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
         Incident.incident_date_time.isnot(None),
         Incident.incident_date_time >= one_year_ago,
     ).count()
-    lost_time_incidents = db.query(Incident).filter(
+    lost_time_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
         Incident.incident_date_time.isnot(None),
         Incident.incident_date_time >= one_year_ago,
         Incident.days_away > 0,
@@ -130,17 +146,17 @@ def get_leading_indicators(db: Session = Depends(get_db)):
     # ── Contractor Risk Score ───────────────────────────────────────────────
     # Relative incident rate of contractors vs. permanent staff (incidents per head).
     is_contractor = func.lower(Employee.employment_type).like("%contract%")
-    contractor_employees = db.query(Employee).filter(is_contractor).count()
+    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(is_contractor).count()
     permanent_employees = max(total_employees - contractor_employees, 0)
 
     contractor_incidents = (
-        db.query(func.count(Incident.id))
+        _org_filter(db.query(func.count(Incident.id)), Incident, org_id)
         .join(Employee, Incident.reported_by == Employee.id)
         .filter(is_contractor)
         .scalar() or 0
     )
     total_attributed_incidents = (
-        db.query(func.count(Incident.id)).filter(Incident.reported_by.isnot(None)).scalar() or 0
+        _org_filter(db.query(func.count(Incident.id)), Incident, org_id).filter(Incident.reported_by.isnot(None)).scalar() or 0
     )
     permanent_incidents = max(total_attributed_incidents - contractor_incidents, 0)
 
@@ -159,7 +175,7 @@ def get_leading_indicators(db: Session = Depends(get_db)):
     walk_anchor = latest_walk_dt.date() if latest_walk_dt else today
     walk_window_start = walk_anchor - timedelta(days=90)
     avg_compliance = (
-        db.query(func.avg(SafetyWalk.compliance_rating))
+        _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
         .filter(SafetyWalk.inspection_date_time >= walk_window_start)
         .scalar()
     )
@@ -179,10 +195,15 @@ def get_leading_indicators(db: Session = Depends(get_db)):
 
 
 @router.get("/capa-actions")
-def get_ranked_capa_actions(limit: int = 10, db: Session = Depends(get_db)):
+def get_ranked_capa_actions(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
     today = date.today()
+    org_id = current_user.org_id
     rows = (
-        db.query(CapaAction, Employee)
+        _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)
         .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
         .filter(CapaAction.status != "Completed")
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
@@ -214,10 +235,15 @@ def get_ranked_capa_actions(limit: int = 10, db: Session = Depends(get_db)):
 
 
 @router.get("/overdue-capa")
-def get_overdue_capa(limit: int = 10, db: Session = Depends(get_db)):
+def get_overdue_capa(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
     today = date.today()
+    org_id = current_user.org_id
     rows = (
-        db.query(CapaAction)
+        _org_filter(db.query(CapaAction), CapaAction, org_id)
         .filter(
             CapaAction.status != "Completed",
             CapaAction.due_date < today,
@@ -244,7 +270,11 @@ def get_overdue_capa(limit: int = 10, db: Session = Depends(get_db)):
 
 
 @router.get("/incidents-by-category")
-def get_incidents_by_category(db: Session = Depends(get_db)):
+def get_incidents_by_category(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
     rows = (
         db.query(
             HazardCategory.category_name,
@@ -252,6 +282,7 @@ def get_incidents_by_category(db: Session = Depends(get_db)):
         )
         .outerjoin(Hazard, Hazard.category_id == HazardCategory.id)
         .outerjoin(Incident, Incident.hazard_id == Hazard.id)
+        .filter(Incident.organisation_id == org_id if org_id is not None else True)
         .group_by(HazardCategory.category_name)
         .order_by(func.count(Incident.id).desc())
         .limit(8)
@@ -261,9 +292,13 @@ def get_incidents_by_category(db: Session = Depends(get_db)):
 
 
 @router.get("/incidents-by-severity")
-def get_incidents_by_severity(db: Session = Depends(get_db)):
+def get_incidents_by_severity(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
     rows = (
-        db.query(Incident.severity, func.count(Incident.id).label("count"))
+        _org_filter(db.query(Incident.severity, func.count(Incident.id).label("count")), Incident, org_id)
         .filter(Incident.severity.isnot(None))
         .group_by(Incident.severity)
         .all()
@@ -272,16 +307,23 @@ def get_incidents_by_severity(db: Session = Depends(get_db)):
 
 
 @router.get("/compliance-trend")
-def get_compliance_trend(days: int = 30, db: Session = Depends(get_db)):
-    # Anchored to the latest real safety_walk date, not today (historical
-    # test data — see get_leading_indicators for the same reasoning).
-    latest_walk_dt = db.query(func.max(SafetyWalk.inspection_date_time)).scalar()
+def get_compliance_trend(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
+    latest_walk_dt = _org_filter(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
     anchor = latest_walk_dt.date() if latest_walk_dt else date.today()
     cutoff = anchor - timedelta(days=days)
     rows = (
-        db.query(
-            func.date(SafetyWalk.inspection_date_time).label("day"),
-            func.avg(SafetyWalk.compliance_rating).label("avg_score"),
+        _org_filter(
+            db.query(
+                func.date(SafetyWalk.inspection_date_time).label("day"),
+                func.avg(SafetyWalk.compliance_rating).label("avg_score"),
+            ),
+            SafetyWalk,
+            org_id,
         )
         .filter(SafetyWalk.inspection_date_time.isnot(None))
         .filter(func.date(SafetyWalk.inspection_date_time) >= cutoff)
@@ -296,9 +338,14 @@ def get_compliance_trend(days: int = 30, db: Session = Depends(get_db)):
 
 
 @router.get("/safety-walks-recent")
-def get_safety_walks_recent(limit: int = 5, db: Session = Depends(get_db)):
+def get_safety_walks_recent(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
     rows = (
-        db.query(SafetyWalk, WorkingStation, Employee)
+        _org_filter(db.query(SafetyWalk, WorkingStation, Employee), SafetyWalk, org_id)
         .outerjoin(WorkingStation, SafetyWalk.location_station_id == WorkingStation.id)
         .outerjoin(Employee, SafetyWalk.inspector_id == Employee.id)
         .order_by(SafetyWalk.inspection_date_time.desc())
@@ -323,9 +370,14 @@ def get_safety_walks_recent(limit: int = 5, db: Session = Depends(get_db)):
 
 
 @router.get("/near-misses-recent")
-def get_near_misses_recent(limit: int = 5, db: Session = Depends(get_db)):
+def get_near_misses_recent(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
     rows = (
-        db.query(NearMiss, WorkingStation, Employee)
+        _org_filter(db.query(NearMiss, WorkingStation, Employee), NearMiss, org_id)
         .outerjoin(WorkingStation, NearMiss.location_station_id == WorkingStation.id)
         .outerjoin(Employee, NearMiss.reported_by == Employee.id)
         .order_by(NearMiss.event_date_time.desc())
@@ -350,9 +402,14 @@ def get_near_misses_recent(limit: int = 5, db: Session = Depends(get_db)):
 
 
 @router.get("/permits-active")
-def get_active_permits(limit: int = 10, db: Session = Depends(get_db)):
+def get_active_permits(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
     rows = (
-        db.query(PermitToWork, PermitType, WorkingStation)
+        _org_filter(db.query(PermitToWork, PermitType, WorkingStation), PermitToWork, org_id)
         .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
         .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
         .filter(PermitToWork.status == "Active")

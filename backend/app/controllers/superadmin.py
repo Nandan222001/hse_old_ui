@@ -89,6 +89,7 @@ def invite_organisation(payload: InviteOrganisationRequest, db: Session = Depend
 
     user = User(
         username=username,
+        full_name=payload.admin_name,
         email=payload.admin_email,
         password_hash=password_hash,
         app_role_id=admin_role.id,

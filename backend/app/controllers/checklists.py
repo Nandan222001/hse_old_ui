@@ -12,12 +12,15 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/checklists", tags=["Checklists"])
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
-def _actor(request: Request):
+def _actor(request: Request, current_user: CurrentUser = None):
+    if current_user:
+        return current_user.email, current_user.role
     email = request.headers.get("X-User-Email", "")
     role  = request.headers.get("X-User-Role", "Admin")
     return email, role
@@ -81,7 +84,7 @@ def _fmt_sub(row: dict) -> dict:
 # ─── templates ───────────────────────────────────────────────────────────────
 
 @router.get("/templates")
-def list_templates(db: Session = Depends(get_db)) -> list:
+def list_templates(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> list:
     rows = db.execute(
         text("SELECT * FROM checklist_templates WHERE is_active = 1 ORDER BY display_name")
     ).mappings().all()
@@ -89,7 +92,7 @@ def list_templates(db: Session = Depends(get_db)) -> list:
 
 
 @router.post("/templates/bootstrap")
-def bootstrap_templates(db: Session = Depends(get_db)) -> dict:
+def bootstrap_templates(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     """Seed the six default HSE checklist templates."""
     templates = _default_templates()
     counts: dict[str, int] = {}
@@ -128,6 +131,7 @@ def list_submissions(
     checklist_type: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> list:
     where = "WHERE 1=1"
     params: dict[str, Any] = {"limit": limit}
@@ -137,6 +141,9 @@ def list_submissions(
     if status:
         where += " AND status = :st"
         params["st"] = status
+    if current_user.org_id is not None:
+        where += " AND submitted_by_email IN (SELECT email FROM users WHERE organisation_id = :org_id)"
+        params["org_id"] = current_user.org_id
     rows = db.execute(
         text(f"SELECT * FROM checklist_submissions {where} ORDER BY created_at DESC LIMIT :limit"),
         params,
@@ -145,7 +152,7 @@ def list_submissions(
 
 
 @router.post("/submissions", status_code=status.HTTP_201_CREATED)
-def create_submission(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
+def create_submission(request: Request, payload: dict, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     checklist_type = payload.get("checklist_type", "")
     tmpl = _tmpl(db, checklist_type)
     items = json.loads(tmpl["items_json"])
@@ -154,7 +161,7 @@ def create_submission(request: Request, payload: dict, db: Session = Depends(get
     sub_uuid = str(_uuid.uuid4())
     now  = datetime.utcnow()
     cdate = payload.get("checklist_date") or now.date().isoformat()
-    actor_email, actor_role = _actor(request)
+    actor_email, actor_role = _actor(request, current_user)
 
     submit_sla_h = sla.get("draft_submission_sla_hours", 24) if sla else 24
     submit_due = now + timedelta(hours=submit_sla_h)
@@ -194,7 +201,7 @@ def create_submission(request: Request, payload: dict, db: Session = Depends(get
 
 
 @router.get("/submissions/{submission_uuid}")
-def get_submission(submission_uuid: str, db: Session = Depends(get_db)) -> dict:
+def get_submission(submission_uuid: str, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     sub  = _sub(db, submission_uuid)
     tmpl = _tmpl(db, sub["checklist_type"])
 
@@ -249,12 +256,12 @@ def get_submission(submission_uuid: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.put("/submissions/{submission_uuid}/items")
-def save_items(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
+def save_items(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     sub = _sub(db, submission_uuid)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be edited")
 
-    actor_email, actor_role = _actor(request)
+    actor_email, actor_role = _actor(request, current_user)
     items = payload.get("items", [])
     now = datetime.utcnow()
 
@@ -274,12 +281,12 @@ def save_items(submission_uuid: str, request: Request, payload: dict, db: Sessio
 
 
 @router.post("/submissions/{submission_uuid}/submit")
-def submit_submission(submission_uuid: str, request: Request, db: Session = Depends(get_db)) -> dict:
+def submit_submission(submission_uuid: str, request: Request, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     sub = _sub(db, submission_uuid)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be submitted")
 
-    actor_email, actor_role = _actor(request)
+    actor_email, actor_role = _actor(request, current_user)
     tmpl = _tmpl(db, sub["checklist_type"])
     sla = json.loads(tmpl["sla_json"]) if tmpl.get("sla_json") else {}
     validate_sla_h = sla.get("validation_sla_hours", 48) if sla else 48
@@ -301,7 +308,7 @@ def submit_submission(submission_uuid: str, request: Request, db: Session = Depe
 
 
 @router.post("/submissions/{submission_uuid}/validate")
-def validate_submission(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
+def validate_submission(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
     sub = _sub(db, submission_uuid)
     if sub["status"] != "submitted":
         raise HTTPException(status_code=400, detail="Only submitted checklists can be validated")
@@ -310,7 +317,7 @@ def validate_submission(submission_uuid: str, request: Request, payload: dict, d
     if decision not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="decision must be 'approved' or 'rejected'")
 
-    actor_email, actor_role = _actor(request)
+    actor_email, actor_role = _actor(request, current_user)
     new_status = "validated" if decision == "approved" else "rejected"
     notes = payload.get("notes")
 

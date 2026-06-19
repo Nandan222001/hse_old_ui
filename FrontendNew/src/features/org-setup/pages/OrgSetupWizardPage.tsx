@@ -1018,18 +1018,18 @@ export function OrgSetupWizardPage() {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [dataEntryOption, setDataEntryOption] = useState<"manual"|"excel"|"api">("manual");
 
-  const { data: progressRaw } = useGetOrgSetupProgressQuery();
+  const { data: progressRaw, isLoading: progressLoading } = useGetOrgSetupProgressQuery();
   const { data: step1Saved } = useGetOrgSetupStep1Query();
 
   useEffect(() => {
-    if (progressRaw && !progressLoaded) {
-      const raw = progressRaw as unknown as { steps_completed?: number[]; activated?: boolean };
-      const done: number[] = raw.steps_completed ?? [];
+    if (!progressLoading && !progressLoaded) {
+      const raw = progressRaw as unknown as { steps_completed?: number[]; activated?: boolean } | undefined;
+      const done: number[] = raw?.steps_completed ?? [];
       setCompletedSteps(done);
       if (done.length > 0) setCurrentStep(Math.min(Math.max(...done) + 1, 8));
       setProgressLoaded(true);
     }
-  }, [progressRaw, progressLoaded]);
+  }, [progressRaw, progressLoading, progressLoaded]);
 
   useEffect(() => {
     if (step1Saved) {
@@ -1051,7 +1051,7 @@ export function OrgSetupWizardPage() {
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}><Building2 className="w-5 h-5 text-white" /></div>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: "#111827" }}>Organisation Setup</h1>
-            <p className="text-sm" style={{ color: "#6B7280" }}>Step {currentStep} of 8 — {stepTitles[currentStep - 1]}</p>
+            <p className="text-sm" style={{ color: "#6B7280" }}>{progressLoaded ? `Step ${currentStep} of 8 — ${stepTitles[currentStep - 1]}` : "Loading your progress…"}</p>
           </div>
         </div>
         {completedSteps.length > 0 && currentStep > 1 && (
@@ -1063,14 +1063,22 @@ export function OrgSetupWizardPage() {
 
       <div className="grid xl:grid-cols-3 gap-5 items-start">
         <div className="xl:col-span-2">
-          {currentStep === 1 && <Step1 onNext={() => goNext(1)} dataEntryOption={dataEntryOption} onDataEntryChange={setDataEntryOption} />}
-          {currentStep === 2 && <Step2 onNext={() => goNext(2)} onBack={() => goBack(2)} />}
-          {currentStep === 3 && <Step3 onNext={() => goNext(3)} onBack={() => goBack(3)} dataEntryOption={dataEntryOption} />}
-          {currentStep === 4 && <Step4 onNext={() => goNext(4)} onBack={() => goBack(4)} dataEntryOption={dataEntryOption} />}
-          {currentStep === 5 && <Step5 onNext={() => goNext(5)} onBack={() => goBack(5)} />}
-          {currentStep === 6 && <Step6 onNext={() => goNext(6)} onBack={() => goBack(6)} />}
-          {currentStep === 7 && <Step7 onNext={() => goNext(7)} onBack={() => goBack(7)} />}
-          {currentStep === 8 && <Step8 onBack={() => goBack(8)} completedSteps={completedSteps} />}
+          {!progressLoaded ? (
+            <div className="flex justify-center items-center py-24 bg-white rounded-2xl border" style={{ borderColor: "#E3E9F6" }}>
+              <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#4A57B9" }} />
+            </div>
+          ) : (
+            <>
+              {currentStep === 1 && <Step1 onNext={() => goNext(1)} dataEntryOption={dataEntryOption} onDataEntryChange={setDataEntryOption} />}
+              {currentStep === 2 && <Step2 onNext={() => goNext(2)} onBack={() => goBack(2)} />}
+              {currentStep === 3 && <Step3 onNext={() => goNext(3)} onBack={() => goBack(3)} dataEntryOption={dataEntryOption} />}
+              {currentStep === 4 && <Step4 onNext={() => goNext(4)} onBack={() => goBack(4)} dataEntryOption={dataEntryOption} />}
+              {currentStep === 5 && <Step5 onNext={() => goNext(5)} onBack={() => goBack(5)} />}
+              {currentStep === 6 && <Step6 onNext={() => goNext(6)} onBack={() => goBack(6)} />}
+              {currentStep === 7 && <Step7 onNext={() => goNext(7)} onBack={() => goBack(7)} />}
+              {currentStep === 8 && <Step8 onBack={() => goBack(8)} completedSteps={completedSteps} />}
+            </>
+          )}
         </div>
         <div className="sticky top-6"><StepRequirementsSidebar step={currentStep} /></div>
       </div>

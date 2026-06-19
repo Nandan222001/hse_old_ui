@@ -10,6 +10,7 @@ class LoginRequest(BaseModel):
 class TokenData(BaseModel):
     user_id: int
     username: str
+    full_name: Optional[str] = None
     email: str
     role: str
     role_level: int

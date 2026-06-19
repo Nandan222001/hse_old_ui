@@ -59,16 +59,9 @@ export function LoginPage() {
       if (result === "org_setup_required") {
         navigate("/org-setup-wizard", { replace: true });
       } else if (result === "success") {
-        if (user?.isSuperAdmin) {
-          navigate("/superadmin", { replace: true });
-        } else {
-          navigate(
-            PRODUCT_ADMIN_EMAILS.has(email.trim().toLowerCase())
-              ? "/auth/onboarding/admin"
-              : "/",
-            { replace: true },
-          );
-        }
+        // Do NOT navigate here — React state (setUser/setIsAuthenticated) is
+        // batched and not applied yet. The useEffect below handles the redirect
+        // once the state has settled, so SuperAdminLayout sees the correct user.
       } else if (result === "pending_approval") {
         setInfoMessage("Your account is pending admin approval. You will be notified once access is granted.");
       } else if (result === "user_not_found") {

@@ -5,6 +5,7 @@ from app.models.base import Base
 class ShiftSchedule(Base):
     __tablename__ = "shift_schedule"
 
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.id"))
     shift_date = Column(Date, nullable=False)
     shift_type = Column(String(50))
