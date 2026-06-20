@@ -27,6 +27,7 @@ from app.models.data_import import DataImport
 from app.models.validation_log import ValidationLog
 from app.models.api_integration import ApiIntegration
 from app.models.document import Document
+from app.models.equipment_certification import EquipmentCertification
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
@@ -35,4 +36,5 @@ __all__ = [
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
     "OrganisationInvite", "Subscription", "Notification",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
+    "EquipmentCertification",
 ]

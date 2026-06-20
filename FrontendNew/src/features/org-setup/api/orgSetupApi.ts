@@ -248,10 +248,10 @@ export function useCreateOrgSetupUserMutation(): MutationTuple<Omit<OrgUser, "id
   });
 }
 
-export function useBulkUploadOrgSetupUsersMutation(): MutationTuple<FormData, { count?: number }> {
+export function useBulkUploadOrgSetupUsersMutation(): MutationTuple<FormData, { count?: number; error?: string; users?: OrgUser[] }> {
   return useMutation(async (formData) => {
     const res = await axiosInstance.post("/org-setup/step4/bulk", formData);
-    return res.data as { count?: number };
+    return res.data as { count?: number; error?: string; users?: OrgUser[] };
   });
 }
 
@@ -319,4 +319,8 @@ export function useConnectOrgApiMutation(): MutationTuple<OrgApiConnectPayload, 
     const res = await axiosInstance.post("/org-setup/step1/api-connect", data);
     return res.data as OrgDetailsFromExternal;
   });
+}
+
+export async function resetOrgSetupWizard(): Promise<void> {
+  await axiosInstance.post("/org-setup/reset", {});
 }

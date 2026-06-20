@@ -55,22 +55,33 @@ def _mark_invite_accepted(email: str, db: Session) -> None:
 
 @router.get("/check", summary="Check if an email has a pending org invite (needs setup)")
 def check_setup_required(email: str, db: Session = Depends(get_db)):
+    email = email.strip().lower()
     invite = (
         db.query(OrganisationInvite)
         .filter(
-            OrganisationInvite.admin_email == email.strip().lower(),
+            OrganisationInvite.admin_email == email,
             OrganisationInvite.status == "pending",
         )
         .first()
     )
-    if invite:
-        return {
-            "needs_setup": True,
-            "organisation_name": invite.organisation_name,
-            "admin_name": invite.admin_name,
-            "invite_id": invite.id,
-        }
-    return {"needs_setup": False}
+    if not invite:
+        return {"needs_setup": False}
+
+    # If the user already has an organisation_id, they completed setup already.
+    # Auto-accept the stale invite so they never see the wizard again.
+    user = db.query(User).filter(User.email == email).first()
+    if user and user.organisation_id is not None:
+        invite.status = "accepted"
+        db.commit()
+        logger.info("Auto-accepted stale invite for %s (org_id=%s)", email, user.organisation_id)
+        return {"needs_setup": False}
+
+    return {
+        "needs_setup": True,
+        "organisation_name": invite.organisation_name,
+        "admin_name": invite.admin_name,
+        "invite_id": invite.id,
+    }
 
 
 @router.post(

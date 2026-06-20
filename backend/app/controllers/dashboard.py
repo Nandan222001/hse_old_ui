@@ -22,7 +22,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 def _org_filter(query, model, org_id):
-    """Apply organisation_id filter only when org_id is provided."""
+    """Filter by org_id only. NULL organisation rows are not tenant data."""
     if org_id is not None:
         return query.filter(model.organisation_id == org_id)
     return query

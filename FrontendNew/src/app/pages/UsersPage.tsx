@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { RoleBadge } from "../components/shared/StatusBadge";
 import {
-  Search, X, UserPlus, Trash2, Users as UsersIcon, CheckCircle2,
-  ShieldCheck, AlertTriangle, ArrowUpRight, Copy, ChevronDown,
+  Search, X, UserPlus, Users as UsersIcon, CheckCircle2,
+  ShieldCheck, AlertTriangle, ArrowUpRight, Copy,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, Cell, CartesianGrid,
@@ -40,27 +40,6 @@ async function apiPost(path: string, body: object) {
     throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
   }
   return res.json();
-}
-
-async function apiPatch(path: string, body: object) {
-  const res = await fetch(`${API}${path}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function apiDelete(path: string) {
-  const res = await fetch(`${API}${path}`, { method: "DELETE", headers: authHeaders() });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
-  }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -421,12 +400,11 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
 
 export function UsersPage() {
   const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "Admin";
+  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
 
   // ── Org users state ─────────────────────────────────────────────────────────
   const [orgUsers, setOrgUsers]           = useState<OrgUser[]>([]);
   const [orgUsersLoading, setOrgUsersLoading] = useState(false);
-  const [roleMenuId, setRoleMenuId]       = useState<number | null>(null);
 
   // ── Invite modal state ──────────────────────────────────────────────────────
   const [showInviteModal, setShowInviteModal]   = useState(false);
@@ -451,7 +429,8 @@ export function UsersPage() {
     setOrgUsersLoading(true);
     try {
       const data = await apiGet("/org/users");
-      setOrgUsers((data as { items?: OrgUser[] }).items ?? []);
+      const list = Array.isArray(data) ? data : ((data as { items?: OrgUser[] }).items ?? []);
+      setOrgUsers(list);
     } catch {
       // Not fatal — user might not be an org admin
     } finally {
@@ -491,61 +470,41 @@ export function UsersPage() {
     }
   };
 
-  const handleRemoveOrgUser = async (userId: number, email: string) => {
-    if (!window.confirm(`Remove ${email} from your organisation?`)) return;
-    try {
-      await apiDelete(`/org/users/${userId}`);
-      setOrgUsers((prev) => prev.filter((u) => u.id !== userId));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to remove user");
-    }
-  };
-
-  const handleToggleOrgUser = async (userId: number, currentActive: boolean) => {
-    try {
-      const result = await apiPatch(`/org/users/${userId}/toggle`, { is_active: !currentActive });
-      setOrgUsers((prev) =>
-        prev.map((u) => u.id === userId ? { ...u, is_active: (result as OrgUser).is_active } : u),
-      );
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update user status");
-    }
-  };
-
-  const handleChangeOrgUserRole = async (userId: number, role: string) => {
-    setRoleMenuId(null);
-    try {
-      const result = await apiPatch(`/org/users/${userId}/role`, { role });
-      setOrgUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId
-            ? { ...u, role: (result as OrgUser).role, role_label: (result as OrgUser).role_label }
-            : u,
-        ),
-      );
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to change role");
-    }
-  };
-
   // ── Derived values ────────────────────────────────────────────────────────────
 
+  // Merge org users (login accounts) + imported employees into one unified list
+  const allPeople = useMemo<EmployeeDirectoryRow[]>(() => {
+    const fromOrgUsers: EmployeeDirectoryRow[] = orgUsers.map((u) => ({
+      id: -(u.id),
+      full_name: u.username,
+      role_name: u.role_label,
+      department_name: null,
+      site_name: null,
+      employment_type: "Staff",
+      shift_pattern: null,
+      active_status: u.is_active ? "Active" : "Inactive",
+    }));
+    return [...fromOrgUsers, ...employeeDirectory];
+  }, [orgUsers, employeeDirectory]);
+
   const employeeRoleOptions = Array.from(
-    new Set(employeeDirectory.map((e) => e.role_name).filter((r): r is string => Boolean(r))),
+    new Set(allPeople.map((e) => e.role_name).filter((r): r is string => Boolean(r))),
   ).sort();
 
-  const filteredEmployees = employeeDirectory
-    .filter((e) => !search || e.full_name.toLowerCase().includes(search.toLowerCase()))
+  const filteredEmployees = allPeople
+    .filter((e) => !search || (e.full_name ?? "").toLowerCase().includes(search.toLowerCase()))
     .filter((e) => filterRole === "All Roles" || e.role_name === filterRole)
     .filter((e) => filterStatus === "All Statuses" || e.active_status === filterStatus);
 
-  const employeeInitials = (e: EmployeeDirectoryRow) =>
-    e.full_name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const employeeInitials = (e: EmployeeDirectoryRow) => {
+    if (!e.full_name) return "?";
+    return e.full_name.split(" ").map((p) => p[0] ?? "").join("").slice(0, 2).toUpperCase() || "?";
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 relative" onClick={() => roleMenuId && setRoleMenuId(null)}>
+    <div className="space-y-6 relative">
 
       {/* People Dashboard */}
       <PeopleDashboardSection currentUserName={currentUser?.name} overview={peopleOverview} />
@@ -570,134 +529,12 @@ export function UsersPage() {
         )}
       </div>
 
-      {/* ── Organisation Users (Admin only) ── */}
-      {isAdmin && (
-        <div
-          className="bg-white rounded-xl border overflow-hidden"
-          style={{ borderColor: "#D6E4FF", boxShadow: "0px 2px 12px rgba(11,61,145,0.08)" }}
-        >
-          <div
-            className="px-4 py-3 flex items-center gap-2 border-b"
-            style={{ borderColor: "#E0EAFF", background: "#F0F4FF" }}
-          >
-            <UserPlus className="w-4 h-4" style={{ color: "#1D4ED8" }} />
-            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#1D4ED8" }}>
-              Organisation Users — {orgUsersLoading ? "…" : orgUsers.length}
-            </span>
-          </div>
-
-          {orgUsersLoading ? (
-            <div className="px-4 py-8 text-center text-[13px]" style={{ color: "#9CA3AF" }}>
-              Loading users…
-            </div>
-          ) : orgUsers.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <UsersIcon className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "#9CA3AF" }} />
-              <p className="text-[13px]" style={{ color: "#9CA3AF" }}>
-                No users invited yet. Click "Invite User" to add team members.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr style={{ background: "#F8FAFF" }}>
-                  {["User", "Role", "Status", "Actions"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left">
-                      <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: "#9CA3AF", fontWeight: 600 }}>{h}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {orgUsers.map((u) => (
-                  <tr key={u.id} style={{ borderBottom: "1px solid #EEF2FF" }}>
-                    {/* User */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px]"
-                          style={{ background: "linear-gradient(135deg, #0B3D91, #1D4ED8)", fontWeight: 700 }}
-                        >
-                          {(u.email[0] ?? "U").toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-[13px]" style={{ color: "#0A0A0A", fontWeight: 500 }}>{u.username}</div>
-                          <div className="text-[11px]" style={{ color: "#6B7280" }}>{u.email}</div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Role — inline dropdown */}
-                    <td className="px-4 py-3">
-                      <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setRoleMenuId(roleMenuId === u.id ? null : u.id)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                          style={{ background: "#EEF4FF", color: "#1D4ED8" }}
-                        >
-                          {u.role_label}
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                        {roleMenuId === u.id && (
-                          <div
-                            className="absolute top-8 left-0 z-20 bg-white rounded-xl border py-1 min-w-[160px]"
-                            style={{ borderColor: "#E2E8F0", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}
-                          >
-                            {ORG_ROLES.map((r) => (
-                              <button
-                                key={r.value}
-                                onClick={() => handleChangeOrgUserRole(u.id, r.value)}
-                                className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F0F4FF]"
-                                style={{ color: u.role === r.value ? "#1D4ED8" : "#374151", fontWeight: u.role === r.value ? 700 : 400 }}
-                              >
-                                {r.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Status — click to toggle */}
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggleOrgUser(u.id, u.is_active)}
-                        className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-75"
-                        style={{
-                          background: u.is_active ? "#DCFCE7" : "#FEE2E2",
-                          color: u.is_active ? "#15803D" : "#DC2626",
-                        }}
-                        title={u.is_active ? "Click to deactivate" : "Click to activate"}
-                      >
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: u.is_active ? "#15803D" : "#DC2626" }} />
-                        {u.is_active ? "Active" : "Inactive"}
-                      </button>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleRemoveOrgUser(u.id, u.email)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] border"
-                        style={{ borderColor: "#FECACA", color: "#DC2626", background: "#FFF5F5" }}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
       {/* ── Filters ── */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
           <input
-            placeholder="Search employees…"
+            placeholder="Search users…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-10 pl-10 pr-4 rounded-lg border text-[13px]"
@@ -725,7 +562,7 @@ export function UsersPage() {
         </select>
       </div>
 
-      {/* ── Employees Table ── */}
+      {/* ── All Users Table ── */}
       <div
         className="bg-white rounded-xl border overflow-hidden"
         style={{ borderColor: "#E8EFE8", boxShadow: "0px 2px 12px rgba(27, 94, 32, 0.08)" }}
@@ -733,7 +570,7 @@ export function UsersPage() {
         <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "#EEF2EE", background: "#F4F7F4" }}>
           <ShieldCheck className="w-4 h-4" style={{ color: "#2E7D32" }} />
           <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#2E7D32" }}>
-            Employees — {filteredEmployees.length}
+            {orgUsersLoading ? "Loading…" : `All Users — ${filteredEmployees.length}`}
           </span>
         </div>
         <table className="w-full">
@@ -751,7 +588,7 @@ export function UsersPage() {
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center">
                   <UsersIcon className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "#9CA3AF" }} />
-                  <p className="text-[13px]" style={{ color: "#9CA3AF" }}>No employees found</p>
+                  <p className="text-[13px]" style={{ color: "#9CA3AF" }}>No users found</p>
                 </td>
               </tr>
             ) : filteredEmployees.map((e) => (
@@ -764,7 +601,7 @@ export function UsersPage() {
                     >
                       {employeeInitials(e)}
                     </div>
-                    <span className="text-[13px]" style={{ color: "#0A0A0A", fontWeight: 500 }}>{e.full_name}</span>
+                    <span className="text-[13px]" style={{ color: "#0A0A0A", fontWeight: 500 }}>{e.full_name ?? "—"}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3"><RoleBadge role={e.role_name ?? "Worker"} /></td>

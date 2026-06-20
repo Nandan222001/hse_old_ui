@@ -16,6 +16,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import CurrentUser, get_current_user
 from app.models.data_import import DataImport
 from app.models.validation_log import ValidationLog
 from app.models.api_integration import ApiIntegration
@@ -269,8 +270,9 @@ async def full_import(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    from app.services.excel_import_service import SHEET_STEPS
+    from app.services.excel_import_service import SHEET_STEPS, capture_tenant_table_max_ids, link_new_rows_to_org
     from sqlalchemy import text as _text
 
     content = await file.read()
@@ -280,17 +282,16 @@ async def full_import(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot open Excel file: {exc}")
 
+    # Resolve org_id at request time from the database; JWT org_id may be stale
+    # immediately after organisation setup.
+    org_id = current_user.org_id
+    if not org_id or org_id <= 0:
+        raise HTTPException(status_code=400, detail="Organisation setup is not complete. Complete setup before importing data.")
+    before_ids = capture_tenant_table_max_ids(db)
+
     per_sheet = []
     total_processed = 0
     total_failed = 0
-
-    # Disable FK checks so cross-sheet references work regardless of insert order.
-    # Each sheet commits independently so a later failure can't roll back earlier sheets.
-    try:
-        db.execute(_text("SET FOREIGN_KEY_CHECKS=0"))
-        db.commit()
-    except Exception:
-        pass
 
     try:
         for sheet_label, table_key, fn in SHEET_STEPS:
@@ -299,6 +300,8 @@ async def full_import(
             errors: list[str] = []
             agent = _SHEET_AGENT.get(sheet_label, "MasterDataAgent")
             try:
+                # SET inside the transaction so it stays on the same connection as INSERTs
+                db.execute(_text("SET FOREIGN_KEY_CHECKS=0"))
                 processed = fn(db, wb)
                 db.commit()
             except Exception as exc:
@@ -321,6 +324,11 @@ async def full_import(
             db.commit()
         except Exception:
             pass
+
+    # Stamp organisation_id only on rows inserted by this upload.
+    if org_id and org_id > 0:
+        link_new_rows_to_org(db, org_id, before_ids)
+        db.commit()
 
     # Log the import
     import_row = DataImport(
@@ -466,12 +474,13 @@ async def import_single_file(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """
     Generic single-sheet import used by the Excel tab for Shift Schedule.
     Returns {summary: {total_inserted}, sheets: [{status, header_errors, row_errors}]}.
     """
-    from app.services.excel_import_service import _insert_shift_schedule
+    from app.services.excel_import_service import _insert_shift_schedule, capture_tenant_table_max_ids, link_new_rows_to_org
 
     content = await file.read()
     filename = file.filename or "upload"
@@ -486,6 +495,9 @@ async def import_single_file(
     row_errors: list[dict] = []
     count = 0
     status = "ok"
+    if not current_user.org_id or current_user.org_id <= 0:
+        raise HTTPException(status_code=400, detail="Organisation setup is not complete. Complete setup before importing data.")
+    before_ids = capture_tenant_table_max_ids(db)
 
     try:
         if ext == "csv":
@@ -502,6 +514,8 @@ async def import_single_file(
                 wb.active.title = "Shift_Schedule"
 
         count = _insert_shift_schedule(db, wb)
+        if current_user.org_id and current_user.org_id > 0:
+            link_new_rows_to_org(db, current_user.org_id, before_ids)
         db.commit()
     except Exception as exc:
         db.rollback()

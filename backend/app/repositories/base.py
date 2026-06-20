@@ -27,7 +27,7 @@ class BaseRepository(IRepository[T], Generic[T]):
         )
 
     def get_all_by_org(self, org_id: int, skip: int = 0, limit: int = 100) -> list[T]:
-        """Return records scoped to a specific organisation."""
+        """Return records for the organisation only."""
         return (
             self._db.query(self.model_class)
             .filter(self.model_class.organisation_id == org_id)
@@ -44,10 +44,13 @@ class BaseRepository(IRepository[T], Generic[T]):
         )
 
     def get_by_id_and_org(self, id: int, org_id: int) -> Optional[T]:
-        """Return a record only if it belongs to the given organisation."""
+        """Return a record belonging to the organisation."""
         return (
             self._db.query(self.model_class)
-            .filter(self.model_class.id == id, self.model_class.organisation_id == org_id)
+            .filter(
+                self.model_class.id == id,
+                self.model_class.organisation_id == org_id,
+            )
             .first()
         )
 

@@ -58,13 +58,61 @@ def _fmt_time(val) -> Optional[str]:
     return s if s else None
 
 
-def _rows(ws):
+def _rows(ws, _min_len: int = 25):
     all_rows = list(ws.iter_rows(values_only=True))
-    return all_rows[1:] if all_rows else []
+    if not all_rows:
+        return []
+    # Pad every data row to _min_len so r[i] never throws IndexError regardless
+    # of how many columns the uploaded file actually has.
+    return [r + (None,) * max(0, _min_len - len(r)) for r in all_rows[1:]]
 
 
 def _check_sheet(wb, name: str) -> bool:
     return name in wb.sheetnames
+
+
+TENANT_TABLES = (
+    "sites", "departments", "employees", "incidents", "near_misses",
+    "safety_walks", "capa_actions", "permits_to_work", "shift_schedule",
+    "working_stations", "roles", "hazard_categories", "hazards",
+    "permit_types", "training_programs", "policies",
+)
+
+
+def capture_tenant_table_max_ids(db: Session) -> dict[str, int]:
+    """Snapshot current ids so import linking does not claim old seed/test rows."""
+    max_ids: dict[str, int] = {}
+    for tbl in TENANT_TABLES:
+        try:
+            max_ids[tbl] = int(db.execute(text(f"SELECT COALESCE(MAX(id), 0) FROM `{tbl}`")).scalar() or 0)
+        except Exception:
+            max_ids[tbl] = 0
+    return max_ids
+
+
+def link_new_rows_to_org(db: Session, org_id: int, before_ids: dict[str, int]) -> int:
+    """Stamp organisation_id only on rows inserted after before_ids was captured."""
+    affected = 0
+    for tbl in TENANT_TABLES:
+        try:
+            result = db.execute(
+                text(
+                    f"UPDATE `{tbl}` "
+                    "SET organisation_id = :oid "
+                    "WHERE organisation_id IS NULL AND id > :before_id"
+                ),
+                {"oid": org_id, "before_id": before_ids.get(tbl, 0)},
+            )
+            affected += result.rowcount
+        except Exception:
+            pass
+    logger.info("Linked %s new import rows to org_id=%s", affected, org_id)
+    return affected
+
+
+def latest_org_id(db: Session) -> int | None:
+    org_id = db.execute(text("SELECT MAX(id) FROM organisation")).scalar()
+    return int(org_id) if org_id else None
 
 
 # ── per-table insert functions ────────────────────────────────────────────────
@@ -155,34 +203,13 @@ def _insert_sites(db: Session, wb) -> int:
 
 
 def _link_org_to_data(db: Session, wb) -> int:
-    """After all sheets are imported, stamp organisation_id on every row
-    that was just inserted without one. Uses the org that was just created
-    (the one inserted during this import run, i.e. the one with NULL org_id on sites)."""
-    # Prefer the org whose sites still have NULL organisation_id (just inserted in this run).
-    # Fallback: the most recently created org.
-    row = db.execute(
-        text("SELECT o.id FROM organisation o "
-             "LEFT JOIN sites s ON s.organisation_id IS NULL "
-             "ORDER BY o.id DESC LIMIT 1")
-    ).fetchone()
-    org_id = row[0] if row else db.execute(text("SELECT MAX(id) FROM organisation")).scalar()
-    if not org_id:
-        return 0
-    affected = 0
-    for tbl in ("sites", "departments", "employees", "incidents", "near_misses",
-                "safety_walks", "capa_actions", "permits_to_work", "shift_schedule",
-                "working_stations", "roles", "hazard_categories", "hazards",
-                "permit_types", "training_programs", "policies"):
-        try:
-            result = db.execute(
-                text(f"UPDATE `{tbl}` SET organisation_id = :oid WHERE organisation_id IS NULL"),
-                {"oid": org_id},
-            )
-            affected += result.rowcount
-        except Exception:
-            pass  # table may not have the column or may not exist
-    logger.info("Linked %s rows to org_id=%s", affected, org_id)
-    return affected
+    """Deprecated no-op.
+
+    Older code globally stamped every NULL organisation_id row, which could
+    attach seed/test data to the first tenant that opened setup/dashboard.
+    Use link_new_rows_to_org() with a captured pre-import id snapshot instead.
+    """
+    return 0
 
 
 def _insert_permit_types(db: Session, wb) -> int:
@@ -466,7 +493,6 @@ SHEET_STEPS = [
     ("Safety_Walks",          "safety_walks",       _insert_safety_walks),
     ("CAPA_Actions",          "capa_actions",       _insert_capa_actions),
     ("Shift_Schedule",        "shift_schedule",     _insert_shift_schedule),
-    ("Link Organisation",     "org_link",           _link_org_to_data),
 ]
 
 
@@ -491,17 +517,15 @@ def import_excel_stream(file_bytes: bytes, db: Session):
 
     results: dict[str, int] = {}
     errors: dict[str, str] = {}
-
-    try:
-        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-        db.commit()
-    except Exception:
-        pass
+    before_ids = capture_tenant_table_max_ids(db)
 
     try:
         for idx, (sheet_label, table_key, fn) in enumerate(SHEET_STEPS):
             yield _sse({"type": "processing", "index": idx, "key": table_key, "label": sheet_label})
             try:
+                # Must SET within the same transaction as the INSERTs; committing
+                # after SET returns the connection to the pool, resetting the flag.
+                db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
                 count = fn(db, wb)
                 db.commit()
                 results[table_key] = count
@@ -515,6 +539,9 @@ def import_excel_stream(file_bytes: bytes, db: Session):
                 yield _sse({"type": "error", "index": idx, "key": table_key, "label": sheet_label, "error": msg})
     finally:
         try:
+            org_id = latest_org_id(db)
+            if org_id:
+                results["org_link"] = link_new_rows_to_org(db, org_id, before_ids)
             db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
             db.commit()
         except Exception:
@@ -551,16 +578,12 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
 
     results: dict[str, int] = {}
     errors: dict[str, str] = {}
-
-    try:
-        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-        db.commit()
-    except Exception:
-        pass
+    before_ids = capture_tenant_table_max_ids(db)
 
     try:
         for sheet_label, table_key, fn in SHEET_STEPS:
             try:
+                db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
                 count = fn(db, wb)
                 db.commit()
                 results[table_key] = count
@@ -571,6 +594,9 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
                 db.rollback()
     finally:
         try:
+            org_id = latest_org_id(db)
+            if org_id:
+                results["org_link"] = link_new_rows_to_org(db, org_id, before_ids)
             db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
             db.commit()
         except Exception:

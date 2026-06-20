@@ -4,7 +4,7 @@ import {
   Upload, FileText, CheckCircle2, XCircle, AlertCircle, RefreshCw,
   Download, Database, Clock, AlertTriangle, FileSpreadsheet,
   Users, MapPin, ShieldAlert, ClipboardList, BookOpen,
-  Shield, Layers, Info, Zap, Eye,
+  Shield, Layers, Info, Zap, Eye, Brain, BarChart3,
   PenLine, Plug, Server, UserCheck, Timer, Wifi, Building2,
   Code2, Plus, Trash2, ChevronRight, CheckSquare, Save,
   RotateCcw, Link, X, FolderOpen, Presentation, BookMarked,
@@ -27,7 +27,7 @@ const API_BASE = (import.meta.env.VITE_API_URL as string || "/api/v1").replace(/
 
 function getAuthHeaders(): HeadersInit {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const jwt = localStorage.getItem("hse_jwt");
+  const jwt = localStorage.getItem("hse_jwt_token");
   if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
   try {
     const u = JSON.parse(localStorage.getItem("hse_user") || "{}");
@@ -603,169 +603,393 @@ function ApiIntegrationsTab() {
   );
 }
 
-// ── EXCEL TAB ─────────────────────────────────────────────────────────────────
+// ── AI DATA IMPORT SECTION ─────────────────────────────────────────────────────
 
-function ExcelTab() {
-  const [selectedEntity, setSelectedEntity] = useState<EntityType>(ENTITY_TYPES[0]);
-  const [dragging, setDragging] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { data: imports = [], isLoading: importsLoading, refetch: refetchImports } = useListImportsQuery();
-  const { data: validLogs = [], isLoading: validLogsLoading } = useListValidationLogsQuery();
-  const [createImport] = useCreateImportMutation();
-  const totalImports = imports.length;
-  const successImports = imports.filter(i => i.status === "success").length;
-  const successRate = totalImports > 0 ? Math.round((successImports / totalImports) * 100) : 0;
-  const totalRecords = imports.reduce((s, i) => s + i.records_total, 0);
-  const validPass = validLogs.filter(l => l.status === "pass").length;
-  const validFail = validLogs.filter(l => l.status === "fail").length;
+const AI_DATA_TYPES = [
+  { key: "employees",         label: "Employees",         icon: UserCheck    },
+  { key: "departments",       label: "Departments",        icon: Building2    },
+  { key: "working_stations",  label: "Working Stations",   icon: BarChart3    },
+  { key: "roles",             label: "Roles",              icon: Shield       },
+  { key: "policies",          label: "Policies",           icon: FileText     },
+  { key: "permit_types",      label: "Permit Types",       icon: ClipboardList},
+  { key: "hazard_categories", label: "Hazard Categories",  icon: AlertTriangle},
+  { key: "hazards",           label: "Hazards",            icon: AlertOctagon },
+  { key: "training_programs", label: "Training",           icon: GraduationCap},
+  { key: "permits_to_work",   label: "Permits To Work",    icon: FileText     },
+  { key: "incidents",         label: "Incidents",          icon: AlertTriangle},
+  { key: "near_misses",       label: "Near Misses",        icon: Shield       },
+  { key: "safety_walks",      label: "Safety Walks",       icon: CheckCircle2 },
+  { key: "capa_actions",      label: "CAPA Actions",       icon: Zap          },
+  { key: "shift_schedule",    label: "Shift Schedule",     icon: CalendarClock},
+];
 
-  function handleDrop(e: React.DragEvent) { e.preventDefault(); setDragging(false); const file = e.dataTransfer.files[0]; if (file) { setSelectedFile(file); setResult(null); } }
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (file) { setSelectedFile(file); setResult(null); } }
+type AiFieldDef = { label: string; key: string; type: string; placeholder?: string; options?: string[]; required?: boolean };
 
-  async function handleUpload() {
-    if (!selectedFile || isUploading) return;
-    setIsUploading(true); setResult(null);
-    let count = 0; let uploadOk = false; let errMsg = "";
+const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
+  employees: [
+    { label: "Employee ID",           key: "employee_id",           type: "text",     placeholder: "EMP001",            required: true },
+    { label: "Full Name",             key: "full_name",             type: "text",     placeholder: "Jessica Hernandez",  required: true },
+    { label: "Date of Birth",         key: "date_of_birth",         type: "date" },
+    { label: "Gender",                key: "gender",                type: "select",   options: ["M","F","Other"] },
+    { label: "Employment Type",       key: "employment_type",       type: "select",   options: ["Permanent","Contract","Part-time","Temporary"] },
+    { label: "Employment Start Date", key: "employment_start_date", type: "date" },
+    { label: "Job Title / Role ID",   key: "job_title",             type: "text",     placeholder: "ROLE001" },
+    { label: "Department",            key: "department",            type: "text",     placeholder: "DEPT001" },
+    { label: "Shift Pattern",         key: "shift_pattern",         type: "select",   options: ["Rotating","Days","Nights","Afternoon","Fixed"] },
+    { label: "Manager ID",            key: "manager_id",            type: "text",     placeholder: "EMP001" },
+    { label: "Active Status",         key: "active_status",         type: "select",   options: ["Active","Inactive","On Leave"] },
+  ],
+  departments: [
+    { label: "Department ID",   key: "department_id",   type: "text", placeholder: "DEPT001", required: true },
+    { label: "Site ID",         key: "site_id",         type: "text", placeholder: "SITE001", required: true },
+    { label: "Department Name", key: "department_name", type: "text", placeholder: "Heavy Assembly", required: true },
+    { label: "Manager ID",      key: "manager_id",      type: "text", placeholder: "EMP001" },
+  ],
+  working_stations: [
+    { label: "Station ID",    key: "station_id",    type: "text",   placeholder: "STN001", required: true },
+    { label: "Station Name",  key: "station_name",  type: "text",   placeholder: "Assembly Line 1", required: true },
+    { label: "Department ID", key: "department_id", type: "text",   placeholder: "DEPT001" },
+    { label: "Station Type",  key: "station_type",  type: "text",   placeholder: "Production" },
+    { label: "Capacity",      key: "capacity",      type: "number", placeholder: "10" },
+  ],
+  roles: [
+    { label: "Role ID",         key: "role_id",         type: "text",   placeholder: "ROLE001", required: true },
+    { label: "Role Name",       key: "role_name",       type: "text",   placeholder: "Plant Manager", required: true },
+    { label: "Job Category",    key: "job_category",    type: "text",   placeholder: "Senior Management" },
+    { label: "Authority Level", key: "authority_level", type: "number", placeholder: "5" },
+  ],
+  policies: [
+    { label: "Policy Name", key: "policy_name", type: "text",     placeholder: "Health & Safety Policy", required: true },
+    { label: "Category",    key: "category",    type: "select",   options: ["Safety","Environmental","Compliance","HR","Quality","Other"] },
+    { label: "Issue Date",  key: "issue_date",  type: "date" },
+    { label: "Owner",       key: "owner",       type: "text",     placeholder: "HSE Manager" },
+    { label: "Status",      key: "status",      type: "select",   options: ["Active","Draft","Under Review","Expired"] },
+  ],
+  permit_types: [
+    { label: "Permit Type ID",   key: "permit_type_id",   type: "text",     placeholder: "PT001", required: true },
+    { label: "Permit Type Name", key: "permit_type_name", type: "text",     placeholder: "Hot Work Permit", required: true },
+    { label: "Description",      key: "description",      type: "textarea", placeholder: "Describe the permit type…" },
+    { label: "Risk Level",       key: "risk_level",       type: "select",   options: ["Low","Medium","High","Critical"] },
+  ],
+  hazard_categories: [
+    { label: "Category ID",   key: "category_id",   type: "text",     placeholder: "HC001", required: true },
+    { label: "Category Name", key: "category_name", type: "text",     placeholder: "Electrical Hazards", required: true },
+    { label: "Description",   key: "description",   type: "textarea", placeholder: "Describe the category…" },
+  ],
+  hazards: [
+    { label: "Hazard ID",    key: "hazard_id",    type: "text",   placeholder: "HAZ001", required: true },
+    { label: "Hazard Name",  key: "title",        type: "text",   placeholder: "Moving Machinery", required: true },
+    { label: "Category ID",  key: "category_id",  type: "text",   placeholder: "HC001" },
+    { label: "Severity",     key: "severity",     type: "select", options: ["Minor","Moderate","Serious","Critical"] },
+    { label: "Probability",  key: "probability",  type: "select", options: ["Unlikely","Possible","Likely","Almost Certain"] },
+  ],
+  training_programs: [
+    { label: "Training ID",       key: "training_id",    type: "text",   placeholder: "TRN001", required: true },
+    { label: "Training Name",     key: "training_name",  type: "text",   placeholder: "Fire Safety Awareness", required: true },
+    { label: "Duration (Hours)",  key: "duration_hours", type: "number", placeholder: "4" },
+    { label: "Frequency",         key: "frequency",      type: "select", options: ["One-time","Monthly","Quarterly","Bi-Annual","Annual"] },
+    { label: "Certification",     key: "certification",  type: "text",   placeholder: "Fire Safety Certificate" },
+    { label: "Expiry (Months)",   key: "expiry_months",  type: "number", placeholder: "12" },
+  ],
+  permits_to_work: [
+    { label: "Permit ID",         key: "permit_id",         type: "text",     placeholder: "PTW-001", required: true },
+    { label: "Work Description",  key: "work_description",  type: "textarea", placeholder: "Describe the work…", required: true },
+    { label: "Date Issued",       key: "date_issued",       type: "date" },
+    { label: "Issued By",         key: "issued_by",         type: "text",     placeholder: "EMP001" },
+    { label: "Status",            key: "status",            type: "select",   options: ["active","closed","cancelled","draft"] },
+  ],
+  incidents: [
+    { label: "Incident ID",    key: "incident_id",    type: "text",     placeholder: "INC00001", required: true },
+    { label: "Report Date",    key: "report_date",    type: "date",     required: true },
+    { label: "Incident Type",  key: "incident_type",  type: "select",   options: ["Injury","Damage","Near-miss","Fire","Environmental","Unsafe Act","Unsafe Condition"] },
+    { label: "Severity",       key: "severity",       type: "select",   options: ["Minor","Significant","Serious","Lost Time","Fatality"] },
+    { label: "Description",    key: "description",    type: "textarea", placeholder: "Brief description…" },
+  ],
+  near_misses: [
+    { label: "Near Miss ID",           key: "near_miss_id",         type: "text",     placeholder: "NM00001", required: true },
+    { label: "Report Date",            key: "report_date",          type: "date",     required: true },
+    { label: "Description",            key: "description",          type: "textarea", placeholder: "What happened…" },
+    { label: "Potential Consequence",  key: "potential_consequence",type: "text",     placeholder: "e.g. Injury" },
+    { label: "CAPA Escalation",        key: "capa_escalation",      type: "select",   options: ["Yes","No"] },
+  ],
+  safety_walks: [
+    { label: "Walk ID",           key: "walk_id",           type: "text",     placeholder: "SW001", required: true },
+    { label: "Walk Date",         key: "walk_date",         type: "date",     required: true },
+    { label: "Conducted By",      key: "conducted_by",      type: "text",     placeholder: "EMP001" },
+    { label: "Site ID",           key: "site_id",           type: "text",     placeholder: "SITE001" },
+    { label: "Compliance Rating", key: "compliance_rating", type: "number",   placeholder: "4 (1–5)" },
+    { label: "Findings",          key: "findings",          type: "textarea", placeholder: "Observations…" },
+  ],
+  capa_actions: [
+    { label: "Action ID",           key: "action_id",           type: "text",     placeholder: "CAPA001", required: true },
+    { label: "Action Type",         key: "action_type",         type: "select",   options: ["Corrective","Preventive"], required: true },
+    { label: "Description",         key: "description",         type: "textarea", placeholder: "Describe the action…" },
+    { label: "Responsible Person",  key: "responsible_person",  type: "text",     placeholder: "EMP001" },
+    { label: "Due Date",            key: "due_date",            type: "date" },
+    { label: "Status",              key: "status",              type: "select",   options: ["Open","In Progress","Completed"] },
+  ],
+  shift_schedule: [
+    { label: "Schedule ID",     key: "schedule_id",    type: "text",   placeholder: "SCH001", required: true },
+    { label: "Employee ID",     key: "employee_id",    type: "text",   placeholder: "EMP001", required: true },
+    { label: "Shift Date",      key: "shift_date",     type: "date" },
+    { label: "Shift Type",      key: "shift_type",     type: "select", options: ["Morning","Afternoon","Night","Rotating"] },
+    { label: "Shift Start",     key: "shift_start",    type: "text",   placeholder: "06:00" },
+    { label: "Shift End",       key: "shift_end",      type: "text",   placeholder: "14:00" },
+    { label: "Station Assigned",key: "station_assigned",type: "text",  placeholder: "Station A" },
+  ],
+};
+
+interface AiImportRecord { id: string; dataType: string; method: string; records: number; importedAt: string; }
+
+function AiImportSection() {
+  const [selectedType, setSelectedType] = useState("");
+  const [bulkResult, setBulkResult] = useState<{ count: number; errors?: string[] } | null>(null);
+  const [importing,  setImporting]  = useState(false);
+  const [msg,        setMsg]        = useState<{ ok: boolean; text: string } | null>(null);
+  const [history,    setHistory]    = useState<AiImportRecord[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function authHeaders(): Record<string, string> {
+    const h: Record<string, string> = {};
+    const jwt = localStorage.getItem("hse_jwt_token") || localStorage.getItem("hse_jwt");
+    if (jwt) h["Authorization"] = `Bearer ${jwt}`;
+    return h;
+  }
+
+  const fetchHistory = useCallback(async () => {
+    setHistLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      const headers: Record<string, string> = {};
-      const jwt = localStorage.getItem("hse_jwt");
-      if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
-      try { const u = JSON.parse(localStorage.getItem("hse_user") || "{}"); if (u?.email) headers["X-User-Email"] = u.email; if (u?.role) headers["X-User-Role"] = u.role; if (u?.orgCode) headers["X-Tenant-Id"] = u.orgCode; } catch { /**/ }
+      const res  = await fetch(`${API_BASE}/org-setup/step6a/imports`, { headers: authHeaders() });
+      const json = await res.json().catch(() => ({}));
+      const items = json?.data ?? json?.items ?? json ?? [];
+      setHistory(Array.isArray(items) ? items : []);
+    } catch { /**/ } finally { setHistLoading(false); }
+  }, []);
 
-      const isShiftSchedule = selectedEntity.id === "shift_schedule";
-      const uploadUrl = isShiftSchedule
-        ? `${API_BASE}/org-admin/data-management/import/file`
-        : `${API_BASE}/org-setup/onboarding-bulk?module=${selectedEntity.moduleKey}`;
-      const uploadRes = await fetch(uploadUrl, { method: "POST", headers, body: formData });
-      const uploadJson = await uploadRes.json().catch(() => ({}));
-      const uploadData = uploadJson?.data ?? uploadJson;
+  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
 
-      if (isShiftSchedule) {
-        count = uploadData?.summary?.total_inserted ?? 0;
-        const sheetErrors = (uploadData?.sheets ?? []).flatMap((s: { row_errors?: { message: string }[]; header_errors?: string[] }) => [...(s.header_errors ?? []), ...(s.row_errors ?? []).map((e: { message: string }) => e.message)]);
-        const errors: string[] = sheetErrors.slice(0, 3);
-        if (!uploadRes.ok) { errMsg = uploadData?.error || uploadData?.detail || `Server error ${uploadRes.status}`; }
-        else if (count === 0) { const status = (uploadData?.sheets?.[0]?.status ?? ""); const hint = sheetErrors.length > 0 ? ` — ${sheetErrors[0]}` : (status === "rejected" ? " — sheet headers do not match the Shift Schedule template." : " — check column headers match the template."); errMsg = `0 records imported${hint}`; }
-        else { uploadOk = true; const warn = errors.length > 0 ? ` (${errors.length} row warning${errors.length > 1 ? "s" : ""})` : ""; errMsg = `${count} shift schedule record${count > 1 ? "s" : ""} imported successfully${warn}.`; }
-      } else {
-        count = uploadData?.count ?? 0;
-        const errors: string[] = uploadData?.errors ?? [];
-        if (!uploadRes.ok) { errMsg = uploadData?.error || uploadData?.detail || uploadData?.message || `Server error ${uploadRes.status} — check the file format.`; }
-        else if (count === 0) { const hint = errors.length > 0 ? ` — ${errors[0]}` : " — check that column headers match the template."; errMsg = `0 records imported${hint}`; }
-        else { uploadOk = true; const warn = errors.length > 0 ? ` (${errors.length} warning${errors.length > 1 ? "s" : ""})` : ""; errMsg = `${count} records imported successfully${warn}.`; }
-      }
-    } catch (e: unknown) { errMsg = (e as Error).message || "Upload failed."; }
-    try { await createImport({ file_name: selectedFile.name, import_type: "excel", data_type: selectedEntity.label, records_estimated: count }).unwrap(); } catch { /**/ }
-    setResult({ success: uploadOk, message: errMsg });
-    setSelectedFile(null); setIsUploading(false);
-  }
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file || !selectedType) return;
+    setBulkResult(null); setMsg(null); setImporting(true);
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const res  = await fetch(`${API_BASE}/org-setup/onboarding-bulk?module=${encodeURIComponent(selectedType)}`, {
+        method: "POST", headers: authHeaders(), body: fd,
+      });
+      const json = await res.json().catch(() => ({}));
+      const data = json?.data ?? json;
+      const count  = data?.count ?? 0;
+      const errors: string[] = data?.errors ?? [];
+      setBulkResult({ count, errors });
+      if (count > 0) setMsg({ ok: true,  text: `${count} records imported successfully${errors.length > 0 ? ` (${errors.length} warning${errors.length > 1 ? "s" : ""})` : ""}.` });
+      else           setMsg({ ok: false, text: errors[0] || "0 records imported — check column headers match the template." });
+      void fetchHistory();
+    } catch (e: unknown) { setMsg({ ok: false, text: (e as Error).message || "Upload failed." }); }
+    finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
 
-  function handleDownloadTemplate(entity: EntityType) {
-    const csv = `${entity.fields.join(",")}\n${entity.sampleData}`;
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement("a"), { href: url, download: `template_${entity.id}.csv` });
+  const handleTemplate = async () => {
+    if (!selectedType) return;
+    const res = await fetch(`${API_BASE}/org-setup/template/${selectedType}`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), { href: url, download: `${selectedType}_template.csv` });
     a.click(); URL.revokeObjectURL(url);
-  }
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-3">
-        {[{ label: "Total Imports", value: totalImports, color: "#4A57B9", bg: "#EEF2FF", icon: Upload },{ label: "Success Rate", value: `${successRate}%`, color: "#059669", bg: "#D1FAE5", icon: CheckCircle2 },{ label: "Records Imported", value: totalRecords.toLocaleString(), color: "#0E7490", bg: "#ECFEFF", icon: Database },{ label: "Templates Available", value: ENTITY_TYPES.length, color: "#D97706", bg: "#FEF3C7", icon: FileText }].map(({ label, value, color, bg, icon: Icon }) => (
-          <Card key={label} className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}><Icon className="w-5 h-5" style={{ color }} /></div>
-            <div><div className="text-[20px] font-black leading-none" style={{ color: "#111827" }}>{value}</div><div className="text-[11px] mt-0.5" style={{ color: "#9CA3AF" }}>{label}</div></div>
-          </Card>
-        ))}
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}>
+          <FileSpreadsheet className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <div className="text-[16px] font-bold" style={{ color: "#111827" }}>Data Import</div>
+          <div className="text-[12px]" style={{ color: "#9CA3AF" }}>Select a data type, then upload your .xlsx or .csv file</div>
+        </div>
       </div>
 
-      <div>
-        <SectionLabel>Select data type to upload</SectionLabel>
-        <div className="grid grid-cols-5 gap-2 lg:grid-cols-8 xl:grid-cols-10">
-          {ENTITY_TYPES.map(entity => {
-            const active = selectedEntity.id === entity.id; const Icon = entity.icon;
+      {/* Data Type Selector */}
+      <Card className="p-5">
+        <SectionLabel>Select Data Type</SectionLabel>
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2">
+          {AI_DATA_TYPES.map(({ key, label, icon: Icon }) => {
+            const active = selectedType === key;
             return (
-              <button key={entity.id} onClick={() => { setSelectedEntity(entity); setSelectedFile(null); setResult(null); }}
-                className="flex flex-col items-center gap-2 rounded-2xl border p-3 transition-all"
-                style={active ? { background: entity.bg, borderColor: entity.color, boxShadow: `0 4px 16px ${entity.color}30` } : { background: "#fff", borderColor: "#E3E9F6" }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: active ? entity.bg : "#F8FAFF" }}>
-                  <Icon className="w-4.5 h-4.5" style={{ color: active ? entity.color : "#9CA3AF" }} />
-                </div>
-                <span className="text-[11px] font-bold text-center leading-tight" style={{ color: active ? entity.color : "#374151" }}>{entity.label}</span>
+              <button key={key} type="button"
+                onClick={() => { setSelectedType(key); setBulkResult(null); setMsg(null); }}
+                className="flex flex-col items-center gap-1.5 rounded-xl border-2 p-2.5 text-center transition-all"
+                style={active ? { borderColor: "#4A57B9", background: "#EEF2FF" } : { borderColor: "#E3E9F6", background: "#fff" }}>
+                <Icon className="w-4 h-4" style={{ color: active ? "#4A57B9" : "#9CA3AF" }} />
+                <span className="text-[10px] font-bold leading-tight" style={{ color: active ? "#4A57B9" : "#374151" }}>{label}</span>
               </button>
             );
           })}
         </div>
-      </div>
+      </Card>
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <Card className="xl:col-span-2 p-5">
-          <div className="flex items-center justify-between gap-3 mb-5">
+      {/* Upload */}
+      <Card className="p-5">
+        <SectionLabel>Upload File</SectionLabel>
+
+        {!selectedType && (
+          <div className="p-4 rounded-xl text-sm text-center" style={{ background: "#F9FAFB", color: "#9CA3AF" }}>
+            Select a data type above to enable upload.
+          </div>
+        )}
+
+        {selectedType && (
+          <div className="space-y-4">
+            {/* Drop zone */}
+            <div
+              onClick={() => !importing && fileRef.current?.click()}
+              className="rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-12 gap-3 transition-all"
+              style={{ cursor: importing ? "default" : "pointer", borderColor: importing ? "#4A57B9" : "#D1D5DB", background: importing ? "#EEF2FF" : "#F9FAFB" }}>
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: importing ? "#EEF2FF" : "#F3F4F6" }}>
+                {importing
+                  ? <RefreshCw className="w-7 h-7 animate-spin" style={{ color: "#4A57B9" }} />
+                  : <Upload className="w-7 h-7" style={{ color: "#9CA3AF" }} />}
+              </div>
+              {importing
+                ? <div className="text-center">
+                    <p className="text-sm font-bold" style={{ color: "#4A57B9" }}>Importing…</p>
+                    <p className="text-xs mt-0.5" style={{ color: "#6B7280" }}>This may take a moment for large files</p>
+                  </div>
+                : <div className="text-center">
+                    <p className="text-sm font-semibold" style={{ color: "#374151" }}>Drop your file here or click to browse</p>
+                    <p className="text-xs mt-0.5" style={{ color: "#9CA3AF" }}>.xlsx, .xls and .csv supported</p>
+                  </div>
+              }
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleBulkUpload} disabled={importing} />
+            </div>
+
+            {/* Actions */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: selectedEntity.bg }}><selectedEntity.icon className="w-5 h-5" style={{ color: selectedEntity.color }} /></div>
-              <div><h3 className="text-base font-bold" style={{ color: "#111827" }}>Upload {selectedEntity.label}</h3><p className="text-[11px]" style={{ color: "#6B7280" }}>{selectedEntity.description}</p></div>
+              <label className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-bold cursor-pointer transition-opacity ${importing ? "opacity-60 cursor-default" : "hover:opacity-90"}`}
+                style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}>
+                {importing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {importing ? "Importing…" : "Choose File & Import"}
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleBulkUpload} disabled={importing} />
+              </label>
+              <button onClick={handleTemplate}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors hover:bg-gray-50"
+                style={{ borderColor: "#E3E9F6", color: "#6B7280" }}>
+                <Download className="w-4 h-4" /> Download Template
+              </button>
             </div>
-            <button onClick={() => handleDownloadTemplate(selectedEntity)} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border transition-colors hover:opacity-80" style={{ borderColor: selectedEntity.color + "60", color: selectedEntity.color, background: selectedEntity.bg }}>
-              <Download className="w-3.5 h-3.5" />Download Template
-            </button>
+
+            {/* Result */}
+            {msg && (
+              <div className="flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: msg.ok ? "#D1FAE5" : "#FEE2E2", color: msg.ok ? "#065F46" : "#991B1B" }}>
+                {msg.ok ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+                {msg.text}
+              </div>
+            )}
+            {bulkResult && bulkResult.count > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium" style={{ background: "#D1FAE5", color: "#065F46" }}>
+                <CheckCircle2 className="w-4 h-4" />{bulkResult.count} records imported
+                {(bulkResult.errors?.length ?? 0) > 0 && ` (${bulkResult.errors!.length} warnings)`}
+              </div>
+            )}
           </div>
-          <div onDragOver={e => { e.preventDefault(); if (!isUploading) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} onClick={() => !isUploading && fileInputRef.current?.click()}
-            className="rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-14 gap-3 transition-all"
-            style={{ cursor: isUploading ? "default" : "pointer", borderColor: isUploading ? selectedEntity.color : dragging ? selectedEntity.color : selectedFile ? "#10B981" : "#D1D5DB", background: isUploading ? selectedEntity.bg : dragging ? selectedEntity.bg : selectedFile ? "#F0FDF4" : "#F9FAFB" }}>
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: isUploading ? selectedEntity.bg : dragging ? selectedEntity.bg : selectedFile ? "#DCFCE7" : "#F3F4F6" }}>
-              {isUploading ? <RefreshCw className="w-7 h-7 animate-spin" style={{ color: selectedEntity.color }} /> : <Upload className="w-7 h-7" style={{ color: dragging ? selectedEntity.color : selectedFile ? "#10B981" : "#9CA3AF" }} />}
+        )}
+      </Card>
+
+      {/* Import History */}
+      <Card className="overflow-hidden" style={{ padding: 0 }}>
+        <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: "#E3E9F6", background: "#F9FAFB" }}>
+          <h3 className="text-sm font-bold" style={{ color: "#111827" }}>Import History ({history.length})</h3>
+          <button onClick={fetchHistory} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50" style={{ borderColor: "#E3E9F6", color: "#6B7280" }}>
+            <RefreshCw className={`w-3 h-3 ${histLoading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
+        {histLoading
+          ? <div className="flex justify-center py-10"><RefreshCw className="w-5 h-5 animate-spin" style={{ color: "#D1D5DB" }} /></div>
+          : history.length === 0
+          ? <div className="text-center py-10 text-sm" style={{ color: "#9CA3AF" }}>No imports yet — upload a file above to get started</div>
+          : <table className="w-full text-sm">
+              <thead><tr style={{ background: "#F9FAFB" }}>
+                {["Data Type","Method","Records","Date"].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>{history.map(imp => (
+                <tr key={imp.id} className="border-t hover:bg-blue-50/20" style={{ borderColor: "#F3F4F6" }}>
+                  <td className="px-5 py-3 font-medium capitalize" style={{ color: "#111827" }}>{(imp.dataType ?? "").replace(/_/g, " ")}</td>
+                  <td className="px-5 py-3 capitalize" style={{ color: "#6B7280" }}>{imp.method ?? "—"}</td>
+                  <td className="px-5 py-3" style={{ color: "#6B7280" }}>{imp.records ?? "—"}</td>
+                  <td className="px-5 py-3" style={{ color: "#9CA3AF" }}>{imp.importedAt ? new Date(imp.importedAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+        }
+      </Card>
+    </div>
+  );
+}
+
+// ── EXCEL TAB ─────────────────────────────────────────────────────────────────
+
+function ExcelTab() {
+  const { data: imports = [], isLoading: importsLoading, refetch: refetchImports } = useListImportsQuery();
+  const { data: validLogs = [], isLoading: validLogsLoading } = useListValidationLogsQuery();
+  const totalImports    = imports.length;
+  const successImports  = imports.filter(i => i.status === "success").length;
+  const successRate     = totalImports > 0 ? Math.round((successImports / totalImports) * 100) : 0;
+  const totalRecords    = imports.reduce((s, i) => s + i.records_total, 0);
+  const validPass       = validLogs.filter(l => l.status === "pass").length;
+  const validFail       = validLogs.filter(l => l.status === "fail").length;
+
+  return (
+    <div className="space-y-6">
+      {/* ── Stats row ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-3">
+        {([
+          { label: "Total Imports",     value: totalImports,               color: "#4A57B9", bg: "#EEF2FF", icon: Upload       },
+          { label: "Success Rate",      value: `${successRate}%`,          color: "#059669", bg: "#D1FAE5", icon: CheckCircle2  },
+          { label: "Records Imported",  value: totalRecords.toLocaleString(), color: "#0E7490", bg: "#ECFEFF", icon: Database   },
+          { label: "Data Types",        value: AI_DATA_TYPES.length,       color: "#D97706", bg: "#FEF3C7", icon: FileText      },
+        ] as const).map(({ label, value, color, bg, icon: Icon }) => (
+          <div key={label} className="rounded-2xl border p-4 flex items-center gap-3" style={{ background: "#fff", borderColor: "#E3E9F6" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+              <Icon className="w-5 h-5" style={{ color }} />
             </div>
-            {isUploading ? <div className="text-center"><p className="text-sm font-bold" style={{ color: selectedEntity.color }}>Uploading & processing…</p><p className="text-xs mt-0.5" style={{ color: "#6B7280" }}>This may take a moment for large files</p></div>
-              : selectedFile ? <div className="text-center"><p className="text-sm font-bold" style={{ color: "#10B981" }}>{selectedFile.name}</p><p className="text-xs mt-0.5" style={{ color: "#6B7280" }}>{(selectedFile.size / 1024).toFixed(1)} KB · Click to change</p></div>
-              : <div className="text-center"><p className="text-sm font-semibold" style={{ color: "#374151" }}>Drop your Excel file here</p><p className="text-xs mt-0.5" style={{ color: "#9CA3AF" }}>or click to browse · .xlsx and .xls supported</p></div>}
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
-          </div>
-          {result && (
-            <div className="mt-4 flex items-start gap-2 p-3 rounded-xl text-sm" style={{ background: result.success ? "#D1FAE5" : "#FEE2E2", color: result.success ? "#065F46" : "#991B1B" }}>
-              {result.success ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}{result.message}
-            </div>
-          )}
-          <div className="mt-4 flex justify-end">
-            <button onClick={handleUpload} disabled={!selectedFile || isUploading} className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
-              style={{ background: `linear-gradient(135deg, ${selectedEntity.color}, ${selectedEntity.color}CC)` }}>
-              {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}{isUploading ? "Uploading…" : `Import ${selectedEntity.label}`}
-            </button>
-          </div>
-        </Card>
-        <Card className="p-5 flex flex-col gap-5">
-          <div>
-            <div className="flex items-center gap-2 mb-3"><FileText className="w-4 h-4" style={{ color: selectedEntity.color }} /><span className="text-sm font-bold" style={{ color: "#111827" }}>Template Columns</span><span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: selectedEntity.bg, color: selectedEntity.color }}>{selectedEntity.fields.length} fields</span></div>
-            <div className="space-y-1.5">
-              {selectedEntity.fields.map(field => { const required = selectedEntity.requiredFields.includes(field); return (
-                <div key={field} className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ background: required ? `${selectedEntity.color}10` : "#F9FAFB", border: `1px solid ${required ? selectedEntity.color + "30" : "#E3E9F6"}` }}>
-                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: required ? selectedEntity.color : "#D1D5DB" }} />
-                  <span className="text-[11px] font-medium flex-1" style={{ color: "#374151" }}>{field}</span>
-                  {required && <span className="text-[9px] font-bold uppercase" style={{ color: selectedEntity.color }}>Required</span>}
-                </div>
-              ); })}
+            <div>
+              <div className="text-[20px] font-black leading-none" style={{ color: "#111827" }}>{value}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: "#9CA3AF" }}>{label}</div>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2 mb-3"><Shield className="w-4 h-4" style={{ color: "#4A57B9" }} /><span className="text-sm font-bold" style={{ color: "#111827" }}>Validation Rules</span></div>
-            <div className="space-y-1.5">
-              {selectedEntity.validations.map(rule => (<div key={rule} className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: "#10B981" }} /><span className="text-[11px]" style={{ color: "#6B7280" }}>{rule}</span></div>))}
-            </div>
-          </div>
-        </Card>
+        ))}
       </div>
 
+      {/* ── AI Import (wizard-identical) ─────────────────────────────── */}
+      <AiImportSection />
+
+      {/* ── Import History ───────────────────────────────────────────── */}
       <div>
-        <div className="flex items-center justify-between mb-3"><SectionLabel>Import History</SectionLabel><button onClick={() => refetchImports()} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border" style={{ borderColor: "#E3E9F6", color: "#6B7280" }}><RefreshCw className="w-3 h-3" /> Refresh</button></div>
+        <div className="flex items-center justify-between mb-3">
+          <SectionLabel>Import History</SectionLabel>
+          <button onClick={() => refetchImports()} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50" style={{ borderColor: "#E3E9F6", color: "#6B7280" }}>
+            <RefreshCw className="w-3 h-3" /> Refresh
+          </button>
+        </div>
         <Card className="overflow-hidden">
-          {importsLoading ? <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin" style={{ color: "#D1D5DB" }} /></div>
-            : imports.length === 0 ? <div className="flex flex-col items-center justify-center py-14 text-center px-6"><Clock className="w-10 h-10 mb-3" style={{ color: "#E5E7EB" }} /><p className="text-sm font-semibold mb-1" style={{ color: "#374151" }}>No imports yet</p><p className="text-xs" style={{ color: "#9CA3AF" }}>Upload an Excel file above to see your import history here.</p></div>
+          {importsLoading
+            ? <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin" style={{ color: "#D1D5DB" }} /></div>
+            : imports.length === 0
+            ? <div className="flex flex-col items-center justify-center py-14 text-center px-6">
+                <Clock className="w-10 h-10 mb-3" style={{ color: "#E5E7EB" }} />
+                <p className="text-sm font-semibold mb-1" style={{ color: "#374151" }}>No imports yet</p>
+                <p className="text-xs" style={{ color: "#9CA3AF" }}>Use the import section above to get started.</p>
+              </div>
             : <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead><tr style={{ background: "#F8FAFF", borderBottom: "1px solid #E9EEF8" }}>{["File Name","Data Type","Records","Success","Failed","Status","Uploaded By","Date"].map(h => (<th key={h} className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>))}</tr></thead>
+                <thead><tr style={{ background: "#F8FAFF", borderBottom: "1px solid #E9EEF8" }}>
+                  {["File Name","Data Type","Records","Success","Failed","Status","Uploaded By","Date"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>
+                  ))}
+                </tr></thead>
                 <tbody>{imports.map(row => { const st = IMPORT_STATUS[row.status] ?? IMPORT_STATUS.processing; return (
                   <tr key={row.id} className="border-t hover:bg-blue-50/20 transition-colors" style={{ borderColor: "#F3F4F6" }}>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><FileSpreadsheet className="w-3.5 h-3.5" style={{ color: "#10B981" }} /><span className="text-xs font-semibold" style={{ color: "#111827" }}>{row.file_name}</span></div></td>
@@ -778,17 +1002,39 @@ function ExcelTab() {
                     <td className="px-4 py-3 text-xs" style={{ color: "#9CA3AF" }}>{formatDate(row.created_at)}</td>
                   </tr>
                 ); })}</tbody>
-              </table></div>}
+              </table></div>
+          }
         </Card>
       </div>
 
+      {/* ── Validation Logs ──────────────────────────────────────────── */}
       <div>
-        <div className="flex items-center justify-between mb-3"><SectionLabel>Validation Logs</SectionLabel><div className="flex gap-2 text-[10px]">{[{ s: "pass", label: `${validPass} Pass`, ...VALIDATION_STATUS.pass },{ s: "warning", label: `${validLogs.filter(l => l.status === "warning").length} Warn`, ...VALIDATION_STATUS.warning },{ s: "fail", label: `${validFail} Fail`, ...VALIDATION_STATUS.fail }].map(({ s, label, bg, color }) => (<span key={s} className="px-2 py-0.5 rounded-full font-bold" style={{ background: bg, color }}>{label}</span>))}</div></div>
+        <div className="flex items-center justify-between mb-3">
+          <SectionLabel>Validation Logs</SectionLabel>
+          <div className="flex gap-2 text-[10px]">
+            {([
+              { s: "pass",    label: `${validPass} Pass`,                                        ...VALIDATION_STATUS.pass    },
+              { s: "warning", label: `${validLogs.filter(l => l.status === "warning").length} Warn`, ...VALIDATION_STATUS.warning },
+              { s: "fail",    label: `${validFail} Fail`,                                        ...VALIDATION_STATUS.fail    },
+            ] as const).map(({ s, label, bg, color }) => (
+              <span key={s} className="px-2 py-0.5 rounded-full font-bold" style={{ background: bg, color }}>{label}</span>
+            ))}
+          </div>
+        </div>
         <Card className="overflow-hidden">
-          {validLogsLoading ? <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin" style={{ color: "#D1D5DB" }} /></div>
-            : validLogs.length === 0 ? <div className="flex flex-col items-center justify-center py-12 text-center px-6"><Shield className="w-8 h-8 mb-3" style={{ color: "#E5E7EB" }} /><p className="text-xs" style={{ color: "#9CA3AF" }}>Validation logs will appear here after your first import.</p></div>
+          {validLogsLoading
+            ? <div className="flex items-center justify-center py-12"><RefreshCw className="h-6 w-6 animate-spin" style={{ color: "#D1D5DB" }} /></div>
+            : validLogs.length === 0
+            ? <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                <Shield className="w-8 h-8 mb-3" style={{ color: "#E5E7EB" }} />
+                <p className="text-xs" style={{ color: "#9CA3AF" }}>Validation logs will appear here after your first import.</p>
+              </div>
             : <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead><tr style={{ background: "#F8FAFF", borderBottom: "1px solid #E9EEF8" }}>{["File","Validation Rule","Status","Rows Affected","Message","Timestamp"].map(h => (<th key={h} className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>))}</tr></thead>
+                <thead><tr style={{ background: "#F8FAFF", borderBottom: "1px solid #E9EEF8" }}>
+                  {["File","Validation Rule","Status","Rows Affected","Message","Timestamp"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>
+                  ))}
+                </tr></thead>
                 <tbody>{validLogs.map(row => { const st = VALIDATION_STATUS[row.status] ?? VALIDATION_STATUS.pass; const StatusIcon = st.icon; return (
                   <tr key={row.id} className="border-t hover:bg-blue-50/20 transition-colors" style={{ borderColor: "#F3F4F6" }}>
                     <td className="px-4 py-3 text-xs font-medium" style={{ color: "#111827" }}>{row.file_name}</td>
@@ -799,7 +1045,8 @@ function ExcelTab() {
                     <td className="px-4 py-3 text-xs" style={{ color: "#9CA3AF" }}>{row.timestamp}</td>
                   </tr>
                 ); })}</tbody>
-              </table></div>}
+              </table></div>
+          }
         </Card>
       </div>
     </div>
@@ -848,7 +1095,7 @@ function DocumentsTab({ initialSubTab }: { initialSubTab?: DocCategory }) {
 
   function getHeaders(): Record<string, string> {
     const h: Record<string, string> = {};
-    const jwt = localStorage.getItem("hse_jwt"); if (jwt) h["Authorization"] = `Bearer ${jwt}`;
+    const jwt = localStorage.getItem("hse_jwt_token"); if (jwt) h["Authorization"] = `Bearer ${jwt}`;
     try { const u = JSON.parse(localStorage.getItem("hse_user") || "{}"); if (u?.email) h["X-User-Email"] = u.email; if (u?.role) h["X-User-Role"] = u.role; if (u?.orgCode) h["X-Tenant-Id"] = u.orgCode; } catch { /**/ }
     return h;
   }
@@ -1029,56 +1276,117 @@ function FullImportCard() {
 
 type Tab = "manual" | "excel" | "api" | "documents" | "fullimport";
 
+const TAB_DEFS: { key: Tab; label: string; icon: React.ElementType; badge?: string }[] = [
+  { key: "excel",      label: "Import Data",       icon: Brain           },
+  { key: "manual",     label: "Manual Entry",       icon: PenLine         },
+  { key: "fullimport", label: "Full Data Import",   icon: Layers          },
+  { key: "api",        label: "API & Integrations", icon: Plug            },
+  { key: "documents",  label: "Documents",          icon: FolderOpen      },
+];
+
 export function DataManagementPage() {
   const [searchParams] = useSearchParams();
   const typeParam = searchParams.get("type") as DocCategory | null;
   const [tab, setTab] = useState<Tab>(typeParam ? "documents" : "excel");
   const [docSubTab, setDocSubTab] = useState<DocCategory>(typeParam ?? "pdf");
+  const [repairing, setRepairing] = useState(false);
+  const [repairMsg, setRepairMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (typeParam) { setTab("documents"); setDocSubTab(typeParam); }
   }, [typeParam]);
 
-  const TABS: { key: Tab; label: string; icon: React.ElementType; desc: string }[] = [
-    { key: "manual",     label: "Manual Entry",       icon: PenLine,        desc: "Enter data directly via form"         },
-    { key: "excel",      label: "Excel / CSV Upload",  icon: FileSpreadsheet,desc: "Bulk import spreadsheet files"        },
-    { key: "fullimport", label: "Full Data Import",    icon: Layers,         desc: "Upload complete 17-sheet client file" },
-    { key: "api",        label: "API & Integrations",  icon: Plug,           desc: "Connect external systems"             },
-    { key: "documents",  label: "Documents",           icon: FolderOpen,     desc: "Upload PDF, DOCX & PPTX files"        },
-  ];
+  const handleRepairData = useCallback(async () => {
+    setRepairing(true);
+    setRepairMsg(null);
+    try {
+      const jwt = localStorage.getItem("hse_jwt_token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
+      const res = await fetch(`${API_BASE}/org-setup/fix-org-data`, { method: "POST", headers });
+      const json = await res.json().catch(() => ({})) as { fixed?: number; error?: string };
+      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      setRepairMsg({ ok: true, text: `Fixed ${json.fixed ?? 0} rows — uploaded data is now visible on all pages.` });
+    } catch (e: unknown) {
+      setRepairMsg({ ok: false, text: (e as { message?: string })?.message || "Repair failed" });
+    } finally {
+      setRepairing(false);
+    }
+  }, []);
 
   return (
-    <div className="p-6 space-y-6" style={{ background: "#F3F7FF", minHeight: "100vh" }}>
-      <div>
-        <h1 className="text-[22px] font-black" style={{ color: "#111827" }}>Data Upload</h1>
-        <p className="text-[13px] mt-1" style={{ color: "#9CA3AF" }}>Import your organisation's HSE data — choose your preferred method below</p>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {TABS.map(t => { const Icon = t.icon; const active = tab === t.key; return (
-          <button key={t.key} onClick={() => setTab(t.key)} className="flex items-start gap-4 p-5 rounded-2xl border text-left transition-all"
-            style={{ background: active ? "#EEF2FF" : "#fff", borderColor: active ? "#4A57B9" : "#E3E9F6", boxShadow: active ? "0 4px 16px rgba(74,87,185,0.12)" : "none" }}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors" style={{ background: active ? "#4A57B9" : "#F3F4F6" }}>
-              <Icon className="w-6 h-6" style={{ color: active ? "#fff" : "#9CA3AF" }} />
+    <div style={{ background: "#F3F7FF", minHeight: "100vh" }}>
+      {/* ── Page header ───────────────────────────────────────────────── */}
+      <div className="bg-white border-b" style={{ borderColor: "#E8EDF6" }}>
+        <div className="px-8 pt-7 pb-0">
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h1 className="text-[22px] font-black tracking-tight" style={{ color: "#111827" }}>Data Management</h1>
+              <p className="text-[13px] mt-0.5" style={{ color: "#9CA3AF" }}>
+                Import, sync, and manage your organisation's HSE data
+              </p>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[15px] font-bold mb-0.5" style={{ color: active ? "#4A57B9" : "#111827" }}>{t.label}</div>
-              <div className="text-[12px]" style={{ color: "#9CA3AF" }}>{t.desc}</div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap justify-end">
+              <button
+                onClick={handleRepairData}
+                disabled={repairing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-amber-50 disabled:opacity-60"
+                style={{ borderColor: "#F59E0B", color: "#D97706", background: "#FFFBEB" }}
+                title="Link all uploaded data to your organisation so it appears on dashboard pages"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${repairing ? "animate-spin" : ""}`} />
+                {repairing ? "Repairing…" : "Repair & Sync Data"}
+              </button>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ background: "#EEF2FF", color: "#4A57B9" }}>
+                <Database className="w-3.5 h-3.5" />Secure &amp; Encrypted
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ background: "#D1FAE5", color: "#059669" }}>
+                <CheckCircle2 className="w-3.5 h-3.5" />Validated
+              </div>
             </div>
-            {active && <CheckSquare className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#4A57B9" }} />}
-          </button>
-        ); })}
+          </div>
+          {repairMsg && (
+            <div className="mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium" style={{ background: repairMsg.ok ? "#D1FAE5" : "#FEE2E2", color: repairMsg.ok ? "#065F46" : "#991B1B" }}>
+              {repairMsg.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+              {repairMsg.text}
+              <button onClick={() => setRepairMsg(null)} className="ml-auto opacity-60 hover:opacity-100"><X className="w-4 h-4" /></button>
+            </div>
+          )}
+
+          {/* ── Tab navigation ──────────────────────────────────────────── */}
+          <div className="flex items-center gap-0.5">
+            {TAB_DEFS.map(t => {
+              const Icon = t.icon;
+              const active = tab === t.key;
+              return (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  className="relative flex items-center gap-2 px-5 py-3 text-[13px] font-semibold transition-colors rounded-t-xl"
+                  style={{
+                    color: active ? "#4A57B9" : "#6B7280",
+                    background: active ? "#F3F7FF" : "transparent",
+                    borderTop:    active ? "1px solid #E8EDF6" : "1px solid transparent",
+                    borderLeft:   active ? "1px solid #E8EDF6" : "1px solid transparent",
+                    borderRight:  active ? "1px solid #E8EDF6" : "1px solid transparent",
+                    borderBottom: active ? "1px solid #F3F7FF" : "1px solid transparent",
+                    marginBottom: active ? "-1px" : "0",
+                  }}>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
-      <div className={`${tab !== "api" ? "bg-white rounded-2xl border p-6" : ""}`} style={{ borderColor: "#E3E9F6" }}>
-        {tab === "manual"     && <ManualEntryTab />}
-        {tab === "excel"      && <ExcelTab />}
-        {tab === "fullimport" && <FullImportCard />}
-        {tab === "api"        && <ApiIntegrationsTab />}
-        {tab === "documents"  && <DocumentsTab initialSubTab={docSubTab} />}
-      </div>
-      <div className="flex items-center gap-3 p-4 rounded-xl border" style={{ background: "#fff", borderColor: "#E3E9F6" }}>
-        <Info className="w-5 h-5 flex-shrink-0" style={{ color: "#4A57B9" }} />
-        <div className="text-[13px]" style={{ color: "#6B7280" }}>
-          <strong style={{ color: "#4A57B9" }}>Tip:</strong> For bulk historical data (150+ records), use the <strong>Excel upload</strong> or <strong>Full Data Import</strong> tab. For live operational data, use <strong>API integration</strong> for real-time sync.
+
+      {/* ── Tab content ────────────────────────────────────────────────── */}
+      <div className="px-8 py-6">
+        <div className="bg-white rounded-2xl border p-6 shadow-sm" style={{ borderColor: "#E3E9F6" }}>
+          {tab === "excel"      && <ExcelTab />}
+          {tab === "manual"     && <ManualEntryTab />}
+          {tab === "fullimport" && <FullImportCard />}
+          {tab === "api"        && <ApiIntegrationsTab />}
+          {tab === "documents"  && <DocumentsTab initialSubTab={docSubTab} />}
         </div>
       </div>
     </div>

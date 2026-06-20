@@ -7,9 +7,11 @@ from io import BytesIO
 from typing import Any
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 from app.models.organisation_invite import OrganisationInvite
 
 router = APIRouter(tags=["Stubs"])
@@ -113,11 +115,15 @@ def org_setup_progress(db: Session = Depends(get_db)) -> dict:
     from app.models.site import Site
     from app.models.organisation import Organisation
     steps_done = []
-    if _wizard_step1 or db.query(Organisation).first():
+    # Use _wizard_org_id (set after step 1 is saved) to scope DB queries.
+    # Before step 1 is saved, _wizard_org_id is None and the wizard is blank.
+    if _wizard_step1:
+        steps_done.append(1)
+    elif _wizard_org_id and db.query(Organisation).filter(Organisation.id == _wizard_org_id).first():
         steps_done.append(1)
     if _wizard_step2:
         steps_done.append(2)
-    if db.query(Site).first():
+    if _wizard_org_id and db.query(Site).filter(Site.organisation_id == _wizard_org_id).first():
         steps_done.append(3)
     if _wizard_users:
         steps_done.append(4)
@@ -139,8 +145,11 @@ def org_setup_progress(db: Session = Depends(get_db)) -> dict:
 def org_setup_step1_get(db: Session = Depends(get_db)) -> dict:
     if _wizard_step1:
         return _wizard_step1
+    # Only read org from DB if step 1 was already saved this session.
+    if not _wizard_org_id:
+        return {}
     from app.models.organisation import Organisation
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    org = db.query(Organisation).filter(Organisation.id == _wizard_org_id).first()
     if not org:
         return {}
     return {
@@ -158,7 +167,7 @@ def org_setup_step1_get(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/org-setup/step1")
 def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
-    global _wizard_step1
+    global _wizard_step1, _wizard_org_id
     d = payload.get("data", payload)
     _wizard_step1 = dict(d)
     from app.models.organisation import Organisation
@@ -175,21 +184,39 @@ def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(
         num_employees = int(ne) if ne else None
     except Exception:
         num_employees = None
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
-    if org:
-        name = (d.get("organisationName") or "").strip()
-        if name:
-            org.organisation_name = name
-        org.country = (d.get("country") or "").strip() or None
-        org.industry_sector = (d.get("industrySector") or "").strip() or None
-        org.number_of_employees = num_employees
-        org.headquarters_location = (d.get("headquartersLocation") or "").strip() or None
-        org.parent_company = (d.get("parentCompany") or "").strip() or None
-        org.iso_45001_status = (d.get("iso45001Status") or "").strip() or None
-        org.regulatory_authority = (d.get("regulatoryAuthority") or "").strip() or None
-        if est_date:
-            org.establishment_date = est_date
+    if _wizard_org_id:
+        # Same wizard session — update this org's details (user editing step 1)
+        org = db.query(Organisation).filter(Organisation.id == _wizard_org_id).first()
+        if org:
+            name = (d.get("organisationName") or "").strip()
+            if name:
+                org.organisation_name = name
+            org.country = (d.get("country") or "").strip() or None
+            org.industry_sector = (d.get("industrySector") or "").strip() or None
+            org.number_of_employees = num_employees
+            org.headquarters_location = (d.get("headquartersLocation") or "").strip() or None
+            org.parent_company = (d.get("parentCompany") or "").strip() or None
+            org.iso_45001_status = (d.get("iso45001Status") or "").strip() or None
+            org.regulatory_authority = (d.get("regulatoryAuthority") or "").strip() or None
+            if est_date:
+                org.establishment_date = est_date
+        else:
+            # _wizard_org_id stale (e.g. after restart) — create fresh
+            org = Organisation(
+                organisation_name=(d.get("organisationName") or "New Organisation").strip(),
+                country=(d.get("country") or "").strip() or None,
+                industry_sector=(d.get("industrySector") or "").strip() or None,
+                number_of_employees=num_employees,
+                headquarters_location=(d.get("headquartersLocation") or "").strip() or None,
+                parent_company=(d.get("parentCompany") or "").strip() or None,
+                iso_45001_status=(d.get("iso45001Status") or "").strip() or None,
+                regulatory_authority=(d.get("regulatoryAuthority") or "").strip() or None,
+                establishment_date=est_date,
+            )
+            db.add(org)
     else:
+        # New wizard session — ALWAYS create a brand-new org so each org admin
+        # gets their own separate Organisation record, never overwriting another org.
         org = Organisation(
             organisation_name=(d.get("organisationName") or "New Organisation").strip(),
             country=(d.get("country") or "").strip() or None,
@@ -204,6 +231,7 @@ def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(
         db.add(org)
     db.commit()
     db.refresh(org)
+    _wizard_org_id = org.id  # scope all subsequent wizard DB queries to this org
 
     # Also link the admin user to this org right away (so dashboard shows data before activate)
     from app.services.auth_service import decode_access_token
@@ -341,6 +369,33 @@ _wizard_documents: list[dict] = []
 _wizard_doc_id: int = 0
 _wizard_imports: list[dict] = []
 _wizard_import_id: int = 0
+# Tracks the org being configured in the current wizard session.
+# Set when step 1 is saved; cleared on reset. Used by step 3/4 to scope DB queries.
+_wizard_org_id: int | None = None
+
+
+def _reset_wizard_state() -> None:
+    global _wizard_users, _wizard_user_id, _wizard_step1, _wizard_step2
+    global _wizard_step5, _wizard_step7, _wizard_documents, _wizard_doc_id
+    global _wizard_imports, _wizard_import_id, _wizard_org_id
+    _wizard_users = []
+    _wizard_user_id = 0
+    _wizard_step1 = {}
+    _wizard_step2 = {}
+    _wizard_step5 = {}
+    _wizard_step7 = {}
+    _wizard_documents = []
+    _wizard_doc_id = 0
+    _wizard_imports = []
+    _wizard_import_id = 0
+    _wizard_org_id = None
+
+
+@router.post("/org-setup/reset")
+def org_setup_reset() -> dict:
+    """Clear wizard in-memory state so a fresh setup can begin."""
+    _reset_wizard_state()
+    return {"reset": True}
 
 
 def _next_user_id() -> str:
@@ -433,7 +488,9 @@ def _parse_sites_file(content: bytes, filename: str) -> list[dict]:
 @router.get("/org-setup/step3/sites")
 def org_setup_step3_sites(db: Session = Depends(get_db)) -> list:
     from app.models.site import Site
-    sites = db.query(Site).order_by(Site.id.asc()).all()
+    if not _wizard_org_id:
+        return []
+    sites = db.query(Site).filter(Site.organisation_id == _wizard_org_id).order_by(Site.id.asc()).all()
     return [_site_to_dict(s) for s in sites]
 
 
@@ -442,7 +499,10 @@ def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) ->
     from app.models.site import Site
     from app.models.organisation import Organisation
     d = payload.get("data", payload)
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    org_id = _wizard_org_id
+    if not org_id:
+        org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+        org_id = org.id if org else None
     site = Site(
         site_name=            (d.get("name") or "").strip(),
         type=                 (d.get("type") or "").strip() or None,
@@ -454,7 +514,7 @@ def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) ->
         capacity=             d.get("capacity") or None,
         primary_products=     (d.get("primaryProducts") or "").strip() or None,
         hazard_classification=(d.get("hazardClassification") or "").strip() or None,
-        organisation_id=      org.id if org else None,
+        organisation_id=      org_id,
     )
     db.add(site)
     db.commit()
@@ -485,8 +545,10 @@ async def org_setup_step3_bulk(file: UploadFile = File(...), db: Session = Depen
         return {"count": 0, "error": "No site rows found in the file. Check the sheet name and column format."}
 
     from app.models.organisation import Organisation
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
-    org_id = org.id if org else None
+    org_id = _wizard_org_id
+    if not org_id:
+        org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+        org_id = org.id if org else None
 
     count = 0
     for d in site_dicts:
@@ -574,7 +636,36 @@ _WIZARD_ROLE_MAP = {
 }
 
 
-def _create_wizard_user(d: dict, db: Session) -> dict:
+def _step4_org_id(request: Request, db: Session) -> int | None:
+    """Resolve the wizard organisation from persisted user state.
+
+    The module-level wizard id is only a fallback: it is not shared between
+    backend workers and is lost on restart.
+    """
+    from app.models.user import User
+    from app.services.auth_service import decode_access_token
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token_data = decode_access_token(auth_header.removeprefix("Bearer ").strip())
+        if token_data:
+            user = None
+            try:
+                user_id = int(token_data.get("sub", 0))
+            except (TypeError, ValueError):
+                user_id = 0
+            if user_id:
+                user = db.query(User).filter(User.id == user_id).first()
+            if user is None:
+                email = (token_data.get("email") or "").strip().lower()
+                if email:
+                    user = db.query(User).filter(User.email == email).first()
+            if user and user.organisation_id:
+                return user.organisation_id
+    return _wizard_org_id
+
+
+def _create_wizard_user(d: dict, db: Session, org_id: int | None = None) -> dict:
     """Create a real DB User from wizard Step-4 data. Returns serialisable dict."""
     import re, secrets, string, bcrypt
     from app.models.user import User
@@ -586,9 +677,19 @@ def _create_wizard_user(d: dict, db: Session) -> dict:
     if not email:
         return {}
 
-    # Skip duplicate
-    if db.query(User).filter(User.email == email).first():
-        return {}
+    # If user already exists, re-link to this wizard's org and return (don't create duplicate)
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        if org_id and existing.organisation_id != org_id:
+            existing.organisation_id = org_id
+            db.commit()
+            db.refresh(existing)
+        role_obj = db.query(AppRole).filter(AppRole.id == existing.app_role_id).first() if existing.app_role_id else None
+        return {
+            "id": str(existing.id), "name": existing.full_name or existing.username,
+            "email": existing.email, "role": role_obj.label if role_obj else d.get("role", ""),
+            "department": d.get("department", ""), "status": "active" if existing.is_active else "inactive",
+        }
 
     # Map role label → app_role
     role_label = (d.get("role") or "").strip().lower()
@@ -597,8 +698,12 @@ def _create_wizard_user(d: dict, db: Session) -> dict:
     if not app_role:
         app_role = db.query(AppRole).filter(AppRole.name == "operator").first()
 
-    # Latest org
-    org    = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    # Use the active wizard org; fall back to latest org only if wizard not started yet
+    org = None
+    if org_id:
+        org = db.query(Organisation).filter(Organisation.id == org_id).first()
+    if org is None:
+        org = db.query(Organisation).order_by(Organisation.id.desc()).first()
     org_id = org.id if org else None
 
     # Unique username
@@ -648,12 +753,16 @@ def _create_wizard_user(d: dict, db: Session) -> dict:
 
 
 @router.get("/org-setup/step4/users")
-def org_setup_step4_users(db: Session = Depends(get_db)) -> list:
+def org_setup_step4_users(request: Request, db: Session = Depends(get_db)) -> list:
     from app.models.user import User
     from app.models.app_role import AppRole
     from app.models.organisation import Organisation
 
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    org_id = _step4_org_id(request, db)
+    if not org_id:
+        return list(_wizard_users)
+
+    org = db.query(Organisation).filter(Organisation.id == org_id).first()
     if not org:
         return list(_wizard_users)
 
@@ -681,9 +790,9 @@ def org_setup_step4_users(db: Session = Depends(get_db)) -> list:
 
 
 @router.post("/org-setup/step4/user")
-def org_setup_step4_create_user(payload: dict, db: Session = Depends(get_db)) -> dict:
+def org_setup_step4_create_user(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
     d = payload.get("data", payload)
-    result = _create_wizard_user(d, db)
+    result = _create_wizard_user(d, db, _step4_org_id(request, db))
     if not result:
         return {"id": _next_user_id(), "name": d.get("name",""), "email": d.get("email",""),
                 "role": d.get("role",""), "department": d.get("department",""), "status": "active"}
@@ -691,7 +800,7 @@ def org_setup_step4_create_user(payload: dict, db: Session = Depends(get_db)) ->
 
 
 @router.post("/org-setup/step4/bulk")
-async def org_setup_step4_bulk(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
+async def org_setup_step4_bulk(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
     if not file.filename:
         return {"count": 0}
 
@@ -711,13 +820,14 @@ async def org_setup_step4_bulk(file: UploadFile = File(...), db: Session = Depen
     if not user_dicts:
         return {"count": 0, "error": "No user rows found. Expected columns: Name, Email, Role, Department"}
 
-    count = 0
+    imported_users = []
+    org_id = _step4_org_id(request, db)
     for d in user_dicts:
-        result = _create_wizard_user(d, db)
+        result = _create_wizard_user(d, db, org_id)
         if result:
-            count += 1
+            imported_users.append(result)
 
-    return {"count": count}
+    return {"count": len(imported_users), "users": imported_users}
 
 
 @router.post("/org-setup/step4/hrms-import")
@@ -823,6 +933,7 @@ async def org_setup_onboarding_bulk(
     module: str = "",
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     import datetime
     from app.services.excel_import_service import (
@@ -831,6 +942,7 @@ async def org_setup_onboarding_bulk(
         _insert_hazard_categories, _insert_hazards, _insert_training_programs,
         _insert_permits_to_work, _insert_incidents, _insert_near_misses,
         _insert_safety_walks, _insert_capa_actions, _insert_shift_schedule,
+        capture_tenant_table_max_ids, link_new_rows_to_org,
     )
     _INSERT_FNS = {
         "employees": _insert_employees,
@@ -851,10 +963,13 @@ async def org_setup_onboarding_bulk(
     }
     if module not in _INSERT_FNS:
         return {"count": 0, "errors": [f"Unknown module: {module!r}"]}
+    if not current_user.org_id or current_user.org_id <= 0:
+        return {"count": 0, "errors": ["Organisation setup is not complete. Complete setup before importing data."]}
 
     content = await file.read()
     fname = (file.filename or "").lower()
     sheet_name = _MODULE_SHEET[module]
+    before_ids = capture_tenant_table_max_ids(db)
 
     try:
         import openpyxl
@@ -872,10 +987,20 @@ async def org_setup_onboarding_bulk(
             if sheet_name not in wb.sheetnames and wb.worksheets:
                 wb.worksheets[0].title = sheet_name
 
+        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         count = _INSERT_FNS[module](db, wb)
+        if current_user.org_id and current_user.org_id > 0:
+            link_new_rows_to_org(db, current_user.org_id, before_ids)
         db.commit()
     except Exception as exc:
+        db.rollback()
         return {"count": 0, "errors": [str(exc)]}
+    finally:
+        try:
+            db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+            db.commit()
+        except Exception:
+            pass
 
     global _wizard_import_id
     _wizard_import_id += 1
@@ -887,6 +1012,16 @@ async def org_setup_onboarding_bulk(
         "records": count,
     })
     return {"count": count, "errors": []}
+
+
+@router.post("/org-setup/fix-org-data")
+def fix_org_data(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Global NULL-row repair is disabled to prevent seed/test data leakage."""
+    return {
+        "fixed": 0,
+        "org_id": current_user.org_id,
+        "message": "Global repair disabled. Upload data again; new imports are tenant-scoped automatically.",
+    }
 
 
 @router.get("/org-setup/step7")
@@ -904,7 +1039,6 @@ def org_setup_activate(request: Request, payload: Any = None, db: Session = Depe
     from app.models.organisation import Organisation
     from app.models.user import User
     from app.services.auth_service import decode_access_token
-    from sqlalchemy import text
 
     # Decode admin email from JWT
     email = ""
@@ -915,8 +1049,21 @@ def org_setup_activate(request: Request, payload: Any = None, db: Session = Depe
         if token_data:
             email = (token_data.get("email") or "").strip().lower()
 
-    # Find the latest org (created in step 1)
-    org = db.query(Organisation).order_by(Organisation.id.desc()).first()
+    # Find the org that was created/identified in step 1 of this wizard session
+    org = None
+    if _wizard_org_id:
+        org = db.query(Organisation).filter(Organisation.id == _wizard_org_id).first()
+    if org is None:
+        # Fallback: find the org for this admin by invite
+        if email:
+            invite_row = (
+                db.query(OrganisationInvite)
+                .filter(OrganisationInvite.admin_email == email)
+                .order_by(OrganisationInvite.id.desc())
+                .first()
+            )
+            if invite_row:
+                org = db.query(Organisation).order_by(Organisation.id.desc()).first()
 
     if email and org:
         # Link admin user to org
@@ -933,18 +1080,6 @@ def org_setup_activate(request: Request, payload: Any = None, db: Session = Depe
         )
         if invite:
             invite.status = "accepted"
-
-        # Stamp all unlinked data rows with this org_id
-        for tbl in ("sites", "departments", "employees", "incidents", "near_misses",
-                    "safety_walks", "capa_actions", "permits_to_work",
-                    "shift_schedule", "working_stations"):
-            try:
-                db.execute(
-                    text(f"UPDATE {tbl} SET organisation_id = :oid WHERE organisation_id IS NULL"),
-                    {"oid": org.id},
-                )
-            except Exception:
-                pass
 
         db.commit()
 

@@ -22,6 +22,7 @@ import { SubscriptionPage } from "./pages/SubscriptionPage";
 import { NearMissPage } from "./pages/NearMissPage";
 import { RiskPage } from "./pages/RiskPage";
 import { AssetsPage } from "./pages/AssetsPage";
+import { EquipmentCertificationPage } from "./pages/EquipmentCertificationPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { SuperAdminDashboardPage } from "./pages/SuperAdminDashboardPage";
 import { OrgSetupPage } from "./pages/OrgSetupPage";
@@ -102,7 +103,7 @@ const AIAgentRoute = AIAgentPage;
 const AnalyticsRoute = AnalyticsPage;
 const NearMissRoute = NearMissPage;
 const RootCauseAnalysisRoute = RiskPage;
-const EquipmentCertificationRoute = AssetsPage;
+const EquipmentCertificationRoute = EquipmentCertificationPage;
 
 function hiddenForOnboarding<T extends object>(Component: ComponentType<T>) {
   return function HiddenForOnboardingScopedRoute(props: T) {

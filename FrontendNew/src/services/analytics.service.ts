@@ -31,6 +31,10 @@ export interface ViolationsSummary {
   downtime_by_type: ViolationItem[];
   open_capa_items: string[];
   severity_mix: SeverityMixItem[];
+  injury_category: ViolationItem[];
+  person_involved: ViolationItem[];
+  injury_type: ViolationItem[];
+  key_learnings: string[];
 }
 
 export const getViolationsSummary = (months = 10) =>
@@ -147,6 +151,24 @@ export interface RiskSummary {
 
 export const getRiskSummary = () =>
   axiosInstance.get<RiskSummary>('/analytics/risk-summary').then((r) => r.data);
+
+// ── Engagement Summary ────────────────────────────────────────────────────────
+
+export interface EngagementSummary {
+  reporting_rate: number;
+  reporting_rate_mom: number;
+  survey_score: number;
+  survey_score_pct: number;
+  safety_observations_pct: number;
+  safety_walks_pct: number;
+  toolbox_attendance_pct: number;
+  site_participation_pct: number;
+  top_recognitions: { name: string }[];
+  open_actions: { text: string; status: string }[];
+}
+
+export const getEngagementSummary = () =>
+  axiosInstance.get<EngagementSummary>('/analytics/engagement-summary').then((r) => r.data);
 
 // ── Policies ──────────────────────────────────────────────────────────────────
 
@@ -282,9 +304,40 @@ export interface EquipmentCertFilters {
   equipment_type?: string;
 }
 
-// No backend model yet — returns empty list until equipment endpoint is added
-export async function getEquipmentCertifications(_filters: EquipmentCertFilters = {}): Promise<EquipmentCertification[]> {
-  return [];
+export async function getEquipmentCertifications(filters: EquipmentCertFilters = {}): Promise<EquipmentCertification[]> {
+  const params = new URLSearchParams();
+  if (filters.status)         params.set('status', filters.status);
+  if (filters.equipment_type) params.set('equipment_type', filters.equipment_type);
+  if (filters.site_id)        params.set('site_id', filters.site_id);
+  const qs = params.toString();
+  return axiosInstance
+    .get<EquipmentCertification[]>(`/equipment-certifications/${qs ? `?${qs}` : ''}`)
+    .then((r) => r.data);
+}
+
+export interface CertCreate {
+  equipment_name: string;
+  equipment_type?: string;
+  site_id?: number;
+  zone?: string;
+  serial_number?: string;
+  manufacturer?: string;
+  model?: string;
+  certification_type?: string;
+  certified_by?: string;
+  issue_date?: string;
+  expiry_date?: string;
+  next_inspection_date?: string;
+  compliance_standard?: string;
+}
+
+export async function createEquipmentCertification(payload: CertCreate): Promise<EquipmentCertification> {
+  return axiosInstance.post<EquipmentCertification>('/equipment-certifications/', payload).then((r) => r.data);
+}
+
+export async function deleteEquipmentCertification(certId: string): Promise<void> {
+  const id = certId.replace('CERT-', '').replace(/^0+/, '') || '0';
+  await axiosInstance.delete(`/equipment-certifications/${id}`);
 }
 
 export async function getNearMiss(filters: NearMissFilters = {}): Promise<NearMiss[]> {

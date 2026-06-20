@@ -347,6 +347,9 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
 
 @router.get("/directory")
 def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
+    from app.models.user import User
+    from app.models.app_role import AppRole
+
     org_id = current_user.org_id
 
     q = (
@@ -359,16 +362,45 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
         q = q.filter(Employee.organisation_id == org_id)
     rows = q.order_by(Employee.full_name.asc()).all()
 
+    if rows:
+        return [
+            {
+                "id": emp.id,
+                "full_name": emp.full_name,
+                "role_name": role.role_name if role else None,
+                "department_name": dept.department_name if dept else None,
+                "site_name": site.site_name if site else None,
+                "employment_type": emp.employment_type,
+                "shift_pattern": emp.shift_pattern,
+                "active_status": emp.active_status,
+            }
+            for emp, role, dept, site in rows
+        ]
+
+    # Fallback: when employees table is empty, show org users so the page is not blank
+    uq = (
+        db.query(User, AppRole)
+        .outerjoin(AppRole, User.app_role_id == AppRole.id)
+        .filter(
+            User.organisation_id == org_id,
+            AppRole.name.notin_(["superadmin", "admin"]),
+        )
+        if org_id is not None
+        else db.query(User, AppRole)
+            .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .filter(AppRole.name.notin_(["superadmin", "admin"]))
+    )
+    user_rows = uq.order_by(User.full_name.asc()).all()
     return [
         {
-            "id": emp.id,
-            "full_name": emp.full_name,
-            "role_name": role.role_name if role else None,
-            "department_name": dept.department_name if dept else None,
-            "site_name": site.site_name if site else None,
-            "employment_type": emp.employment_type,
-            "shift_pattern": emp.shift_pattern,
-            "active_status": emp.active_status,
+            "id": u.id,
+            "full_name": u.full_name or u.username,
+            "role_name": ar.label if ar else None,
+            "department_name": None,
+            "site_name": None,
+            "employment_type": "System User",
+            "shift_pattern": None,
+            "active_status": "Active" if u.is_active else "Inactive",
         }
-        for emp, role, dept, site in rows
+        for u, ar in user_rows
     ]

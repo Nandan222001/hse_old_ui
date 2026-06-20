@@ -647,6 +647,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             storedUser.initials = payload.full_name
               .split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
           }
+          // If the JWT already has org_id, the user completed org setup.
+          // Clear any stale wizard flags so they don't get redirected on refresh.
+          if (payload.org_id && storedUser.onboardingSetupRequired) {
+            storedUser.onboardingSetupRequired = false;
+            storedUser.onboardingSetupCompleted = true;
+          }
         } catch { /* malformed token — ignore */ }
       }
       return storedUser;
@@ -814,6 +820,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("hse_jwt_token");
     localStorage.removeItem("hse_auth");
     localStorage.removeItem("hse_user");
+    sessionStorage.removeItem("org_setup_wizard_session_reset");
     setIsAuthenticated(false);
     setUser(null);
   };

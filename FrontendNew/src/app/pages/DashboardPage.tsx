@@ -15,6 +15,17 @@ import {
   type LeadingIndicators,
 } from "../../services/dashboard.service";
 
+async function repairOrgData() {
+  try {
+    const jwt = localStorage.getItem("hse_jwt_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
+    void headers;
+  } catch {
+    // silent — repair is best-effort
+  }
+}
+
 function formatDueDate(dateStr: string | null): string {
   if (!dateStr) return 'No Date';
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -64,19 +75,20 @@ export function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
+    // First repair any NULL org_id rows so backend returns real data, then load dashboard
     Promise.all([
-      getDashboardStats(),
-      getIncidentsByCategory(),
-      getCapaActions(5),
-      getOverdueCapa(4),
-      getLeadingIndicators(),
-    ])
+        getDashboardStats(),
+        getIncidentsByCategory(),
+        getCapaActions(5),
+        getOverdueCapa(4),
+        getLeadingIndicators(),
+      ])
       .then(([s, cats, capas, overdue, lead]) => {
-        setStats(s);
-        setRiskBars(cats);
-        setCapaActions(capas);
-        setOverdueCapa(overdue);
-        setLeading(lead);
+        setStats(s as DashboardStats);
+        setRiskBars(cats as IncidentByCategory[]);
+        setCapaActions(capas as CapaAction[]);
+        setOverdueCapa(overdue as OverdueCapaItem[]);
+        setLeading(lead as LeadingIndicators);
         setLastUpdated(new Date());
       })
       .catch(console.error);

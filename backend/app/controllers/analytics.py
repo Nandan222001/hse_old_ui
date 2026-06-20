@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, or_
@@ -26,6 +26,7 @@ CAUSE_COLORS = ["#8BC34A", "#FFC107", "#607D8B", "#2F3A4F", "#E91E63"]
 
 
 def _org_filter(query, model, org_id):
+    """Filter by org_id only. NULL organisation rows are not tenant data."""
     if org_id is not None:
         return query.filter(model.organisation_id == org_id)
     return query
@@ -170,6 +171,66 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
         months_map[key][bucket] += r.cnt
     severity_mix = list(months_map.values())[-5:]
 
+    # Injury cause (immediate_cause column — closest proxy to body-part/injury cause)
+    injury_cat_rows = (
+        _org_filter(
+            db.query(Incident.immediate_cause, func.count(Incident.id).label("cnt"))
+            .filter(Incident.immediate_cause.isnot(None)),
+            Incident, org_id,
+        )
+        .group_by(Incident.immediate_cause)
+        .order_by(func.count(Incident.id).desc())
+        .limit(7)
+        .all()
+    )
+    injury_category = [{"label": r.immediate_cause, "value": r.cnt} for r in injury_cat_rows]
+
+    # Person involved — group by employment_type of the employee who reported
+    person_rows = (
+        db.query(Employee.employment_type, func.count(Incident.id).label("cnt"))
+        .join(Incident, Incident.reported_by == Employee.id)
+        .filter(
+            Employee.employment_type.isnot(None),
+            *([Incident.organisation_id == org_id] if org_id is not None else []),
+        )
+        .group_by(Employee.employment_type)
+        .order_by(func.count(Incident.id).desc())
+        .limit(6)
+        .all()
+    )
+    person_involved = [{"label": r.employment_type, "value": r.cnt} for r in person_rows]
+
+    # Injury type — root_cause column describes how the injury happened
+    injury_type_rows = (
+        _org_filter(
+            db.query(Incident.root_cause, func.count(Incident.id).label("cnt"))
+            .filter(Incident.root_cause.isnot(None)),
+            Incident, org_id,
+        )
+        .group_by(Incident.root_cause)
+        .order_by(func.count(Incident.id).desc())
+        .limit(7)
+        .all()
+    )
+    injury_type = [{"label": r.root_cause, "value": r.cnt} for r in injury_type_rows]
+
+    # Key learnings — latest incident descriptions (first sentence, max 120 chars)
+    learning_rows = (
+        _org_filter(
+            db.query(Incident.description)
+            .filter(Incident.description.isnot(None)),
+            Incident, org_id,
+        )
+        .order_by(Incident.id.desc())
+        .limit(6)
+        .all()
+    )
+    key_learnings = [
+        (r.description.split(".")[0].strip()[:120] or r.description[:120])
+        for r in learning_rows
+        if r.description
+    ]
+
     return {
         "by_type": by_type,
         "by_location": by_location,
@@ -180,6 +241,10 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
         "downtime_by_type": downtime_by_type,
         "open_capa_items": open_capa_items,
         "severity_mix": severity_mix,
+        "injury_category": injury_category,
+        "person_involved": person_involved,
+        "injury_type": injury_type,
+        "key_learnings": key_learnings,
     }
 
 
@@ -612,9 +677,9 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     distinct_policy_categories = _org_filter(
         db.query(func.count(func.distinct(Policy.category))), Policy, org_id
     ).scalar() or 0
-    distinct_hazard_categories = _org_filter(
-        db.query(func.count(func.distinct(HazardCategory.category_name))), HazardCategory, org_id
-    ).scalar() or 0
+    distinct_hazard_categories = (
+        db.query(func.count(func.distinct(HazardCategory.category_name))).scalar() or 0
+    )
     legal_register_pct = (
         min(100, round(distinct_policy_categories / distinct_hazard_categories * 100))
         if distinct_hazard_categories else 0
@@ -706,4 +771,377 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         "compliance_trend_mom": trend_mom,
         "findings_by_severity": findings_by_severity,
         "non_conformance_rows": non_conformance_rows,
+    }
+
+
+@router.get("/asset-summary")
+def get_asset_summary(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from datetime import timedelta
+    from app.models.equipment_certification import EquipmentCertification
+
+    org_id = current_user.org_id
+    today = date.today()
+
+    # ── Equipment cert counts ─────────────────────────────────────────────────
+    cert_q = db.query(EquipmentCertification)
+    if org_id is not None:
+        cert_q = cert_q.filter(EquipmentCertification.organisation_id == org_id)
+    all_certs = cert_q.all()
+
+    total_certs = len(all_certs)
+
+    def _cert_status(expiry_date):
+        if not expiry_date:
+            return "Valid"
+        if expiry_date < today:
+            return "Expired"
+        if expiry_date <= today + timedelta(days=30):
+            return "Expiring Soon"
+        return "Valid"
+
+    for c in all_certs:
+        c._status = _cert_status(c.expiry_date)
+
+    valid_count        = sum(1 for c in all_certs if c._status == "Valid")
+    expiring_count     = sum(1 for c in all_certs if c._status == "Expiring Soon")
+    expired_count      = sum(1 for c in all_certs if c._status == "Expired")
+
+    control_effectiveness = round(valid_count / total_certs * 100) if total_certs else 0
+    maintenance_risk_pct  = round((expiring_count + expired_count) / total_certs * 100) if total_certs else 0
+    if maintenance_risk_pct >= 60:
+        risk_label = "High Risk"
+    elif maintenance_risk_pct >= 25:
+        risk_label = "Medium Risk"
+    else:
+        risk_label = "Low Risk"
+
+    # ── Incident trend by month (asset context = all incidents) ───────────────
+    inc_rows = (
+        _org_filter(
+            db.query(
+                func.year(Incident.incident_date_time).label("yr"),
+                func.month(Incident.incident_date_time).label("mo"),
+                func.count(Incident.id).label("cnt"),
+            ).filter(Incident.incident_date_time.isnot(None)),
+            Incident, org_id,
+        )
+        .group_by("yr", "mo")
+        .order_by("yr", "mo")
+        .all()
+    )
+    failure_trend = [{"month": MONTH_NAMES[int(r.mo) - 1], "value": r.cnt} for r in inc_rows[-8:]]
+
+    nm_rows = (
+        _org_filter(
+            db.query(
+                func.year(NearMiss.event_date_time).label("yr"),
+                func.month(NearMiss.event_date_time).label("mo"),
+                func.count(NearMiss.id).label("cnt"),
+            ).filter(NearMiss.event_date_time.isnot(None)),
+            NearMiss, org_id,
+        )
+        .group_by("yr", "mo")
+        .order_by("yr", "mo")
+        .all()
+    )
+    asset_incident_trend = [{"month": MONTH_NAMES[int(r.mo) - 1], "value": r.cnt} for r in nm_rows[-8:]]
+
+    # ── Risk table — certs that are expired or expiring soon ──────────────────
+    risk_certs = [c for c in all_certs if c._status in ("Expired", "Expiring Soon")][:6]
+    risk_table = [
+        {
+            "id": f"CERT-{c.id:04d}",
+            "type": c.equipment_type or "Unknown",
+            "risk": "High" if c._status == "Expired" else "Medium",
+            "status": "Critical (Red)" if c._status == "Expired" else "Warning (Amber)",
+        }
+        for c in risk_certs
+    ]
+
+    # ── Overdue inspections — certs where next_inspection_date < today ────────
+    overdue_certs = [
+        c for c in all_certs
+        if c.next_inspection_date and c.next_inspection_date < today
+    ]
+    overdue_certs.sort(key=lambda c: c.next_inspection_date)
+
+    def _overdue_label(d: date) -> str:
+        days = (today - d).days
+        if days == 0:
+            return "Due Today"
+        if days == 1:
+            return "Due Yesterday"
+        return f"Due {days} Days Ago"
+
+    overdue_inspections = [
+        {
+            "name": f"{c.equipment_name} Inspection",
+            "due": _overdue_label(c.next_inspection_date),
+            "tone": "critical",
+        }
+        for c in overdue_certs[:5]
+    ]
+
+    # ── Barrier checklist — cert types with their completion ratio ────────────
+    type_counts: dict[str, dict] = {}
+    for c in all_certs:
+        t = c.certification_type or "General"
+        if t not in type_counts:
+            type_counts[t] = {"total": 0, "valid": 0}
+        type_counts[t]["total"] += 1
+        if c._status == "Valid":
+            type_counts[t]["valid"] += 1
+    barrier_checklist = [
+        {
+            "text": ctype,
+            "progress": round(v["valid"] / v["total"] * 100) if v["total"] else 0,
+        }
+        for ctype, v in list(type_counts.items())[:5]
+    ]
+
+    # ── Heat map — equipment type vs site ─────────────────────────────────────
+    site_ids = {c.site_id for c in all_certs if c.site_id}
+    site_map: dict[int, str] = {}
+    if site_ids:
+        for s in db.query(Site).filter(Site.id.in_(site_ids)).all():
+            site_map[s.id] = s.site_name
+
+    types_list  = sorted({c.equipment_type or "Unknown" for c in all_certs})[:6]
+    sites_list  = sorted({site_map.get(c.site_id, "Unknown") for c in all_certs})[:6]
+
+    heat_vals: list[list[float]] = []
+    for t in types_list:
+        row_vals = []
+        for s in sites_list:
+            bucket = [
+                c for c in all_certs
+                if (c.equipment_type or "Unknown") == t
+                and site_map.get(c.site_id, "Unknown") == s
+            ]
+            if not bucket:
+                row_vals.append(0.1)
+            else:
+                expired_ratio = sum(1 for c in bucket if c._status == "Expired") / len(bucket)
+                row_vals.append(round(expired_ratio + 0.1, 2))
+        heat_vals.append(row_vals)
+
+    return {
+        "control_effectiveness_pct": control_effectiveness,
+        "maintenance_risk_pct": maintenance_risk_pct,
+        "maintenance_risk_label": risk_label,
+        "total_certs": total_certs,
+        "valid_count": valid_count,
+        "expiring_count": expiring_count,
+        "expired_count": expired_count,
+        "failure_trend": failure_trend,
+        "asset_incident_trend": asset_incident_trend,
+        "risk_table": risk_table,
+        "overdue_inspections": overdue_inspections,
+        "barrier_checklist": barrier_checklist,
+        "heat_rows": types_list,
+        "heat_cols": sites_list,
+        "heat_vals": heat_vals,
+    }
+
+
+@router.get("/engagement-summary")
+def get_engagement_summary(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    from app.models.user import User
+    from app.models.app_role import AppRole
+
+    org_id = current_user.org_id
+    today = date.today()
+    first_this_month = today.replace(day=1)
+    first_last_month = (first_this_month - timedelta(days=1)).replace(day=1)
+
+    def _report_count(from_dt, to_dt):
+        inc = int(
+            _org_filter(
+                db.query(func.count(Incident.id)).filter(
+                    Incident.report_date >= from_dt, Incident.report_date < to_dt
+                ),
+                Incident, org_id,
+            ).scalar() or 0
+        )
+        nm = int(
+            _org_filter(
+                db.query(func.count(NearMiss.id)).filter(
+                    func.date(NearMiss.event_date_time) >= from_dt,
+                    func.date(NearMiss.event_date_time) < to_dt,
+                ),
+                NearMiss, org_id,
+            ).scalar() or 0
+        )
+        return inc + nm
+
+    this_month_reports = _report_count(first_this_month, today + timedelta(days=1))
+    last_month_reports = _report_count(first_last_month, first_this_month)
+
+    total_employees = int(
+        _org_filter(db.query(func.count(Employee.id)), Employee, org_id).scalar() or 0
+    )
+    # Reporting rate: reports-per-employee scaled; fallback to raw count when no employees
+    if total_employees > 0:
+        reporting_rate = min(100, round(this_month_reports / total_employees * 25))
+    else:
+        reporting_rate = min(100, this_month_reports * 10)
+    reporting_rate_mom = this_month_reports - last_month_reports
+
+    # Survey score — avg compliance_rating from safety_walks (1–5 scale)
+    avg_compliance = _org_filter(
+        db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id
+    ).scalar()
+    survey_score = round(float(avg_compliance or 0), 1)
+    survey_score_pct = round(survey_score / 5 * 100)
+
+    # Safety observations % — walks with high compliance (rating >= 4)
+    total_walks = int(
+        _org_filter(db.query(func.count(SafetyWalk.id)), SafetyWalk, org_id).scalar() or 0
+    )
+    compliant_walks = int(
+        _org_filter(
+            db.query(func.count(SafetyWalk.id)).filter(SafetyWalk.compliance_rating >= 4),
+            SafetyWalk, org_id,
+        ).scalar() or 0
+    )
+    safety_observations_pct = round(compliant_walks / max(total_walks, 1) * 100)
+
+    # Safety walks % — walks completed this month vs one-per-employee target.
+    # Fall back to all-time walks when no walks exist this month
+    # (imported historical data often has past dates).
+    walks_this_month = int(
+        _org_filter(
+            db.query(func.count(SafetyWalk.id)).filter(
+                func.date(SafetyWalk.inspection_date_time) >= first_this_month
+            ),
+            SafetyWalk, org_id,
+        ).scalar() or 0
+    )
+    effective_walks = walks_this_month if walks_this_month > 0 else total_walks
+    safety_walks_pct = min(100, round(effective_walks / max(total_employees, 1) * 100))
+
+    # Toolbox attendance % — toolbox-type walks vs employee count
+    # Fall back to all walk types when no "toolbox" entries exist
+    toolbox_count = int(
+        _org_filter(
+            db.query(func.count(SafetyWalk.id)).filter(
+                func.lower(SafetyWalk.inspection_type).like("%toolbox%")
+            ),
+            SafetyWalk, org_id,
+        ).scalar() or 0
+    )
+    if toolbox_count == 0:
+        toolbox_count = total_walks
+    toolbox_pct = min(100, round(toolbox_count / max(total_employees, 1) * 100))
+
+    # Site participation % — distinct sites with incidents or near_misses vs total sites
+    total_sites = int(
+        _org_filter(db.query(func.count(Site.id)), Site, org_id).scalar() or 0
+    )
+    active_sites_inc = int(
+        db.query(func.count(func.distinct(WorkingStation.site_id)))
+        .join(Incident, Incident.location_station_id == WorkingStation.id)
+        .filter(*(
+            [Incident.organisation_id == org_id]
+            if org_id is not None else []
+        ))
+        .scalar() or 0
+    )
+    active_sites_nm = int(
+        db.query(func.count(func.distinct(WorkingStation.site_id)))
+        .join(NearMiss, NearMiss.location_station_id == WorkingStation.id)
+        .filter(*(
+            [NearMiss.organisation_id == org_id]
+            if org_id is not None else []
+        ))
+        .scalar() or 0
+    )
+    active_sites = min(max(active_sites_inc, active_sites_nm), total_sites)
+    site_participation_pct = round(active_sites / max(total_sites, 1) * 100)
+
+    # Top recognitions — employees with most completed CAPA actions
+    top_emp_rows = (
+        db.query(Employee.full_name, func.count(CapaAction.id).label("cnt"))
+        .join(CapaAction, CapaAction.responsible_person_id == Employee.id)
+        .filter(
+            CapaAction.status == "Completed",
+            *(
+                [Employee.organisation_id == org_id]
+                if org_id is not None else []
+            ),
+        )
+        .group_by(Employee.full_name)
+        .order_by(func.count(CapaAction.id).desc())
+        .limit(3)
+        .all()
+    )
+    top_recognitions = [{"name": r.full_name} for r in top_emp_rows if r.full_name]
+
+    # Fallback: use org users when employees table is empty
+    if not top_recognitions:
+        user_rows = (
+            db.query(User, AppRole)
+            .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .filter(
+                User.organisation_id == org_id,
+                AppRole.name.notin_(["superadmin", "admin"]),
+            )
+            if org_id is not None
+            else db.query(User, AppRole)
+            .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .filter(AppRole.name.notin_(["superadmin", "admin"]))
+        )
+        top_recognitions = [
+            {"name": u.full_name or u.username}
+            for u, _ in user_rows.order_by(User.id.asc()).limit(3).all()
+        ]
+
+    # Open actions — CAPA not completed, ordered by due date
+    def _action_status(due_date) -> str:
+        if not due_date:
+            return "Overdue"
+        days = (due_date - today).days
+        if days < 0:
+            return "Overdue"
+        if days == 0:
+            return "Due Today"
+        return "Due Tomorrow"
+
+    open_capa_rows = (
+        _org_filter(
+            db.query(CapaAction).filter(CapaAction.status != "Completed"),
+            CapaAction, org_id,
+        )
+        .order_by(
+            case((CapaAction.due_date.is_(None), 1), else_=0),
+            CapaAction.due_date.asc(),
+        )
+        .limit(5)
+        .all()
+    )
+    open_actions = [
+        {
+            "text": c.description or c.action_type or f"CAPA Action #{c.id}",
+            "status": _action_status(c.due_date),
+        }
+        for c in open_capa_rows
+    ]
+
+    return {
+        "reporting_rate": reporting_rate,
+        "reporting_rate_mom": reporting_rate_mom,
+        "survey_score": survey_score,
+        "survey_score_pct": survey_score_pct,
+        "safety_observations_pct": safety_observations_pct,
+        "safety_walks_pct": safety_walks_pct,
+        "toolbox_attendance_pct": toolbox_pct,
+        "site_participation_pct": site_participation_pct,
+        "top_recognitions": top_recognitions,
+        "open_actions": open_actions,
     }

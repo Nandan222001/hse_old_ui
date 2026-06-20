@@ -269,7 +269,7 @@ export function useFullImportMutation(): [
 
 export async function downloadFullTemplate(): Promise<void> {
   const API_BASE = ((import.meta.env.VITE_API_URL as string) || "/api/v1").replace(/\/$/, "");
-  const jwt = localStorage.getItem("hse_jwt");
+  const jwt = localStorage.getItem("hse_jwt_token");
   const headers: Record<string, string> = {};
   if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
 

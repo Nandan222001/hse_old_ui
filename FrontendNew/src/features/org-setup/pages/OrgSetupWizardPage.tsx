@@ -15,6 +15,7 @@ import {
   useSaveOrgSetupStep5Mutation, useUploadOrgSetupKnowledgeMutation, useImportOrgSetupDataMutation,
   useBulkImportModuleMutation, useSaveOrgSetupStep7Mutation, useActivateOrganizationMutation,
   useHrmsImportMutation, useParseOrgExcelMutation, useConnectOrgApiMutation,
+  resetOrgSetupWizard,
 } from "@/features/org-setup/api/orgSetupApi";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -521,12 +522,17 @@ function Step3({ onNext, onBack, dataEntryOption }: { onNext: () => void; onBack
 // ── Step 4 ─────────────────────────────────────────────────────────────────────
 
 function Step4({ onNext, onBack, dataEntryOption }: { onNext: () => void; onBack: () => void; dataEntryOption: "manual"|"excel"|"api" }) {
-  const { data: users = [], isLoading: usersLoading, refetch } = useGetOrgSetupStep4UsersQuery();
+  const { data: fetchedUsers = [], isLoading: usersLoading, refetch } = useGetOrgSetupStep4UsersQuery();
   const [createUser, { isLoading: creating }] = useCreateOrgSetupUserMutation();
   const [bulkUpload, { isLoading: uploading }] = useBulkUploadOrgSetupUsersMutation();
   const [hrmsImport, { isLoading: hrmsLoading }] = useHrmsImportMutation();
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: "", email: "", role: "", department: "" });
+  const [recentlyImportedUsers, setRecentlyImportedUsers] = useState<typeof fetchedUsers>([]);
+  const users = [
+    ...fetchedUsers,
+    ...recentlyImportedUsers.filter((imported) => !fetchedUsers.some((user) => user.id === imported.id)),
+  ];
   const [error, setError] = useState(""); const [uploadSuccess, setUploadSuccess] = useState<number | null>(null); const [uploadError, setUploadError] = useState("");
   const [showHrmsModal, setShowHrmsModal] = useState(false); const [hrmsUrl, setHrmsUrl] = useState(""); const [hrmsToken, setHrmsToken] = useState(""); const [hrmsError, setHrmsError] = useState("");
 
@@ -542,8 +548,12 @@ function Step4({ onNext, onBack, dataEntryOption }: { onNext: () => void; onBack
     setUploadError(""); setUploadSuccess(null);
     const fd = new FormData(); fd.append("file", file);
     const result = await bulkUpload(fd);
-    if ("data" in result) { const d = result.data as { count?: number }; setUploadSuccess(d?.count ?? 0); }
-    else { setUploadError("Upload failed. Check file has Name, Email, Role, Department columns."); }
+    if ("data" in result) {
+      const d = result.data as { count?: number; error?: string; users?: typeof fetchedUsers };
+      if (d?.error) { setUploadError(d.error); }
+      else if ((d?.count ?? 0) === 0) { setUploadError("No users were imported. Check the file has Name, Email, Role, Department columns and that emails are not already registered."); }
+      else { setUploadSuccess(d?.count ?? 0); setRecentlyImportedUsers(d.users ?? []); }
+    } else { setUploadError("Upload failed. Check file has Name, Email, Role, Department columns."); }
     refetch(); if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -1016,20 +1026,36 @@ export function OrgSetupWizardPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [progressLoaded, setProgressLoaded] = useState(false);
+  const [wizardReady, setWizardReady] = useState(false);
   const [dataEntryOption, setDataEntryOption] = useState<"manual"|"excel"|"api">("manual");
 
-  const { data: progressRaw, isLoading: progressLoading } = useGetOrgSetupProgressQuery();
+  const { data: progressRaw, isLoading: progressLoading, refetch: refetchProgress } = useGetOrgSetupProgressQuery();
   const { data: step1Saved } = useGetOrgSetupStep1Query();
 
+  // Reset backend wizard state on first visit per browser session so a new org
+  // admin always starts from step 1 (not from a previous user's in-memory state).
   useEffect(() => {
-    if (!progressLoading && !progressLoaded) {
-      const raw = progressRaw as unknown as { steps_completed?: number[]; activated?: boolean } | undefined;
-      const done: number[] = raw?.steps_completed ?? [];
-      setCompletedSteps(done);
-      if (done.length > 0) setCurrentStep(Math.min(Math.max(...done) + 1, 8));
-      setProgressLoaded(true);
+    const sessionKey = "org_setup_wizard_session_reset";
+    if (!sessionStorage.getItem(sessionKey)) {
+      resetOrgSetupWizard().finally(() => {
+        sessionStorage.setItem(sessionKey, "1");
+        setWizardReady(true);
+        refetchProgress();
+      });
+    } else {
+      setWizardReady(true);
     }
-  }, [progressRaw, progressLoading, progressLoaded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!wizardReady || progressLoading || progressLoaded) return;
+    const raw = progressRaw as unknown as { steps_completed?: number[]; activated?: boolean } | undefined;
+    const done: number[] = raw?.steps_completed ?? [];
+    setCompletedSteps(done);
+    if (done.length > 0) setCurrentStep(Math.min(Math.max(...done) + 1, 8));
+    setProgressLoaded(true);
+  }, [progressRaw, progressLoading, progressLoaded, wizardReady]);
 
   useEffect(() => {
     if (step1Saved) {
@@ -1051,11 +1077,11 @@ export function OrgSetupWizardPage() {
           <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}><Building2 className="w-5 h-5 text-white" /></div>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: "#111827" }}>Organisation Setup</h1>
-            <p className="text-sm" style={{ color: "#6B7280" }}>{progressLoaded ? `Step ${currentStep} of 8 — ${stepTitles[currentStep - 1]}` : "Loading your progress…"}</p>
+            <p className="text-sm" style={{ color: "#6B7280" }}>{(wizardReady && progressLoaded) ? `Step ${currentStep} of 8 — ${stepTitles[currentStep - 1]}` : "Preparing your workspace…"}</p>
           </div>
         </div>
         {completedSteps.length > 0 && currentStep > 1 && (
-          <button className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors" style={{ borderColor: "#E3E9F6", color: "#6B7280", background: "#fff" }} onClick={() => { setCurrentStep(1); setCompletedSteps([]); setProgressLoaded(false); }}>↺ Start Over</button>
+          <button className="text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors" style={{ borderColor: "#E3E9F6", color: "#6B7280", background: "#fff" }} onClick={() => { resetOrgSetupWizard(); setCurrentStep(1); setCompletedSteps([]); setProgressLoaded(false); }}>↺ Start Over</button>
         )}
       </div>
 
@@ -1063,7 +1089,7 @@ export function OrgSetupWizardPage() {
 
       <div className="grid xl:grid-cols-3 gap-5 items-start">
         <div className="xl:col-span-2">
-          {!progressLoaded ? (
+          {(!wizardReady || !progressLoaded) ? (
             <div className="flex justify-center items-center py-24 bg-white rounded-2xl border" style={{ borderColor: "#E3E9F6" }}>
               <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#4A57B9" }} />
             </div>

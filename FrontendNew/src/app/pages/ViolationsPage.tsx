@@ -4,41 +4,7 @@ import { useNavigate } from "react-router";
 import { Activity, AlertTriangle, Clock3, HeartPulse, PieChart as PieChartIcon, ShieldAlert, Users, type LucideIcon } from "lucide-react";
 import { BarChart, Bar, Cell, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../services/analytics.service";
-
-// Static panels — no backend model for these
-const injuryCategoryData = [
-  { label: "Hand/Finger", value: 5 },
-  { label: "Multiple", value: 3 },
-  { label: "Shoulder", value: 2 },
-  { label: "Face", value: 2 },
-  { label: "Elbow", value: 2 },
-  { label: "Back", value: 2 },
-  { label: "Foot", value: 2 },
-];
-
-const personInvolvedData = [
-  { label: "Green Hand(s)", value: 6 },
-  { label: "Contractor(s)", value: 2 },
-  { label: "Agency Worker(s)", value: 1 },
-  { label: "Own Worker(s)", value: 1 },
-];
-
-const injuryTypeData = [
-  { label: "Cut Wound", value: 3 },
-  { label: "Bruises", value: 3 },
-  { label: "Open Eye Injury", value: 3 },
-  { label: "Sprain and Strain", value: 1 },
-  { label: "Stap Wound", value: 1 },
-  { label: "Open Crack Wound", value: 1 },
-  { label: "Dislocation", value: 1 },
-];
-
-const learnings = [
-  "Matteven a princralitate key learnings",
-  "Dicsusmte mthabs about key learnings",
-  "Inevine suppriatts to kelp learnings",
-  "Anale in slue meet eilment key learnings.",
-];
+import { useAuth } from "../context/AuthContext";
 
 function CardHeader({ icon: Icon, title }: Readonly<{ icon: LucideIcon; title: string }>) {
   return (
@@ -50,16 +16,22 @@ function CardHeader({ icon: Icon, title }: Readonly<{ icon: LucideIcon; title: s
 }
 
 function HorizontalBars({ data }: Readonly<{ data: { label: string; value: number }[] }>) {
-  const max = Math.max(...data.map((item) => item.value));
+  if (!data || data.length === 0) {
+    return <p className="text-[12px] py-2 text-center" style={{ color: '#9CA3AF' }}>No data yet</p>;
+  }
+  const max = Math.max(...data.map((item) => item.value), 1);
   return (
     <div className="space-y-2">
       {data.map((item) => (
         <div key={item.label} className="grid grid-cols-[1fr_auto] items-center gap-2">
-          <div className="h-4 rounded-full bg-slate-100">
-            <div
-              className="h-4 rounded-full bg-gradient-to-r from-[#4A57B9] to-[#6F80E8]"
-              style={{ width: `${(item.value / max) * 100}%` }}
-            />
+          <div>
+            <div className="text-[11px] mb-0.5 truncate" style={{ color: '#374151' }}>{item.label}</div>
+            <div className="h-3 rounded-full bg-slate-100">
+              <div
+                className="h-3 rounded-full bg-gradient-to-r from-[#4A57B9] to-[#6F80E8]"
+                style={{ width: `${(item.value / max) * 100}%` }}
+              />
+            </div>
           </div>
           <span className="text-[12px]" style={{ minWidth: 20, textAlign: 'right', color: '#475569' }}>{item.value}</span>
         </div>
@@ -82,6 +54,7 @@ function DarkPanel({ title, icon, children, className = "" }: Readonly<{ title: 
 
 export function ViolationsPage() {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
 
   const [incidentTypeData, setIncidentTypeData] = useState<ViolationItem[]>([]);
   const [causeData, setCauseData] = useState<RcaItem[]>([]);
@@ -92,6 +65,10 @@ export function ViolationsPage() {
   const [severityMix, setSeverityMix] = useState<SeverityMixItem[]>([]);
   const [rcaData, setRcaData] = useState<RcaItem[]>([]);
   const [actionItems, setActionItems] = useState<string[]>([]);
+  const [injuryCategoryData, setInjuryCategoryData] = useState<ViolationItem[]>([]);
+  const [personInvolvedData, setPersonInvolvedData] = useState<ViolationItem[]>([]);
+  const [injuryTypeData, setInjuryTypeData] = useState<ViolationItem[]>([]);
+  const [learnings, setLearnings] = useState<string[]>([]);
 
   useEffect(() => {
     getViolationsSummary(10).then((data) => {
@@ -104,13 +81,17 @@ export function ViolationsPage() {
       setSeverityMix(data.severity_mix);
       setRcaData(data.by_root_cause);
       setActionItems(data.open_capa_items);
+      setInjuryCategoryData(data.injury_category ?? []);
+      setPersonInvolvedData(data.person_involved ?? []);
+      setInjuryTypeData(data.injury_type ?? []);
+      setLearnings(data.key_learnings ?? []);
     }).catch(console.error);
   }, []);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1>Welcome , User</h1>
+        <h1>Welcome, {currentUser?.name || currentUser?.email || "User"}</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
@@ -126,17 +107,16 @@ export function ViolationsPage() {
                 <HorizontalBars data={injuryCategoryData} />
               </DarkPanel>
               <DarkPanel title="Incident Cause Category" icon={PieChartIcon}>
-                <div className="flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height={132}>
-                    <PieChart>
-                      <Pie data={causeData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={52} paddingAngle={2}>
-                        {causeData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height={132}>
+                  <PieChart>
+                    <Pie data={causeData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={52} paddingAngle={2} cx="50%" cy="50%">
+                      {causeData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value, name) => [value, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
               </DarkPanel>
               <DarkPanel title="Person Involved" icon={Users}>
                 <HorizontalBars data={personInvolvedData} />
@@ -154,9 +134,9 @@ export function ViolationsPage() {
             <div className="rounded-md bg-white p-3 shadow-[0_6px_14px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
               <CardHeader icon={Activity} title="Incident Trend" />
               <ResponsiveContainer width="100%" height={145}>
-                <LineChart data={incidentTrend}>
+                <LineChart data={incidentTrend} margin={{ top: 6, right: 12, bottom: 0, left: 0 }}>
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                  <YAxis width={28} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
                   <Tooltip />
                   <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={2.5} dot={{ r: 2.5, fill: '#6F80E8' }} />
                 </LineChart>
@@ -166,9 +146,18 @@ export function ViolationsPage() {
             <div className="rounded-md bg-white p-3 shadow-[0_6px_14px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
               <CardHeader icon={Clock3} title="Downtime" />
               <ResponsiveContainer width="100%" height={145}>
-                <BarChart data={downtimeData}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} interval={0} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                <BarChart data={downtimeData} margin={{ top: 6, right: 12, bottom: 20, left: 0 }}>
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#64748B' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    angle={-30}
+                    textAnchor="end"
+                    height={48}
+                  />
+                  <YAxis width={28} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
                   <Tooltip />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {downtimeData.map((entry, index) => (
@@ -184,11 +173,11 @@ export function ViolationsPage() {
         <div className="space-y-4">
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
             <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Trend</div>
-            <ResponsiveContainer width="100%" height={120}>
-              <LineChart data={monthlyNearMiss}>
+            <ResponsiveContainer width="100%" height={130}>
+              <LineChart data={monthlyNearMiss} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={3} dot={{ r: 3, fill: '#6F80E8' }} />
               </LineChart>
@@ -197,40 +186,47 @@ export function ViolationsPage() {
 
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
             <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Incident Severity Mix</div>
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={severityMix}>
+            <ResponsiveContainer width="100%" height={175}>
+              <BarChart data={severityMix} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
                 <Tooltip />
-                <Bar dataKey="low" stackId="a" fill="#6F80E8" />
-                <Bar dataKey="medium" stackId="a" fill="#4A57B9" />
-                <Bar dataKey="high" stackId="a" fill="#38BDF8" />
-                <Bar dataKey="critical" stackId="a" fill="#0F766E" />
+                <Bar dataKey="low" stackId="a" fill="#6F80E8" name="Low" />
+                <Bar dataKey="medium" stackId="a" fill="#4A57B9" name="Medium" />
+                <Bar dataKey="high" stackId="a" fill="#38BDF8" name="High" />
+                <Bar dataKey="critical" stackId="a" fill="#0F766E" name="Critical" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 justify-center">
+              {[['#6F80E8','Low'],['#4A57B9','Med'],['#38BDF8','High'],['#0F766E','Critical']].map(([color, label]) => (
+                <div key={label} className="flex items-center gap-1 text-[10px]" style={{ color: '#6B7280' }}>
+                  <span className="h-2 w-2 rounded-sm shrink-0" style={{ background: color }} />
+                  {label}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
             <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>RCA Breakdown</div>
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="56%" height={150}>
-                <PieChart>
-                  <Pie data={rcaData} dataKey="value" nameKey="name" outerRadius={56} innerRadius={0}>
-                    {rcaData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2 text-[13px]" style={{ color: '#374151' }}>
-                {rcaData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: entry.color }} />
-                    <span>{entry.name}</span>
-                  </div>
-                ))}
-              </div>
+            <ResponsiveContainer width="100%" height={150}>
+              <PieChart>
+                <Pie data={rcaData} dataKey="value" nameKey="name" outerRadius={60} innerRadius={0} cx="50%" cy="50%">
+                  {rcaData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value, name) => [value, name]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
+              {rcaData.map((entry) => (
+                <div key={entry.name} className="flex items-center gap-1.5 text-[11px]" style={{ color: '#374151' }}>
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: entry.color }} />
+                  <span className="truncate max-w-[80px]" title={entry.name}>{entry.name}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -239,26 +235,34 @@ export function ViolationsPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.9fr]">
         <div className="rounded-2xl bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
           <div className="mb-3 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Key Learnings</div>
-          <ul className="space-y-2 text-[14px]" style={{ color: '#4B5563' }}>
-            {learnings.map((item) => (
-              <li key={item} className="flex items-start gap-2">
-                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          {learnings.length === 0 ? (
+            <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No incident records to derive learnings from yet</p>
+          ) : (
+            <ul className="space-y-2 text-[14px]" style={{ color: '#4B5563' }}>
+              {learnings.map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
           <div className="mb-3 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Open Actions</div>
-          <div className="space-y-2 text-[14px]" style={{ color: '#374151' }}>
-            {actionItems.map((item, index) => (
-              <label key={item} className="flex items-center gap-2">
-                <input type="checkbox" defaultChecked={index === 0} className="h-4 w-4 rounded accent-[#4A57B9]" />
-                <span className="flex-1">{item}</span>
-              </label>
-            ))}
-          </div>
+          {actionItems.length === 0 ? (
+            <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No open CAPA actions</p>
+          ) : (
+            <div className="space-y-2 text-[14px]" style={{ color: '#374151' }}>
+              {actionItems.map((item) => (
+                <label key={item} className="flex items-center gap-2">
+                  <input type="checkbox" className="h-4 w-4 rounded accent-[#4A57B9]" />
+                  <span className="flex-1">{item}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

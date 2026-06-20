@@ -36,7 +36,7 @@ def _resolve_org_id(current_user: CurrentUser, db: Session) -> int:
     If not yet set on their JWT (e.g. right after org wizard), look it up
     from the organisation_invite → organisation table.
     """
-    if current_user.org_id is not None:
+    if current_user.org_id is not None and current_user.org_id > 0:
         return current_user.org_id
 
     # Find their accepted invite
