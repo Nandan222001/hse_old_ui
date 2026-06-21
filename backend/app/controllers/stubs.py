@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.models.organisation_invite import OrganisationInvite
+from app.models.data_import import DataImport
+from app.models.validation_log import ValidationLog
 
 router = APIRouter(tags=["Stubs"])
 
@@ -1011,6 +1013,33 @@ async def org_setup_onboarding_bulk(
         "importedAt": datetime.datetime.now().isoformat(),
         "records": count,
     })
+
+    label = module.replace("_", " ").title()
+    import_row = DataImport(
+        file_name=file.filename or f"{module}.xlsx",
+        import_type="excel",
+        data_type=label,
+        records_total=count,
+        records_success=count,
+        records_failed=0,
+        status="success" if count > 0 else "failed",
+        uploaded_by=current_user.email or "Admin",
+    )
+    db.add(import_row)
+    vlog = ValidationLog(
+        file_name=file.filename or f"{module}.xlsx",
+        rule="Required fields present",
+        status="pass" if count > 0 else "fail",
+        records_affected=count,
+        message=f"{count} record{'s' if count != 1 else ''} imported successfully" if count > 0 else "No records imported",
+        timestamp=datetime.datetime.now().isoformat(),
+    )
+    db.add(vlog)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
     return {"count": count, "errors": []}
 
 

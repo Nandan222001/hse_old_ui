@@ -463,6 +463,7 @@ export function UsersPage() {
       const result = await apiPost("/org/invite-user", inviteForm);
       setInviteResult(result as typeof inviteResult);
       loadOrgUsers();
+      getEmployeeDirectory().then(setEmployeeDirectory).catch(console.error);
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : "Invite failed");
     } finally {
@@ -472,20 +473,8 @@ export function UsersPage() {
 
   // ── Derived values ────────────────────────────────────────────────────────────
 
-  // Merge org users (login accounts) + imported employees into one unified list
-  const allPeople = useMemo<EmployeeDirectoryRow[]>(() => {
-    const fromOrgUsers: EmployeeDirectoryRow[] = orgUsers.map((u) => ({
-      id: -(u.id),
-      full_name: u.username,
-      role_name: u.role_label,
-      department_name: null,
-      site_name: null,
-      employment_type: "Staff",
-      shift_pattern: null,
-      active_status: u.is_active ? "Active" : "Inactive",
-    }));
-    return [...fromOrgUsers, ...employeeDirectory];
-  }, [orgUsers, employeeDirectory]);
+  // /people/directory now always returns both org users + imported employees combined
+  const allPeople = useMemo<EmployeeDirectoryRow[]>(() => employeeDirectory, [employeeDirectory]);
 
   const employeeRoleOptions = Array.from(
     new Set(allPeople.map((e) => e.role_name).filter((r): r is string => Boolean(r))),

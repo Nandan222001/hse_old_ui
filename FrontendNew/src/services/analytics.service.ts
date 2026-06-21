@@ -152,6 +152,49 @@ export interface RiskSummary {
 export const getRiskSummary = () =>
   axiosInstance.get<RiskSummary>('/analytics/risk-summary').then((r) => r.data);
 
+export const getResidualRiskTrend = () =>
+  axiosInstance.get<{ q: string; risk: number }[]>('/analytics/residual-risk-trend').then((r) => r.data);
+
+export const getRiskMatrix = () =>
+  axiosInstance.get<{ counts: number[][] }>('/analytics/risk-matrix').then((r) => r.data);
+
+// ── Violation Detail ──────────────────────────────────────────────────────────
+
+export interface ViolationDetail {
+  id: string;
+  incident_type: string;
+  severity: string;
+  raw_severity: string;
+  investigation_status: string;
+  status_step: number;
+  incident_datetime: string;
+  description: string;
+  immediate_cause: string;
+  root_cause: string;
+  zone: string;
+  station: string;
+  site: string;
+  reporter: string;
+  permit_active: string;
+  days_away: number;
+  number_persons_involved: number;
+  control_failure: string;
+  capa_actions: {
+    id: string;
+    action_type: string;
+    description: string;
+    responsible_person: string;
+    due_date: string | null;
+    status: string;
+  }[];
+  timeline: { action: string; user: string; time: string; type: string }[];
+  assignee: { name: string; role: string } | null;
+  due_date: string | null;
+}
+
+export const getViolationDetail = (incidentId: number) =>
+  axiosInstance.get<ViolationDetail>(`/analytics/violation-detail/${incidentId}`).then((r) => r.data);
+
 // ── Engagement Summary ────────────────────────────────────────────────────────
 
 export interface EngagementSummary {
@@ -159,6 +202,7 @@ export interface EngagementSummary {
   reporting_rate_mom: number;
   survey_score: number;
   survey_score_pct: number;
+  survey_score_mom: number | null;
   safety_observations_pct: number;
   safety_walks_pct: number;
   toolbox_attendance_pct: number;

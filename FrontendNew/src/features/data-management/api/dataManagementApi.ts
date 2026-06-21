@@ -137,15 +137,20 @@ export function useListValidationLogsQuery() {
   const [data, setData] = useState<ValidationLogRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    axiosInstance
-      .get("/org-admin/data-management/validation-logs")
-      .then(res => setData(unwrapList<ValidationLogRecord>(res)))
-      .catch(() => { /* ignore */ })
-      .finally(() => setIsLoading(false));
+  const refetch = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/org-admin/data-management/validation-logs");
+      setData(unwrapList<ValidationLogRecord>(res));
+    } catch {
+      /* ignore */
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  return { data, isLoading };
+  useEffect(() => { void refetch(); }, [refetch]);
+
+  return { data, isLoading, refetch };
 }
 
 // ── useListApiIntegrationsQuery ────────────────────────────────────────────────

@@ -59,6 +59,7 @@ export function NotificationsPage() {
   const [reportingRateMom, setReportingRateMom]     = useState(0);
   const [surveyScore, setSurveyScore]               = useState(0);
   const [surveyScorePct, setSurveyScorePct]         = useState(0);
+  const [surveyScoreMom, setSurveyScoreMom]         = useState<number | null>(null);
   const [safetyObsPct, setSafetyObsPct]             = useState(0);
   const [safetyWalksPct, setSafetyWalksPct]         = useState(0);
   const [toolboxPct, setToolboxPct]                 = useState(0);
@@ -73,6 +74,7 @@ export function NotificationsPage() {
       setReportingRateMom(d.reporting_rate_mom);
       setSurveyScore(d.survey_score);
       setSurveyScorePct(d.survey_score_pct);
+      setSurveyScoreMom(d.survey_score_mom);
       setSafetyObsPct(d.safety_observations_pct);
       setSafetyWalksPct(d.safety_walks_pct);
       setToolboxPct(d.toolbox_attendance_pct);
@@ -137,7 +139,11 @@ export function NotificationsPage() {
           <div className="p-5">
             <div className="flex items-end gap-3">
               <div className="text-[54px] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{surveyScore.toFixed(1)}/5</div>
-              <div className="pb-2 text-[18px]" style={{ color: '#12B8A6', fontWeight: 700 }}>↑</div>
+              {surveyScoreMom !== null && (
+                <div className="pb-2 text-[18px]" style={{ color: surveyScoreMom >= 0 ? '#12B8A6' : '#DC2626', fontWeight: 700 }}>
+                  {surveyScoreMom >= 0 ? '↑' : '↓'}
+                </div>
+              )}
               <div className="pb-2 text-[14px]" style={{ color: '#6B7280' }}>avg compliance rating</div>
             </div>
             <div className="mt-4 h-3 w-full rounded-full bg-slate-200">

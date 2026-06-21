@@ -4,7 +4,17 @@ import { useNavigate } from "react-router";
 import { Activity, AlertTriangle, Clock3, HeartPulse, PieChart as PieChartIcon, ShieldAlert, Users, type LucideIcon } from "lucide-react";
 import { BarChart, Bar, Cell, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../services/analytics.service";
+import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
+
+interface RecentIncident {
+  id: number;
+  incident_type: string | null;
+  severity: string | null;
+  investigation_status: string | null;
+  incident_date_time: string | null;
+  report_date: string | null;
+}
 
 function CardHeader({ icon: Icon, title }: Readonly<{ icon: LucideIcon; title: string }>) {
   return (
@@ -69,6 +79,11 @@ export function ViolationsPage() {
   const [personInvolvedData, setPersonInvolvedData] = useState<ViolationItem[]>([]);
   const [injuryTypeData, setInjuryTypeData] = useState<ViolationItem[]>([]);
   const [learnings, setLearnings] = useState<string[]>([]);
+  const [recentIncidents, setRecentIncidents] = useState<RecentIncident[]>([]);
+
+  useEffect(() => {
+    axiosInstance.get<RecentIncident[]>('/incidents/?limit=10').then(r => setRecentIncidents(r.data)).catch(console.error);
+  }, []);
 
   useEffect(() => {
     getViolationsSummary(10).then((data) => {
@@ -264,6 +279,43 @@ export function ViolationsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="rounded-2xl bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
+        <div className="mb-3 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Recent Incidents</div>
+        {recentIncidents.length === 0 ? (
+          <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No incidents recorded yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr style={{ background: '#F8FAFC' }}>
+                  {["Incident ID", "Type", "Severity", "Status", "Date"].map(h => (
+                    <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: '#64748B', fontWeight: 700 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentIncidents.map(inc => (
+                  <tr
+                    key={inc.id}
+                    className="cursor-pointer hover:bg-[#F8FAFC] transition-colors"
+                    style={{ borderTop: '1px solid #E2E8F0' }}
+                    onClick={() => navigate(`/violations/${inc.id}`)}
+                  >
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#4A57B9', fontWeight: 600 }}>INC-{String(inc.id).padStart(5, '0')}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.incident_type || '—'}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.severity || '—'}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.investigation_status || 'Pending'}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#64748B' }}>
+                      {inc.incident_date_time ? new Date(inc.incident_date_time).toLocaleDateString() : (inc.report_date || '—')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">

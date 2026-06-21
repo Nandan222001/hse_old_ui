@@ -1,15 +1,8 @@
 import { useState, useEffect } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getRiskSummary, type TaskRow, type AgingBar } from "../../services/analytics.service";
-
-// Static — no quarterly risk model in backend
-const residualTrend = [
-  { q: "Q1", risk: 90 },
-  { q: "Q2", risk: 64 },
-  { q: "Q3", risk: 48 },
-  { q: "Q4", risk: 34 },
-];
+import { getRiskSummary, getResidualRiskTrend, getRiskMatrix, type TaskRow, type AgingBar } from "../../services/analytics.service";
+import { useAuth } from "../context/AuthContext";
 
 const matrixCols = ["Frequent 5", "Probable 4", "Occasional 3", "Remote 2", "Improbable 1"];
 const matrixRows = ["Catastrophic 5", "Significant 4", "Moderate 3", "Low 2", "Negligible 1"];
@@ -71,10 +64,13 @@ function KpiCard({ title, value, subtitle, hint, valueColor = "#1F2937" }: Reado
 }
 
 export function RiskPage() {
+  const { user } = useAuth();
   const [zoneRisk, setZoneRisk] = useState<{ zone: string; value: number }[]>([]);
   const [taskRows, setTaskRows] = useState<TaskRow[]>([]);
   const [agingBars, setAgingBars] = useState<AgingBar[]>([]);
   const [kpis, setKpis] = useState<{ control_effectiveness: string; unverified_controls: number; risk_escalations: number } | null>(null);
+  const [residualTrend, setResidualTrend] = useState<{ q: string; risk: number }[]>([]);
+  const [matrixCounts, setMatrixCounts] = useState<number[][]>(Array.from({ length: 5 }, () => Array(5).fill(0)));
 
   useEffect(() => {
     getRiskSummary().then((data) => {
@@ -83,16 +79,18 @@ export function RiskPage() {
       setAgingBars(data.aging_bars);
       setKpis(data.kpis);
     }).catch(console.error);
+    getResidualRiskTrend().then(setResidualTrend).catch(console.error);
+    getRiskMatrix().then((d) => setMatrixCounts(d.counts)).catch(console.error);
   }, []);
 
   return (
     <div className="space-y-4">
       <div>
-        <h1>Welcome , User</h1>
+        <h1>Welcome, {user?.name ?? "User"}</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <KpiCard title="Control Effectiveness Score" value={kpis ? kpis.control_effectiveness : "—"} subtitle="Effective" hint="▲ 80%" />
+        <KpiCard title="Control Effectiveness Score" value={kpis ? kpis.control_effectiveness : "—"} subtitle="Effective" hint="" />
         <KpiCard title="Unverified Controls" value={kpis ? String(kpis.unverified_controls) : "—"} subtitle="Pending Review" hint="" />
         <KpiCard title="Risk Escalations ⚠" value={kpis ? String(kpis.risk_escalations) : "—"} subtitle="Requires Immediate Action" hint="" />
       </div>
@@ -132,10 +130,13 @@ export function RiskPage() {
                     <td className="px-2 py-2 text-[12px]" style={{ color: '#334155', fontWeight: 700 }}>{row}</td>
                     {matrixCells[rowIdx].map((cell, colIdx) => {
                       const tone = toneStyle(cell.tone);
+                      const count = matrixCounts[rowIdx]?.[colIdx] ?? 0;
                       return (
                         <td key={`${row}-${colIdx}`} className="px-1 py-1">
                           <div className="rounded-md px-2 py-1 text-center" style={{ background: tone.bg, color: tone.text }}>
-                            <div className="text-[14px] leading-none" style={{ fontWeight: 800 }}>{cell.score}</div>
+                            <div className="text-[14px] leading-none" style={{ fontWeight: 800 }}>
+                              {count > 0 ? count : "—"}
+                            </div>
                             <div className="text-[11px]" style={{ fontWeight: 600 }}>{cell.text}</div>
                           </div>
                         </td>
@@ -166,7 +167,7 @@ export function RiskPage() {
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-2 h-2 rounded-full" style={{ background: '#F3F4F6' }}>
-            <div className="h-full rounded-full" style={{ width: '84%', background: '#E9B13D' }} />
+            <div className="h-full rounded-full" style={{ width: `${zoneRisk.length > 0 ? Math.round(Math.max(...zoneRisk.map(z => z.value)) / zoneRisk.reduce((s, z) => s + z.value, 0) * 100) : 0}%`, background: '#E9B13D' }} />
           </div>
         </div>
       </div>

@@ -197,6 +197,7 @@ function Step1({ onNext, dataEntryOption: parentDataEntryOption, onDataEntryChan
   const [excelMsg, setExcelMsg] = useState("");
   const [apiUrl, setApiUrl] = useState(""); const [apiKey, setApiKey] = useState(""); const [apiToken, setApiToken] = useState("");
   const [apiStatus, setApiStatus] = useState<"idle"|"success"|"error">("idle"); const [apiMsg, setApiMsg] = useState("");
+  const [step1Error, setStep1Error] = useState("");
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -237,6 +238,10 @@ function Step1({ onNext, dataEntryOption: parentDataEntryOption, onDataEntryChan
   };
 
   const handleNext = async () => {
+    if (!form.organisationName.trim()) { setStep1Error("Organisation Name is required."); return; }
+    if (!form.country.trim()) { setStep1Error("Country is required."); return; }
+    if (!form.industrySector) { setStep1Error("Industry Sector is required."); return; }
+    setStep1Error("");
     await saveStep1({ ...form, numberOfEmployees: Number(form.numberOfEmployees) || 0, dataEntryOption: parentDataEntryOption, ...(parentDataEntryOption === "api" ? { apiUrl, apiKey, apiToken } : {}) });
     onNext();
   };
@@ -305,6 +310,7 @@ function Step1({ onNext, dataEntryOption: parentDataEntryOption, onDataEntryChan
         <OrgDetailsForm form={form} set={set} />
       </div>
 
+      {step1Error && <div className="px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2" style={{ background: "#FEF2F2", color: "#EF4444", border: "1px solid #FECACA" }}><AlertTriangle className="w-4 h-4 flex-shrink-0" />{step1Error}</div>}
       <div className="flex justify-end">
         <button className={primaryBtnCls} style={primaryBtnStyle} onClick={handleNext} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}Next Step <ChevronRight className="w-4 h-4" />
@@ -426,7 +432,7 @@ function Step2({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
 
       <div className={cardCls} style={cardStyle}>
         <h2 className="text-base font-bold mb-4" style={{ color: "#111827" }}>Audit Schedule & Closure Timelines</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
           <div><label className={labelCls} style={labelStyle}>Audit Frequency</label><select className={inputCls} style={inputStyle} value={auditFrequency} onChange={(e) => setAuditFrequency(e.target.value)}><option value="">Select frequency</option><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Bi-Annual">Bi-Annual</option><option value="Annual">Annual</option></select></div>
           <div><label className={labelCls} style={labelStyle}>Critical Finding Closure (days)</label><input type="number" min="1" placeholder="7" value={criticalDays} onChange={(e) => setCriticalDays(e.target.value)} className={inputCls} style={inputStyle} /></div>
           <div><label className={labelCls} style={labelStyle}>Standard Finding Closure (days)</label><input type="number" min="1" placeholder="30" value={standardDays} onChange={(e) => setStandardDays(e.target.value)} className={inputCls} style={inputStyle} /></div>

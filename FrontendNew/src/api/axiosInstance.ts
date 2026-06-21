@@ -42,6 +42,16 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
+
+    if (status === 401) {
+      localStorage.removeItem('hse_jwt_token');
+      localStorage.removeItem('hse_auth');
+      localStorage.removeItem('hse_user');
+      localStorage.removeItem('hse_subscription');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
     const message =
       error.response?.data?.error ||
       error.response?.statusText ||

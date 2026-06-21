@@ -2,38 +2,23 @@ import { useState, useEffect } from "react";
 import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { getViolationsSummary, type RcaItem } from "../../services/analytics.service";
+import { getViolationsSummary, getPermitsSummary, type RcaItem, type SeverityMixItem, type WorkByType } from "../../services/analytics.service";
 import { getSites } from "../../services/infrastructure.service";
 
-// ⚠️ DUMMY DATA — REMEMBER: no PPE-tracking table exists anywhere in the
-// schema (checked employees/safety_walks/hazards/policies — nothing records
-// per-PPE-item compliance). Kept as hardcoded placeholder data by explicit
-// request (2026-06-17) rather than wired to a real source. Revisit if a real
-// PPE compliance model/table is ever added.
-const ppeData = [
-  { name: "Hard Hat", compliance: 96 },
-  { name: "Safety Vest", compliance: 92 },
-  { name: "Safety Shoes", compliance: 89 },
-  { name: "Gloves", compliance: 85 },
-  { name: "Goggles", compliance: 78 },
-];
-
-// ⚠️ DUMMY DATA — REMEMBER: no report-scheduling/email table exists anywhere
-// in the schema. Kept as hardcoded placeholder data by explicit request
-// (2026-06-17) rather than wired to a real source. Revisit if a real
-// scheduled-reports feature/table is ever added.
-const scheduledReports = [
-  { name: "Weekly Compliance Summary", type: "Compliance", freq: "Weekly", recipients: "safety-team@co.com", lastSent: "Feb 14, 2026", nextSend: "Feb 21, 2026", status: "Active" },
-  { name: "Monthly Incident Report", type: "Incident", freq: "Monthly", recipients: "management@co.com", lastSent: "Jan 31, 2026", nextSend: "Feb 28, 2026", status: "Active" },
-  { name: "Daily Violation Alert", type: "Violations", freq: "Daily", recipients: "supervisors@co.com", lastSent: "Feb 18, 2026", nextSend: "Feb 19, 2026", status: "Active" },
-];
+const ppeData: { name: string; compliance: number }[] = [];
+const scheduledReports: { name: string; type: string; freq: string; recipients: string; lastSent: string; nextSend: string; status: string }[] = [];
 
 export function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [pieData, setPieData] = useState<RcaItem[]>([]);
   const [zoneRiskData, setZoneRiskData] = useState<{ name: string; risk: number; violations: number }[]>([]);
   const [trendData, setTrendData] = useState<{ month: string; violations: number; resolved: number }[]>([]);
+  const [severityMix, setSeverityMix] = useState<SeverityMixItem[]>([]);
+  const [personInvolved, setPersonInvolved] = useState<{ label: string; value: number }[]>([]);
   const [siteNames, setSiteNames] = useState<string[]>([]);
+  const [contractorCompliantPct, setContractorCompliantPct] = useState<number | null>(null);
+  const [contractorNonCompliantPct, setContractorNonCompliantPct] = useState<number | null>(null);
+  const [contractorWorkByType, setContractorWorkByType] = useState<WorkByType[]>([]);
 
   useEffect(() => {
     getSites().then((sites) => setSiteNames(sites.map((s) => s.Site_Name))).catch(console.error);
@@ -42,6 +27,8 @@ export function AnalyticsPage() {
   useEffect(() => {
     getViolationsSummary(12).then((data) => {
       setPieData(data.by_root_cause);
+      setSeverityMix(data.severity_mix);
+      setPersonInvolved(data.person_involved);
 
       // Normalize to 0-100 relative to the busiest location — the risk-color
       // thresholds below (40/70) are calibrated for a percentage scale, and
@@ -65,6 +52,14 @@ export function AnalyticsPage() {
           resolved: nearMissMap[t.month] ?? 0,
         }))
       );
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    getPermitsSummary().then((data) => {
+      setContractorCompliantPct(data.contractor_compliant_pct);
+      setContractorNonCompliantPct(data.contractor_non_compliant_pct);
+      setContractorWorkByType(data.work_by_type);
     }).catch(console.error);
   }, []);
 
@@ -180,24 +175,207 @@ export function AnalyticsPage() {
       {activeTab === "ppe" && (
         <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
           <h2 className="mb-6">PPE Compliance by Type</h2>
-          <div className="space-y-5">
-            {ppeData.map(p => (
-              <div key={p.name}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[14px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{p.name}</span>
-                  <span className="text-[14px]" style={{ color: p.compliance >= 90 ? '#2E7D32' : p.compliance >= 80 ? '#F59E0B' : '#DC2626', fontWeight: 600 }}>{p.compliance}%</span>
+          {ppeData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16" style={{ background: '#F4F7F4', borderRadius: 12 }}>
+              <p className="text-[15px] mb-1" style={{ color: '#0A0A0A', fontWeight: 500 }}>No PPE compliance data available</p>
+              <p className="text-[13px]" style={{ color: '#9CA3AF' }}>PPE tracking has not been configured for this organisation</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {ppeData.map(p => (
+                <div key={p.name}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[14px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{p.name}</span>
+                    <span className="text-[14px]" style={{ color: p.compliance >= 90 ? '#2E7D32' : p.compliance >= 80 ? '#F59E0B' : '#DC2626', fontWeight: 600 }}>{p.compliance}%</span>
+                  </div>
+                  <div className="h-3 rounded-full" style={{ background: '#F4F7F4' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${p.compliance}%`,
+                        background: p.compliance >= 90 ? 'linear-gradient(135deg, #1B5E20, #43A047)' : p.compliance >= 80 ? '#F59E0B' : '#DC2626',
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="h-3 rounded-full" style={{ background: '#F4F7F4' }}>
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${p.compliance}%`,
-                      background: p.compliance >= 90 ? 'linear-gradient(135deg, #1B5E20, #43A047)' : p.compliance >= 80 ? '#F59E0B' : '#DC2626',
-                    }}
-                  />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "contractor" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+              <div className="text-[14px] mb-2" style={{ color: '#4A5568', fontWeight: 600 }}>Contractor Permit Compliance</div>
+              <div className="text-[52px] leading-none" style={{ color: '#2E7D32', fontWeight: 700 }}>{contractorCompliantPct !== null ? `${contractorCompliantPct}%` : "—"}</div>
+              <div className="mt-2 text-[13px]" style={{ color: '#9CA3AF' }}>Permits with no deviation or incident</div>
+            </div>
+            <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+              <div className="text-[14px] mb-2" style={{ color: '#4A5568', fontWeight: 600 }}>Contractor Non-Compliance</div>
+              <div className="text-[52px] leading-none" style={{ color: '#DC2626', fontWeight: 700 }}>{contractorNonCompliantPct !== null ? `${contractorNonCompliantPct}%` : "—"}</div>
+              <div className="mt-2 text-[13px]" style={{ color: '#9CA3AF' }}>Permits with reported deviations</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+              <h2 className="mb-6">Incidents by Employment Type</h2>
+              {personInvolved.length === 0 ? (
+                <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No incident data available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={personInvolved}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2EE" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E8E2', borderRadius: 8 }} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={36} fill="#1B5E20" name="Incidents" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+              <h2 className="mb-6">Permit Status by Type</h2>
+              {contractorWorkByType.length === 0 ? (
+                <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No permit data available</div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={contractorWorkByType} layout="vertical" barSize={18}>
+                      <XAxis type="number" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} domain={[0, 100]} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#334155' }} axisLine={false} tickLine={false} width={100} />
+                      <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E8E2', borderRadius: 8 }} />
+                      <Bar dataKey="active" stackId="a" fill="#2E7D32" name="Active" />
+                      <Bar dataKey="closed" stackId="a" fill="#43A047" name="Closed" />
+                      <Bar dataKey="expired" stackId="a" fill="#9CA3AF" name="Expired" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex gap-4 mt-3 text-[12px]" style={{ color: '#4A5568' }}>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#2E7D32' }} /> Active</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#43A047' }} /> Closed</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#9CA3AF' }} /> Expired</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "zone" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <h2 className="mb-6">Incident Count by Zone / Site</h2>
+            {zoneRiskData.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No zone risk data available</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={zoneRiskData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2EE" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E8E2', borderRadius: 8 }} formatter={(v) => [v, 'Incidents']} />
+                  <Bar dataKey="violations" radius={[4, 4, 0, 0]} barSize={40} name="Incidents">
+                    {zoneRiskData.map((entry) => (
+                      <Cell key={`cell-${entry.name}`} fill={entry.risk > 70 ? '#DC2626' : entry.risk > 40 ? '#F59E0B' : '#2E7D32'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+          {zoneRiskData.length > 0 && (
+            <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+              <h2 className="mb-4">Zone Risk Summary</h2>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: '#F4F7F4' }}>
+                    {["Zone / Site", "Incidents", "Risk Level"].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[11px] uppercase" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {zoneRiskData.map((z) => (
+                    <tr key={z.name} style={{ borderBottom: '1px solid #EEF2EE' }}>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{z.name}</td>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{z.violations}</td>
+                      <td className="px-4 py-3">
+                        <span className="px-3 py-1 rounded-full text-[12px]" style={{
+                          background: z.risk > 70 ? '#FEE2E2' : z.risk > 40 ? '#FEF3C7' : '#DCFCE7',
+                          color: z.risk > 70 ? '#991B1B' : z.risk > 40 ? '#92400E' : '#166534',
+                          fontWeight: 600,
+                        }}>
+                          {z.risk > 70 ? 'High' : z.risk > 40 ? 'Medium' : 'Low'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "trend" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <h2 className="mb-6">Monthly Incidents vs Near Misses</h2>
+            {trendData.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No trend data available</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2EE" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E8E2', borderRadius: 8 }} />
+                    <Line type="monotone" dataKey="violations" stroke="#1B5E20" strokeWidth={2} dot={{ fill: '#1B5E20', r: 3 }} name="Incidents" />
+                    <Line type="monotone" dataKey="resolved" stroke="#43A047" strokeWidth={2} dot={{ fill: '#43A047', r: 3 }} strokeDasharray="5 5" name="Near Misses" />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="flex gap-6 mt-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5" style={{ background: '#1B5E20' }} />
+                    <span className="text-[12px]" style={{ color: '#4A5568' }}>Incidents</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: '#43A047' }} />
+                    <span className="text-[12px]" style={{ color: '#4A5568' }}>Near Misses</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              </>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <h2 className="mb-6">Incident Severity Mix by Month</h2>
+            {severityMix.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No severity data available</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={severityMix}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2EE" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E2E8E2', borderRadius: 8 }} />
+                    <Bar dataKey="critical" stackId="a" fill="#DC2626" name="Critical" />
+                    <Bar dataKey="high" stackId="a" fill="#F59E0B" name="High" />
+                    <Bar dataKey="medium" stackId="a" fill="#2E7D32" name="Medium" />
+                    <Bar dataKey="low" stackId="a" fill="#43A047" name="Low" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex gap-6 mt-4 text-[12px]" style={{ color: '#4A5568' }}>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#DC2626' }} /> Critical</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#F59E0B' }} /> High</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#2E7D32' }} /> Medium</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#43A047' }} /> Low</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -288,7 +466,11 @@ export function AnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {scheduledReports.map(r => (
+              {scheduledReports.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No scheduled reports configured</td>
+                </tr>
+              ) : scheduledReports.map(r => (
                 <tr key={r.name} className="group hover:bg-[#F9FBF9]" style={{ borderBottom: '1px solid #EEF2EE' }}>
                   <td className="px-4 py-3 text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{r.name}</td>
                   <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{r.type}</td>

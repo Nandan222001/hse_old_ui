@@ -227,7 +227,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             status, tone = "Low", "green"
         high_risk_roles.append({"role": name, "status": status, "tone": tone})
 
-    programs = _of(db.query(TrainingProgram).filter(TrainingProgram.expiry_months.isnot(None)), TrainingProgram, org_id).all()
+    programs = _of(db.query(TrainingProgram).filter(TrainingProgram.expiry_months > 0), TrainingProgram, org_id).all()
     employees_with_induction = _of(db.query(Employee).filter(Employee.induction_date.isnot(None)), Employee, org_id).all()
     expired_count = due_30_count = due_90_count = 0
     for emp in employees_with_induction:
@@ -352,6 +352,7 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
 
     org_id = current_user.org_id
 
+    # Always fetch imported employees
     q = (
         db.query(Employee, Role, Department, Site)
         .outerjoin(Role, Employee.role_id == Role.id)
@@ -362,38 +363,40 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
         q = q.filter(Employee.organisation_id == org_id)
     rows = q.order_by(Employee.full_name.asc()).all()
 
-    if rows:
-        return [
-            {
-                "id": emp.id,
-                "full_name": emp.full_name,
-                "role_name": role.role_name if role else None,
-                "department_name": dept.department_name if dept else None,
-                "site_name": site.site_name if site else None,
-                "employment_type": emp.employment_type,
-                "shift_pattern": emp.shift_pattern,
-                "active_status": emp.active_status,
-            }
-            for emp, role, dept, site in rows
-        ]
+    employee_result = [
+        {
+            "id": emp.id,
+            "full_name": emp.full_name,
+            "role_name": role.role_name if role else None,
+            "department_name": dept.department_name if dept else None,
+            "site_name": site.site_name if site else None,
+            "employment_type": emp.employment_type,
+            "shift_pattern": emp.shift_pattern,
+            "active_status": emp.active_status,
+        }
+        for emp, role, dept, site in rows
+    ]
 
-    # Fallback: when employees table is empty, show org users so the page is not blank
-    uq = (
-        db.query(User, AppRole)
-        .outerjoin(AppRole, User.app_role_id == AppRole.id)
-        .filter(
-            User.organisation_id == org_id,
-            AppRole.name.notin_(["superadmin", "admin"]),
+    # Always include non-admin org users (wizard step-4 / invited users)
+    if org_id is not None:
+        uq = (
+            db.query(User, AppRole)
+            .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .filter(
+                User.organisation_id == org_id,
+                AppRole.name.notin_(["superadmin", "admin"]),
+            )
         )
-        if org_id is not None
-        else db.query(User, AppRole)
+    else:
+        uq = (
+            db.query(User, AppRole)
             .outerjoin(AppRole, User.app_role_id == AppRole.id)
             .filter(AppRole.name.notin_(["superadmin", "admin"]))
-    )
+        )
     user_rows = uq.order_by(User.full_name.asc()).all()
-    return [
+    user_result = [
         {
-            "id": u.id,
+            "id": -(u.id),
             "full_name": u.full_name or u.username,
             "role_name": ar.label if ar else None,
             "department_name": None,
@@ -404,3 +407,6 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
         }
         for u, ar in user_rows
     ]
+
+    # Return system users first, then imported employees — always both
+    return user_result + employee_result

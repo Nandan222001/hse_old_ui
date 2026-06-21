@@ -741,13 +741,11 @@ const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
 
 interface AiImportRecord { id: string; dataType: string; method: string; records: number; importedAt: string; }
 
-function AiImportSection() {
+function AiImportSection({ onImportDone }: { onImportDone?: () => void }) {
   const [selectedType, setSelectedType] = useState("");
   const [bulkResult, setBulkResult] = useState<{ count: number; errors?: string[] } | null>(null);
   const [importing,  setImporting]  = useState(false);
   const [msg,        setMsg]        = useState<{ ok: boolean; text: string } | null>(null);
-  const [history,    setHistory]    = useState<AiImportRecord[]>([]);
-  const [histLoading, setHistLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function authHeaders(): Record<string, string> {
@@ -756,18 +754,6 @@ function AiImportSection() {
     if (jwt) h["Authorization"] = `Bearer ${jwt}`;
     return h;
   }
-
-  const fetchHistory = useCallback(async () => {
-    setHistLoading(true);
-    try {
-      const res  = await fetch(`${API_BASE}/org-setup/step6a/imports`, { headers: authHeaders() });
-      const json = await res.json().catch(() => ({}));
-      const items = json?.data ?? json?.items ?? json ?? [];
-      setHistory(Array.isArray(items) ? items : []);
-    } catch { /**/ } finally { setHistLoading(false); }
-  }, []);
-
-  useEffect(() => { void fetchHistory(); }, [fetchHistory]);
 
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file || !selectedType) return;
@@ -782,9 +768,8 @@ function AiImportSection() {
       const count  = data?.count ?? 0;
       const errors: string[] = data?.errors ?? [];
       setBulkResult({ count, errors });
-      if (count > 0) setMsg({ ok: true,  text: `${count} records imported successfully${errors.length > 0 ? ` (${errors.length} warning${errors.length > 1 ? "s" : ""})` : ""}.` });
+      if (count > 0) { setMsg({ ok: true,  text: `${count} records imported successfully${errors.length > 0 ? ` (${errors.length} warning${errors.length > 1 ? "s" : ""})` : ""}.` }); onImportDone?.(); }
       else           setMsg({ ok: false, text: errors[0] || "0 records imported — check column headers match the template." });
-      void fetchHistory();
     } catch (e: unknown) { setMsg({ ok: false, text: (e as Error).message || "Upload failed." }); }
     finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
   };
@@ -897,35 +882,6 @@ function AiImportSection() {
         )}
       </Card>
 
-      {/* Import History */}
-      <Card className="overflow-hidden" style={{ padding: 0 }}>
-        <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: "#E3E9F6", background: "#F9FAFB" }}>
-          <h3 className="text-sm font-bold" style={{ color: "#111827" }}>Import History ({history.length})</h3>
-          <button onClick={fetchHistory} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50" style={{ borderColor: "#E3E9F6", color: "#6B7280" }}>
-            <RefreshCw className={`w-3 h-3 ${histLoading ? "animate-spin" : ""}`} /> Refresh
-          </button>
-        </div>
-        {histLoading
-          ? <div className="flex justify-center py-10"><RefreshCw className="w-5 h-5 animate-spin" style={{ color: "#D1D5DB" }} /></div>
-          : history.length === 0
-          ? <div className="text-center py-10 text-sm" style={{ color: "#9CA3AF" }}>No imports yet — upload a file above to get started</div>
-          : <table className="w-full text-sm">
-              <thead><tr style={{ background: "#F9FAFB" }}>
-                {["Data Type","Method","Records","Date"].map(h => (
-                  <th key={h} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide" style={{ color: "#9CA3AF" }}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>{history.map(imp => (
-                <tr key={imp.id} className="border-t hover:bg-blue-50/20" style={{ borderColor: "#F3F4F6" }}>
-                  <td className="px-5 py-3 font-medium capitalize" style={{ color: "#111827" }}>{(imp.dataType ?? "").replace(/_/g, " ")}</td>
-                  <td className="px-5 py-3 capitalize" style={{ color: "#6B7280" }}>{imp.method ?? "—"}</td>
-                  <td className="px-5 py-3" style={{ color: "#6B7280" }}>{imp.records ?? "—"}</td>
-                  <td className="px-5 py-3" style={{ color: "#9CA3AF" }}>{imp.importedAt ? new Date(imp.importedAt).toLocaleDateString() : "—"}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-        }
-      </Card>
     </div>
   );
 }
@@ -934,7 +890,7 @@ function AiImportSection() {
 
 function ExcelTab() {
   const { data: imports = [], isLoading: importsLoading, refetch: refetchImports } = useListImportsQuery();
-  const { data: validLogs = [], isLoading: validLogsLoading } = useListValidationLogsQuery();
+  const { data: validLogs = [], isLoading: validLogsLoading, refetch: refetchValidLogs } = useListValidationLogsQuery();
   const totalImports    = imports.length;
   const successImports  = imports.filter(i => i.status === "success").length;
   const successRate     = totalImports > 0 ? Math.round((successImports / totalImports) * 100) : 0;
@@ -965,7 +921,7 @@ function ExcelTab() {
       </div>
 
       {/* ── AI Import (wizard-identical) ─────────────────────────────── */}
-      <AiImportSection />
+      <AiImportSection onImportDone={() => { void refetchImports(); void refetchValidLogs(); }} />
 
       {/* ── Import History ───────────────────────────────────────────── */}
       <div>

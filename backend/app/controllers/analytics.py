@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
+from app.models.hazard import Hazard
 from app.models.hazard_category import HazardCategory
 from app.models.incident import Incident
 from app.models.near_miss import NearMiss
@@ -436,6 +437,99 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         "contractor_compliant_pct": contractor_compliant_pct,
         "contractor_non_compliant_pct": contractor_non_compliant_pct,
     }
+
+
+@router.get("/residual-risk-trend")
+def get_residual_risk_trend(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
+
+    latest_dt = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
+    anchor = latest_dt.date() if latest_dt else date.today()
+
+    def _severity_weight(sev: str) -> int:
+        s = (sev or "").lower()
+        if "significant" in s:
+            return 5
+        if "lost time" in s or "major" in s:
+            return 4
+        if "serious" in s:
+            return 3
+        if "moderate" in s:
+            return 2
+        return 1
+
+    quarter_days = 91
+    raw_scores = []
+    for i in range(3, -1, -1):
+        q_end = anchor - timedelta(days=i * quarter_days)
+        q_start = q_end - timedelta(days=quarter_days)
+        rows = _org_filter(
+            db.query(Incident.severity).filter(
+                Incident.incident_date_time.isnot(None),
+                Incident.incident_date_time >= q_start,
+                Incident.incident_date_time < q_end,
+            ),
+            Incident, org_id,
+        ).all()
+        raw_scores.append(sum(_severity_weight(sev) for (sev,) in rows))
+
+    max_raw = max(raw_scores) if any(raw_scores) else 1
+    return [
+        {"q": f"Q{i + 1}", "risk": round(score / max_raw * 100) if max_raw else 0}
+        for i, score in enumerate(raw_scores)
+    ]
+
+
+@router.get("/risk-matrix")
+def get_risk_matrix(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
+
+    def _sev_row(sev: str) -> int | None:
+        s = (sev or "").lower()
+        if "fatal" in s or "catastrophic" in s:
+            return 0
+        if "significant" in s:
+            return 1
+        if "serious" in s or ("moderate" in s and "high" not in s):
+            return 2
+        if "low" in s or "minor" in s:
+            return 3
+        if "negligible" in s:
+            return 4
+        return None
+
+    def _prob_col(prob: str) -> int | None:
+        p = (prob or "").lower()
+        if "frequent" in p or "likely" in p:
+            return 0
+        if "probable" in p:
+            return 1
+        if "possible" in p or "occasional" in p:
+            return 2
+        if "unlikely" in p or "remote" in p:
+            return 3
+        if "rare" in p or "improbable" in p:
+            return 4
+        return None
+
+    hazards = _org_filter(
+        db.query(Hazard.severity, Hazard.probability), Hazard, org_id
+    ).all()
+
+    counts = [[0] * 5 for _ in range(5)]
+    for sev, prob in hazards:
+        r = _sev_row(sev or "")
+        c = _prob_col(prob or "")
+        if r is not None and c is not None:
+            counts[r][c] += 1
+
+    return {"counts": counts}
 
 
 @router.get("/risk-summary")
@@ -1000,6 +1094,24 @@ def get_engagement_summary(
     survey_score = round(float(avg_compliance or 0), 1)
     survey_score_pct = round(survey_score / 5 * 100)
 
+    avg_this_month = _org_filter(
+        db.query(func.avg(SafetyWalk.compliance_rating)).filter(
+            func.date(SafetyWalk.inspection_date_time) >= first_this_month
+        ),
+        SafetyWalk, org_id,
+    ).scalar()
+    avg_last_month = _org_filter(
+        db.query(func.avg(SafetyWalk.compliance_rating)).filter(
+            func.date(SafetyWalk.inspection_date_time) >= first_last_month,
+            func.date(SafetyWalk.inspection_date_time) < first_this_month,
+        ),
+        SafetyWalk, org_id,
+    ).scalar()
+    if avg_this_month is not None and avg_last_month is not None:
+        survey_score_mom = round(float(avg_this_month) - float(avg_last_month), 1)
+    else:
+        survey_score_mom = None
+
     # Safety observations % — walks with high compliance (rating >= 4)
     total_walks = int(
         _org_filter(db.query(func.count(SafetyWalk.id)), SafetyWalk, org_id).scalar() or 0
@@ -1138,10 +1250,144 @@ def get_engagement_summary(
         "reporting_rate_mom": reporting_rate_mom,
         "survey_score": survey_score,
         "survey_score_pct": survey_score_pct,
+        "survey_score_mom": survey_score_mom,
         "safety_observations_pct": safety_observations_pct,
         "safety_walks_pct": safety_walks_pct,
         "toolbox_attendance_pct": toolbox_pct,
         "site_participation_pct": site_participation_pct,
         "top_recognitions": top_recognitions,
         "open_actions": open_actions,
+    }
+
+
+@router.get("/violation-detail/{incident_id}")
+def get_violation_detail(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    org_id = current_user.org_id
+
+    row = (
+        db.query(Incident, WorkingStation, Site, Employee)
+        .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
+        .outerjoin(Site, WorkingStation.site_id == Site.id)
+        .outerjoin(Employee, Incident.reported_by == Employee.id)
+        .filter(Incident.id == incident_id)
+        .filter(*([Incident.organisation_id == org_id] if org_id is not None else []))
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    inc, ws, site, reporter = row
+
+    capa_rows = (
+        db.query(CapaAction, Employee)
+        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+        .filter(CapaAction.incident_id == inc.id)
+        .order_by(CapaAction.due_date.asc())
+        .all()
+    )
+
+    capa_list = [
+        {
+            "id": f"CAPA-{c.id:03d}",
+            "action_type": c.action_type or "Corrective Action",
+            "description": c.description or "",
+            "responsible_person": emp.full_name if emp else "Unassigned",
+            "due_date": c.due_date.strftime("%b %d, %Y") if c.due_date else None,
+            "status": c.status or "Pending",
+        }
+        for c, emp in capa_rows
+    ]
+
+    def _status_step(s: str) -> int:
+        sl = (s or "").lower()
+        if "complete" in sl or "closed" in sl:
+            return 4
+        if "progress" in sl:
+            return 3
+        if "acknowledge" in sl:
+            return 2
+        if "assign" in sl:
+            return 1
+        return 0
+
+    def _map_severity(sev: str) -> str:
+        s = (sev or "").lower()
+        if "fatal" in s or "critical" in s or "catastrophic" in s or "significant" in s:
+            return "Critical"
+        if "major" in s or "lost time" in s or "high" in s or "serious" in s:
+            return "High"
+        if "moderate" in s or "medium" in s:
+            return "Medium"
+        return "Low"
+
+    def _fmt_dt(dt_val) -> str:
+        if dt_val is None:
+            return "Unknown"
+        if hasattr(dt_val, "hour"):
+            return dt_val.strftime("%b %d, %Y %I:%M %p")
+        return dt_val.strftime("%b %d, %Y")
+
+    timeline = []
+    if inc.incident_date_time or inc.report_date:
+        timeline.append({
+            "action": "Incident Reported",
+            "user": reporter.full_name if reporter else "System",
+            "time": _fmt_dt(inc.incident_date_time or inc.report_date),
+            "type": "reported",
+        })
+    for c, emp in capa_rows:
+        timeline.append({
+            "action": f"CAPA: {c.action_type or 'Corrective Action'}",
+            "user": emp.full_name if emp else "Unassigned",
+            "time": c.due_date.strftime("%b %d, %Y") if c.due_date else "No date",
+            "type": "capa",
+        })
+    inv_status = inc.investigation_status or "Pending"
+    if ("complete" in inv_status.lower() or "closed" in inv_status.lower()) and timeline:
+        timeline.append({
+            "action": "Investigation Closed",
+            "user": "System",
+            "time": _fmt_dt(inc.incident_date_time or inc.report_date),
+            "type": "closed",
+        })
+
+    assignee = None
+    if capa_rows:
+        _, first_emp = capa_rows[0]
+        if first_emp:
+            assignee = {"name": first_emp.full_name, "role": "Responsible Person"}
+
+    first_due = (
+        capa_rows[0][0].due_date.strftime("%Y-%m-%d")
+        if capa_rows and capa_rows[0][0].due_date
+        else None
+    )
+
+    return {
+        "id": f"INC-{inc.id:05d}",
+        "incident_type": inc.incident_type or "Unknown",
+        "severity": _map_severity(inc.severity or ""),
+        "raw_severity": inc.severity or "Unknown",
+        "investigation_status": inv_status,
+        "status_step": _status_step(inv_status),
+        "incident_datetime": _fmt_dt(inc.incident_date_time or inc.report_date),
+        "description": inc.description or "",
+        "immediate_cause": inc.immediate_cause or "—",
+        "root_cause": inc.root_cause or inc.root_cause_category or "Under investigation",
+        "zone": ws.zone_classification if ws else "—",
+        "station": ws.station_name if ws else "—",
+        "site": site.site_name if site else "—",
+        "reporter": reporter.full_name if reporter else "Unknown",
+        "permit_active": inc.permit_active or "No",
+        "days_away": inc.days_away or 0,
+        "number_persons_involved": inc.number_persons_involved or 0,
+        "control_failure": inc.control_failure or "No",
+        "capa_actions": capa_list,
+        "timeline": timeline,
+        "assignee": assignee,
+        "due_date": first_due,
     }
