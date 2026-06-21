@@ -239,17 +239,25 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
             <div className="rounded-full px-3 py-1 text-[12px]" style={{ background: "#EEF4FF", color: "#3957C5", fontWeight: 600 }}>Weekly trend</div>
           </div>
           <div className="mt-4 h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={fatigueTrend}>
-                <CartesianGrid stroke="#EEF2F7" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
-                <Line yAxisId="left" type="monotone" dataKey="normal" stroke="#66708E" strokeWidth={3} dot={{ r: 2.5, fill: "#66708E" }} activeDot={{ r: 4 }} />
-                <Line yAxisId="right" type="monotone" dataKey="overtime" stroke="#C9A246" strokeWidth={3} dot={{ r: 2.5, fill: "#C9A246" }} activeDot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            {fatigueTrend.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed" style={{ borderColor: "#D1D5DB" }}>
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>
+                <p className="text-[13px] font-medium" style={{ color: "#6B7280" }}>No shift schedule data uploaded</p>
+                <p className="text-[11px]" style={{ color: "#9CA3AF" }}>Upload shift schedule via Data Management to see fatigue trends</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={fatigueTrend}>
+                  <CartesianGrid stroke="#EEF2F7" vertical={false} />
+                  <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="normal" stroke="#66708E" strokeWidth={3} dot={{ r: 2.5, fill: "#66708E" }} activeDot={{ r: 4 }} />
+                  <Line yAxisId="right" type="monotone" dataKey="overtime" stroke="#C9A246" strokeWidth={3} dot={{ r: 2.5, fill: "#C9A246" }} activeDot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
