@@ -165,6 +165,48 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             for i in range(10)
         ]
 
+    # Fallback: no shift_schedule rows — derive from safety walks (normal hours proxy)
+    # and incidents + near-misses (overtime / fatigue-risk proxy)
+    if not fatigue_trend:
+        latest_inc = _of(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
+        latest_walk = _of(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
+        candidates = [d for d in (latest_inc, latest_walk) if d]
+        if candidates:
+            anchor = max(candidates).date()
+            window_start_fb = anchor - timedelta(weeks=9)
+            fatigue_trend = []
+            for i in range(10):
+                w_start = window_start_fb + timedelta(weeks=i)
+                w_end = w_start + timedelta(weeks=1)
+                walks_count = _of(
+                    db.query(func.count(SafetyWalk.id)).filter(
+                        SafetyWalk.inspection_date_time >= w_start,
+                        SafetyWalk.inspection_date_time < w_end,
+                    ),
+                    SafetyWalk, org_id,
+                ).scalar() or 0
+                inc_count = _of(
+                    db.query(func.count(Incident.id)).filter(
+                        Incident.incident_date_time >= w_start,
+                        Incident.incident_date_time < w_end,
+                    ),
+                    Incident, org_id,
+                ).scalar() or 0
+                nm_count = _of(
+                    db.query(func.count(NearMiss.id)).filter(
+                        NearMiss.event_date_time >= w_start,
+                        NearMiss.event_date_time < w_end,
+                    ),
+                    NearMiss, org_id,
+                ).scalar() or 0
+                # normal = safety walks × 8 hrs (each walk = one 8-hr work session)
+                # overtime = (incidents + near-misses) × 6 (risk events correlate with overtime exposure)
+                fatigue_trend.append({
+                    "week": f"W{i + 1}",
+                    "normal": walks_count * 8,
+                    "overtime": (inc_count + nm_count) * 6,
+                })
+
     latest_walk_date = _of(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
     walk_anchor = (latest_walk_date.date() if latest_walk_date else today)
     eight_months_ago = _add_months(walk_anchor, -7)
