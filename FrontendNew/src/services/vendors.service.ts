@@ -43,7 +43,7 @@ export interface OpenAction {
 }
 
 export interface VendorSummary {
-  risk_score: { value: number; delta: number; up: boolean };
+  risk_score: { value: number; delta: number | null; up: boolean };
   total_contractors: number;
   compliance: ComplianceSegment[];
   exposure_hours: ExposureMonth[];

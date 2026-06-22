@@ -96,7 +96,11 @@ def get_vendor_summary(
     ]
 
     # ── Risk Score (10 − penalty from incident rate) ─────────────────────────
+    # Current period: last 90 days. Previous period: 90–180 days ago.
+    prev_ninety_ago = today - timedelta(days=180)
+
     inc_count = 0
+    prev_inc_count = 0
     if contractor_ids:
         inc_count = (
             db.query(func.count(Incident.id))
@@ -105,11 +109,23 @@ def get_vendor_summary(
                 Incident.reported_by.in_(contractor_ids),
                 Incident.report_date >= ninety_ago,
             )
-            .scalar()
-            or 0
+            .scalar() or 0
         )
-    raw = max(0.0, 10.0 - (inc_count / max(total, 1)) * 3.0)
+        prev_inc_count = (
+            db.query(func.count(Incident.id))
+            .filter(
+                Incident.organisation_id == org_id,
+                Incident.reported_by.in_(contractor_ids),
+                Incident.report_date >= prev_ninety_ago,
+                Incident.report_date < ninety_ago,
+            )
+            .scalar() or 0
+        )
+
+    raw       = max(0.0, 10.0 - (inc_count      / max(total, 1)) * 3.0)
+    prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 3.0)
     risk_score = round(raw, 1)
+    delta      = round(raw - prev_raw, 1)  # positive = improved, negative = worsened
 
     # ── Exposure Hours per month (permits) ───────────────────────────────────
     permit_rows = (
@@ -290,7 +306,7 @@ def get_vendor_summary(
     ]
 
     return {
-        "risk_score":        {"value": risk_score, "delta": 1.5, "up": True},
+        "risk_score":        {"value": risk_score, "delta": delta if total > 0 else None, "up": delta >= 0},
         "total_contractors": total,
         "compliance":        compliance,
         "exposure_hours":    exposure_hours,

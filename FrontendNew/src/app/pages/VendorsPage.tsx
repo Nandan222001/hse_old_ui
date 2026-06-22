@@ -174,13 +174,15 @@ export function VendorsPage() {
               <span className="text-[48px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>
                 {data.risk_score.value}/10
               </span>
-              <div className="mb-2 flex items-center gap-1 rounded-full px-2.5 py-1"
-                style={{ background: data.risk_score.up ? "#DCFCE7" : "#FEE2E2" }}>
-                <TrendingUp className="w-3.5 h-3.5" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444" }} />
-                <span className="text-[13px]" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444", fontWeight: 700 }}>
-                  {data.risk_score.delta}
-                </span>
-              </div>
+              {data.risk_score.delta !== null && (
+                <div className="mb-2 flex items-center gap-1 rounded-full px-2.5 py-1"
+                  style={{ background: data.risk_score.up ? "#DCFCE7" : "#FEE2E2" }}>
+                  <TrendingUp className="w-3.5 h-3.5" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444" }} />
+                  <span className="text-[13px]" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444", fontWeight: 700 }}>
+                    {data.risk_score.delta > 0 ? "+" : ""}{data.risk_score.delta}
+                  </span>
+                </div>
+              )}
             </div>
             <p className="mt-1 text-[12px]" style={{ color: "#6B7280" }}>
               Based on {data.total_contractors} contractor{data.total_contractors !== 1 ? "s" : ""} tracked
