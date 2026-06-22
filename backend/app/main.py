@@ -29,6 +29,7 @@ from app.controllers import (
     data_management as data_management_controller,
     org_users as org_users_controller,
     equipment_certification as equipment_certification_controller,
+    notification as notification_controller,
 )
 
 settings = get_settings()
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(data_management_controller.router, prefix=prefix)
     app.include_router(org_users_controller.router, prefix=prefix)
     app.include_router(equipment_certification_controller.router, prefix=prefix)
+    app.include_router(notification_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

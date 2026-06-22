@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { Upload, Plus, Copy, Eye, EyeOff, Trash2, Palette, FileText, Loader2 } from "lucide-react";
 
@@ -30,8 +31,12 @@ const knowledgeBaseDocs = [
   { name: "Incident_Reporting_Guidelines.txt", size: "45 KB", uploaded: "Mar 10, 2026", status: "Pending" },
 ];
 
+const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge"];
+
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("general");
+  const [searchParams] = useSearchParams();
+  const initialTab = VALID_SETTINGS_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "general";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isUploading, setIsUploading] = useState(false);
   const [docsList, setDocsList] = useState(knowledgeBaseDocs);
   const fileInputRef = useRef<HTMLInputElement>(null);

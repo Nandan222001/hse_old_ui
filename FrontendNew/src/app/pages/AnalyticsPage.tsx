@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { StatusBadge } from "../components/shared/StatusBadge";
@@ -8,8 +9,12 @@ import { getSites } from "../../services/infrastructure.service";
 const ppeData: { name: string; compliance: number }[] = [];
 const scheduledReports: { name: string; type: string; freq: string; recipients: string; lastSent: string; nextSend: string; status: string }[] = [];
 
+const VALID_TABS = ["overview", "ppe", "contractor", "zone", "trend", "custom"];
+
 export function AnalyticsPage() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams] = useSearchParams();
+  const initialTab = VALID_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "overview";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [pieData, setPieData] = useState<RcaItem[]>([]);
   const [zoneRiskData, setZoneRiskData] = useState<{ name: string; risk: number; violations: number }[]>([]);
   const [trendData, setTrendData] = useState<{ month: string; violations: number; resolved: number }[]>([]);

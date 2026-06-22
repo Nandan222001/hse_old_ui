@@ -23,6 +23,7 @@ from app.models.user import User
 from app.models.organisation_invite import OrganisationInvite
 from app.models.subscription import Subscription
 from app.models.notification import Notification
+from app.models.notification_read import NotificationRead
 from app.models.data_import import DataImport
 from app.models.validation_log import ValidationLog
 from app.models.api_integration import ApiIntegration
@@ -34,7 +35,7 @@ __all__ = [
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
-    "OrganisationInvite", "Subscription", "Notification",
+    "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
     "EquipmentCertification",
 ]

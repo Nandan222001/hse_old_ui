@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Activity, AlertTriangle, Clock3, HeartPulse, PieChart as PieChartIcon, ShieldAlert, Users, type LucideIcon } from "lucide-react";
-import { BarChart, Bar, Cell, CartesianGrid, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarChart, Bar, Cell, CartesianGrid, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../services/analytics.service";
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
@@ -122,14 +122,31 @@ export function ViolationsPage() {
                 <HorizontalBars data={injuryCategoryData} />
               </DarkPanel>
               <DarkPanel title="Incident Cause Category" icon={PieChartIcon}>
-                <ResponsiveContainer width="100%" height={132}>
+                <ResponsiveContainer width="100%" height={185}>
                   <PieChart>
-                    <Pie data={causeData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={52} paddingAngle={2} cx="50%" cy="50%">
+                    <Pie
+                      data={causeData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={32}
+                      outerRadius={50}
+                      paddingAngle={2}
+                      cx="50%"
+                      cy="38%"
+                    >
                       {causeData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value, name) => [value, name]} />
+                    <Legend
+                      iconSize={7}
+                      iconType="circle"
+                      formatter={(value: string) =>
+                        value.length > 18 ? value.slice(0, 18) + '…' : value
+                      }
+                      wrapperStyle={{ fontSize: 10, lineHeight: '18px', paddingTop: 6 }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </DarkPanel>
@@ -188,10 +205,20 @@ export function ViolationsPage() {
         <div className="space-y-4">
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
             <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Trend</div>
-            <ResponsiveContainer width="100%" height={130}>
-              <LineChart data={monthlyNearMiss} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={monthlyNearMiss} margin={{ top: 6, right: 8, bottom: 10, left: 0 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} interval={0} />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 10, fill: '#6B7280' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-40}
+                  textAnchor="end"
+                  height={40}
+                  tickFormatter={(v: string) => String(v).slice(0, 3)}
+                />
                 <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                 <Tooltip />
                 <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={3} dot={{ r: 3, fill: '#6F80E8' }} />

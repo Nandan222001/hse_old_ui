@@ -1,7 +1,11 @@
-import { Search, Bell, ChevronDown, ChevronRight, Moon, Sun, LogOut, FileBarChart, Settings as SettingsIcon, BarChart3, History, Sparkles, ExternalLink, Users, Database, Menu } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Moon, Sun, LogOut, FileBarChart, Settings as SettingsIcon, BarChart3, History, Users, Database, Menu, AlertTriangle, Clock, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
+import {
+  getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead,
+  type NotificationItem,
+} from "../../../services/notifications.service";
 
 const breadcrumbMap: Record<string, string> = {
   "/": "Dashboard",
@@ -33,40 +37,62 @@ interface TopNavbarProps {
 export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, subscriptionPlan, setSubscriptionPlan } = useAuth();
+  const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showReportsMenu, setShowReportsMenu] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [notifItems, setNotifItems] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const menuRef = useRef<HTMLDivElement>(null);
+  const reportsMenuRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+  const notifMenuRef = useRef<HTMLDivElement>(null);
+
   const currentPage = breadcrumbMap[location.pathname] || "Dashboard";
   const orgLabel = (user?.companyName || user?.orgCode || "").trim();
-  const isFreePlan = subscriptionPlan === "Free";
 
   const handleLogout = () => {
     logout();
     navigate("/auth/login", { replace: true });
   };
 
-  const [showReportsMenu, setShowReportsMenu] = useState(false);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [showSubscriptionMenu, setShowSubscriptionMenu] = useState(false);
-  const reportsMenuRef = useRef<HTMLDivElement>(null);
-  const settingsMenuRef = useRef<HTMLDivElement>(null);
-  const subscriptionMenuRef = useRef<HTMLDivElement>(null);
+  // Fetch notifications and unread count from API
+  useEffect(() => {
+    getUnreadCount().then(setUnreadCount).catch(() => setUnreadCount(0));
+  }, []);
 
-  // Close dropdown if clicked outside
+  function refreshNotifs() {
+    getNotifications(0, 10)
+      .then(setNotifItems)
+      .catch(() => setNotifItems([]));
+    getUnreadCount().then(setUnreadCount).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (showNotifMenu) refreshNotifs();
+  }, [showNotifMenu]);
+
+  async function markRead(id: number) {
+    await markNotificationRead(id).catch(() => {});
+    setNotifItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    setUnreadCount(prev => Math.max(0, prev - 1));
+  }
+
+  async function markAllRead() {
+    await markAllNotificationsRead().catch(() => {});
+    setNotifItems(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+  }
+
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
-      if (reportsMenuRef.current && !reportsMenuRef.current.contains(e.target as Node)) {
-        setShowReportsMenu(false);
-      }
-      if (settingsMenuRef.current && !settingsMenuRef.current.contains(e.target as Node)) {
-        setShowSettingsMenu(false);
-      }
-      if (subscriptionMenuRef.current && !subscriptionMenuRef.current.contains(e.target as Node)) {
-        setShowSubscriptionMenu(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowUserMenu(false);
+      if (reportsMenuRef.current && !reportsMenuRef.current.contains(e.target as Node)) setShowReportsMenu(false);
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(e.target as Node)) setShowSettingsMenu(false);
+      if (notifMenuRef.current && !notifMenuRef.current.contains(e.target as Node)) setShowNotifMenu(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -92,11 +118,7 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
             <ChevronRight className="w-3.5 h-3.5" />
             <span
               className="text-[11px] px-2 py-0.5 rounded-full"
-              style={{
-                background: darkMode ? '#11387D' : '#EFF6FF',
-                color: '#1D4ED8',
-                fontWeight: 600,
-              }}
+              style={{ background: darkMode ? '#11387D' : '#EFF6FF', color: '#1D4ED8', fontWeight: 600 }}
             >
               {orgLabel}
             </span>
@@ -106,118 +128,8 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
         <span style={{ color: darkMode ? '#EEF4FF' : '#0A0A0A', fontWeight: 500 }}>{currentPage}</span>
       </div>
 
-      {/* Search */}
-      <div className="hidden flex-1 justify-center px-4 lg:flex xl:px-8">
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: '#1D4ED8' }} />
-          <input
-            type="text"
-            placeholder="Search violations, zones, users..."
-            className="w-full h-10 pl-10 pr-4 rounded-lg text-[13px] border transition-all"
-            style={{
-              background: darkMode ? '#132647' : '#F3F7FF',
-              borderColor: darkMode ? '#1E3663' : '#DBE7FF',
-              color: darkMode ? '#EEF4FF' : '#0A0A0A',
-            }}
-          />
-        </div>
-      </div>
-
       {/* Right side */}
       <div className="ml-auto flex items-center gap-2 md:gap-3">
-        {/* Subscription Dropdown */}
-        <div className="relative hidden sm:block" ref={subscriptionMenuRef}>
-          {isFreePlan ? (
-            <button
-              onClick={() => navigate(`/auth/onboarding/form?upgrade=1&target_plan=${encodeURIComponent(subscriptionPlan)}`)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-[13px] font-semibold"
-              style={{
-                background: 'linear-gradient(135deg, #0B3D91, #3B82F6)',
-                color: '#ffffff',
-                boxShadow: '0 2px 4px rgba(11, 61, 145, 0.25)'
-              }}
-            >
-              <Sparkles className="w-4 h-4" />
-              Upgrade
-            </button>
-          ) : (
-            <span
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] uppercase"
-              style={{
-                background: darkMode ? '#11387D' : '#EFF6FF',
-                color: '#1D4ED8',
-                fontWeight: 700,
-              }}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              {subscriptionPlan}
-            </span>
-          )}
-          {showSubscriptionMenu && (
-            <div
-              className="absolute right-0 top-full mt-2 w-72 rounded-xl shadow-xl border py-2 z-50 overflow-hidden"
-              style={{
-                background: darkMode ? '#111811' : '#ffffff',
-                borderColor: darkMode ? '#1E2E1E' : '#E2E8E2',
-              }}
-            >
-              <div className="px-4 py-2 border-b" style={{ borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}>
-                <h3 className="text-[14px] font-bold" style={{ color: darkMode ? '#F0F4F0' : '#0A0A0A' }}>Subscription Plans</h3>
-              </div>
-
-              <div className="p-2 space-y-1">
-                {/* Free Plan */}
-                <button
-                  onClick={() => { setSubscriptionPlan("Free"); setShowSubscriptionMenu(false); navigate("/subscription"); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A] border border-transparent hover:border-gray-200 dark:hover:border-[#2E422E] ${subscriptionPlan === "Free" ? "bg-gray-50 border-gray-200 dark:bg-[#1A241A] dark:border-[#2E422E]" : ""}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[13px] font-bold" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>Free</span>
-                    {subscriptionPlan === "Free" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-[#1E2E1E] text-gray-600 dark:text-gray-300">Current</span>}
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Limited usage across all modules.</p>
-                </button>
-
-                {/* Pro Plan */}
-                <button
-                  onClick={() => { setSubscriptionPlan("Pro"); setShowSubscriptionMenu(false); navigate("/subscription"); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-[#0F1C38] border border-transparent hover:border-gray-200 dark:hover:border-[#2A467A] ${subscriptionPlan === "Pro" ? "bg-blue-50 border-blue-200 dark:bg-[#102A52] dark:border-[#2A4F87]" : ""}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[13px] font-bold" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>Pro</span>
-                    {subscriptionPlan === "Pro" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Current</span>}
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">10x more usage. All options enabled.</p>
-                </button>
-
-                {/* Enterprise Plan */}
-                <button
-                  onClick={() => { setSubscriptionPlan("Enterprise"); setShowSubscriptionMenu(false); navigate("/subscription"); }}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-[#0F1C38] border border-transparent hover:border-gray-200 dark:hover:border-[#2A467A] ${subscriptionPlan === "Enterprise" ? "bg-blue-50 border-blue-200 dark:bg-[#102A52] dark:border-[#2A4F87]" : ""}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[13px] font-bold" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>Enterprise</span>
-                    {subscriptionPlan === "Enterprise" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Current</span>}
-                  </div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Customization & unlimited usage.</p>
-                </button>
-
-                <div className="mt-2 pt-2 border-t" style={{ borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}>
-                  <a
-                    href="https://theta-ai-website.vercel.app/contact"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setShowSubscriptionMenu(false)}
-                    className="w-full text-center px-3 py-2 rounded-lg transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A] flex items-center justify-center gap-1.5"
-                  >
-                    <span className="text-[12px] font-medium" style={{ color: '#1D4ED8' }}>Contact Sales</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-[#1D4ED8]" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Reports Dropdown */}
         <div className="relative hidden lg:block" ref={reportsMenuRef}>
@@ -233,18 +145,15 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
           {showReportsMenu && (
             <div
               className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg border py-2 z-50"
-              style={{
-                background: darkMode ? '#111811' : '#ffffff',
-                borderColor: darkMode ? '#1E2E1E' : '#E2E8E2',
-              }}
+              style={{ background: darkMode ? '#111811' : '#ffffff', borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}
             >
               <button onClick={() => { navigate("/analytics"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
                 <BarChart3 className="w-4 h-4" /> Analytics
               </button>
-              <button onClick={() => { navigate("/analytics?tab=reports"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
+              <button onClick={() => { navigate("/analytics?tab=custom"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
                 <FileBarChart className="w-4 h-4" /> Reports
               </button>
-              <button onClick={() => { navigate("/compliance?tab=audit"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
+              <button onClick={() => { navigate("/compliance"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
                 <History className="w-4 h-4" /> Audit Trail
               </button>
             </div>
@@ -265,15 +174,12 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
           {showSettingsMenu && (
             <div
               className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg border py-2 z-50"
-              style={{
-                background: darkMode ? '#111811' : '#ffffff',
-                borderColor: darkMode ? '#1E2E1E' : '#E2E8E2',
-              }}
+              style={{ background: darkMode ? '#111811' : '#ffffff', borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}
             >
-              <button onClick={() => { navigate("/users?tab=handle-users"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
+              <button onClick={() => { navigate("/users"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
                 <Users className="w-4 h-4" /> Handle Users
               </button>
-              <button onClick={() => { navigate("/users?tab=knowledge-base"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
+              <button onClick={() => { navigate("/settings?tab=knowledge"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
                 <Database className="w-4 h-4" /> Knowledge Base
               </button>
             </div>
@@ -292,56 +198,189 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
         </button>
 
         {/* Notification Bell */}
-        <button className="relative p-2 rounded-lg transition-colors hover:bg-[#F3F7FF]" style={darkMode ? { background: '#172846' } : {}}>
-          <Bell className="w-[18px] h-[18px]" style={{ color: darkMode ? '#AFC4EE' : '#4A5568' }} />
-          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#DC2626] text-white text-[9px] flex items-center justify-center" style={{ fontWeight: 600 }}>
-            3
-          </span>
-        </button>
+        <div className="relative" ref={notifMenuRef}>
+          <button
+            onClick={() => setShowNotifMenu(!showNotifMenu)}
+            className="relative p-2 rounded-lg transition-colors hover:bg-[#F3F7FF]"
+            style={darkMode ? { background: '#172846' } : {}}
+          >
+            <Bell className="w-[18px] h-[18px]" style={{ color: darkMode ? '#AFC4EE' : '#4A5568' }} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#DC2626] text-white text-[9px] flex items-center justify-center" style={{ fontWeight: 600 }}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {showNotifMenu && (
+            <div
+              className="absolute right-0 top-full mt-2 w-80 rounded-xl shadow-xl border z-50 overflow-hidden"
+              style={{ background: darkMode ? '#111827' : '#ffffff', borderColor: darkMode ? '#1E3663' : '#E2E8F0' }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: darkMode ? '#1E3663' : '#E2E8F0' }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px]" style={{ color: darkMode ? '#F0F4F0' : '#0A0A0A', fontWeight: 600 }}>Notifications</span>
+                  {unreadCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-[#DC2626] text-white" style={{ fontWeight: 600 }}>{unreadCount}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={() => markAllRead()}
+                      className="text-[12px] transition-colors hover:underline"
+                      style={{ color: '#1D4ED8', fontWeight: 500 }}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button onClick={() => setShowNotifMenu(false)} className="p-0.5 rounded hover:bg-gray-100">
+                    <X className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div className="max-h-72 overflow-y-auto">
+                {notifItems.length === 0 ? (
+                  <div className="py-10 text-center text-[13px]" style={{ color: '#9CA3AF' }}>
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { markRead(item.id); navigate("/notifications"); setShowNotifMenu(false); }}
+                      className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
+                      style={{ background: item.is_read ? 'transparent' : (darkMode ? '#0F2044' : '#EFF6FF') }}
+                    >
+                      <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+                        style={{ background: item.type === "warning" ? '#FFFBEB' : item.type === "success" ? '#F0FDF4' : '#EFF6FF' }}>
+                        {item.type === "warning"
+                          ? <AlertTriangle className="w-3.5 h-3.5" style={{ color: '#D97706' }} />
+                          : item.type === "success"
+                          ? <Clock className="w-3.5 h-3.5" style={{ color: '#15803D' }} />
+                          : <Clock className="w-3.5 h-3.5" style={{ color: '#1D4ED8' }} />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px]" style={{ color: darkMode ? '#F0F4F0' : '#0A0A0A', fontWeight: item.is_read ? 400 : 600 }}>
+                            {item.title}
+                          </span>
+                          {!item.is_read && <span className="w-1.5 h-1.5 rounded-full bg-[#1D4ED8] flex-shrink-0" />}
+                        </div>
+                        <p className="mt-0.5 text-[12px] truncate" style={{ color: '#6B7280' }}>{item.message}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t px-4 py-2.5" style={{ borderColor: darkMode ? '#1E3663' : '#E2E8F0' }}>
+                <button
+                  onClick={() => { navigate("/notifications"); setShowNotifMenu(false); }}
+                  className="w-full text-center text-[13px] transition-colors hover:underline"
+                  style={{ color: '#1D4ED8', fontWeight: 500 }}
+                >
+                  View all notifications
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Separator */}
         <div className="hidden h-8 w-px sm:block" style={{ background: darkMode ? '#1E3663' : '#DBE7FF' }} />
 
         {/* User */}
         <div className="relative" ref={menuRef}>
-          <div
-            className="flex items-center gap-2 cursor-pointer"
+          {/* Trigger */}
+          <button
             onClick={() => setShowUserMenu(!showUserMenu)}
+            className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl transition-colors hover:bg-[#F3F7FF]"
+            style={darkMode ? { background: showUserMenu ? '#172846' : 'transparent' } : { background: showUserMenu ? '#EFF6FF' : 'transparent' }}
           >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px]" style={{ background: 'linear-gradient(135deg, #0B3D91, #3B82F6)', fontWeight: 600 }}>
+            {/* Avatar */}
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[12px] flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #0B3D91, #3B82F6)', fontWeight: 700 }}
+            >
               {user?.initials || "JD"}
             </div>
-            <span className="text-[11px] px-2 py-0.5 rounded-full uppercase" style={{ background: darkMode ? '#11387D' : '#EFF6FF', color: '#1D4ED8', fontWeight: 600 }}>
-              {user?.role || "Admin"}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
-          </div>
+            {/* Name + role stacked */}
+            <div className="hidden sm:flex flex-col items-start leading-tight">
+              <span className="text-[13px] max-w-[100px] truncate" style={{ color: darkMode ? '#EEF4FF' : '#0A0A0A', fontWeight: 600 }}>
+                {user?.name || "User"}
+              </span>
+              <span className="text-[11px] uppercase" style={{ color: '#1D4ED8', fontWeight: 500 }}>
+                {user?.role || "Admin"}
+              </span>
+            </div>
+            <ChevronDown
+              className="w-3.5 h-3.5 flex-shrink-0 transition-transform"
+              style={{ color: '#9CA3AF', transform: showUserMenu ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            />
+          </button>
 
-          {/* Dropdown menu */}
+          {/* Dropdown */}
           {showUserMenu && (
             <div
-              className="absolute right-0 top-full mt-2 w-56 rounded-xl shadow-lg border py-2 z-50"
-              style={{
-                background: darkMode ? '#111811' : '#ffffff',
-                borderColor: darkMode ? '#1E2E1E' : '#E2E8E2',
-              }}
+              className="absolute right-0 top-full mt-2 w-64 rounded-xl shadow-xl border z-50 overflow-hidden"
+              style={{ background: darkMode ? '#111827' : '#ffffff', borderColor: darkMode ? '#1E3663' : '#E2E8F0' }}
             >
-              <div className="px-4 py-3 border-b" style={{ borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}>
-                <div className="text-[13px]" style={{ color: darkMode ? '#F0F4F0' : '#0A0A0A', fontWeight: 500 }}>
-                  {user?.name || "User"}
+              {/* Profile header */}
+              <div
+                className="flex items-center gap-3 px-4 py-4"
+                style={{ background: darkMode ? '#0F2044' : '#F8FAFF', borderBottom: `1px solid ${darkMode ? '#1E3663' : '#E2E8F0'}` }}
+              >
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-white text-[15px] flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, #0B3D91, #3B82F6)', fontWeight: 700 }}
+                >
+                  {user?.initials || "JD"}
                 </div>
-                <div className="text-[12px]" style={{ color: '#9CA3AF' }}>
-                  {user?.email || "user@organization.com"}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] truncate" style={{ color: darkMode ? '#EEF4FF' : '#0A0A0A', fontWeight: 600 }}>
+                    {user?.name || "User"}
+                  </div>
+                  <div className="text-[12px] truncate" style={{ color: '#6B7280' }}>
+                    {user?.email || "user@organization.com"}
+                  </div>
+                  <span
+                    className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] uppercase"
+                    style={{ background: darkMode ? '#11387D' : '#EFF6FF', color: '#1D4ED8', fontWeight: 700 }}
+                  >
+                    {user?.role || "Admin"}
+                  </span>
                 </div>
               </div>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors hover:bg-red-50"
-                style={{ color: '#DC2626' }}
-              >
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </button>
+
+              {/* Actions */}
+              <div className="py-1.5">
+                <button
+                  onClick={() => { navigate("/settings"); setShowUserMenu(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors hover:bg-gray-50"
+                  style={{ color: darkMode ? '#D1D5DB' : '#374151' }}
+                >
+                  <SettingsIcon className="w-4 h-4 flex-shrink-0" style={{ color: '#6B7280' }} />
+                  Settings
+                </button>
+              </div>
+
+              {/* Sign out */}
+              <div className="border-t py-1.5" style={{ borderColor: darkMode ? '#1E3663' : '#E2E8F0' }}>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors hover:bg-red-50"
+                  style={{ color: '#DC2626' }}
+                >
+                  <LogOut className="w-4 h-4 flex-shrink-0" />
+                  Sign out
+                </button>
+              </div>
             </div>
           )}
         </div>
