@@ -25,6 +25,7 @@ const breadcrumbMap: Record<string, string> = {
   "/engagement": "Engagement",
   "/equipment-certification": "Assets",
   "/root-cause-analysis": "Risk",
+  "/vendors": "Vendors",
   "/settings": "System Settings",
 };
 

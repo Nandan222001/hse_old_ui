@@ -4,7 +4,7 @@ import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
   Lightbulb, ClipboardCheck, BarChart3,
   FolderClosed, AlertTriangle, Heart,
-  LogOut, Shield, Settings, X, Database, type LucideIcon
+  LogOut, Shield, Settings, X, Database, HardHat, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -30,6 +30,7 @@ const navGroups: NavGroup[] = [
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },
       { name: "Reports", icon: BarChart3, path: "/analytics" },
+      { name: "Vendors", icon: HardHat, path: "/vendors" },
       { name: "Assets", icon: FolderClosed, path: "/equipment-certification" },
       { name: "Incidents", icon: AlertTriangle, path: "/violations" },
       { name: "Engagement", icon: Heart, path: "/engagement" },
