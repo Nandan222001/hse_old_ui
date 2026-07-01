@@ -82,6 +82,11 @@ export interface LeadingIndicators {
   predictive_injury_risk_trend: number;
   trir: number;
   ltif: number;
+  ltifr?: number;
+  ltisr?: number;
+  dart_rate?: number;
+  far?: number;
+  near_miss_ratio?: number;
   contractor_risk_label: string;
   contractor_risk_score: number;
   audit_readiness_score: number;

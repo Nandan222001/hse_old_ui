@@ -16,6 +16,7 @@ from app.models.permit_to_work import PermitToWork
 from app.models.permit_type import PermitType
 from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
+from app.models.shift_schedule import ShiftSchedule
 from app.models.working_station import WorkingStation
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -26,6 +27,15 @@ def _org_filter(query, model, org_id):
     if org_id is not None:
         return query.filter(model.organisation_id == org_id)
     return query
+
+
+def _latest_org_date(db: Session, model, date_column, org_id):
+    latest_value = _org_filter(db.query(func.max(date_column)), model, org_id).scalar()
+    return latest_value.date() if latest_value else None
+
+
+def _safe_round(value, digits=2):
+    return round(float(value), digits) if value is not None else 0.0
 
 
 @router.get("/stats")
@@ -87,109 +97,171 @@ def get_leading_indicators(
     track actual hours-worked or formal audit records. They move with real data but are
     not certified OSHA-audited figures.
     """
-    STANDARD_ANNUAL_HOURS = 2000  # assumed full-time hours/employee/year
     org_id = current_user.org_id
 
     total_employees = _org_filter(db.query(Employee), Employee, org_id).count() or 0
-    hours_worked = max(total_employees * STANDARD_ANNUAL_HOURS, 1)
+    man_hours = (
+        _org_filter(db.query(func.coalesce(func.sum(ShiftSchedule.actual_hours_worked), 0.0)), ShiftSchedule, org_id).scalar()
+        or 0.0
+    )
 
-    # All "trailing N days/months" windows below are anchored to the latest
-    # *actual* incident/safety_walk date in the data, not the real wall clock
-    # — this is historical test data (activity ends in 2025), so anchoring to
-    # real "today" would make every trailing window read zero.
-    latest_incident_dt = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
-    latest_walk_dt = _org_filter(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
-    today = (latest_incident_dt.date() if latest_incident_dt else date.today())
+    # All trailing windows anchor to the latest actual incident/walk date in the data.
+    latest_incident_date = _latest_org_date(db, Incident, Incident.incident_date_time, org_id)
+    latest_walk_date = _latest_org_date(db, SafetyWalk, SafetyWalk.inspection_date_time, org_id)
+    latest_date = latest_incident_date or latest_walk_date or date.today()
 
-    # ── TRIR / LTIF (trailing 12 months) ────────────────────────────────────
-    one_year_ago = today - timedelta(days=365)
+    # ── TRIR / LTIFR (trailing 12 months) ──────────────────────────────────
+    one_year_ago = latest_date - timedelta(days=365)
     recordable_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
         Incident.incident_date_time.isnot(None),
-        Incident.incident_date_time >= one_year_ago,
+        func.date(Incident.incident_date_time) >= one_year_ago,
+        func.date(Incident.incident_date_time) <= latest_date,
     ).count()
     lost_time_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
         Incident.incident_date_time.isnot(None),
-        Incident.incident_date_time >= one_year_ago,
-        Incident.days_away > 0,
+        func.date(Incident.incident_date_time) >= one_year_ago,
+        func.date(Incident.incident_date_time) <= latest_date,
+        func.coalesce(Incident.days_away, 0) > 0,
     ).count()
-    trir = round((recordable_incidents * 200_000) / hours_worked, 2)
-    ltif = round((lost_time_incidents * 1_000_000) / hours_worked, 2)
+    lost_days = (
+        _org_filter(
+            db.query(func.coalesce(func.sum(func.coalesce(Incident.days_away, 0)), 0)),
+            Incident,
+            org_id,
+        )
+        .filter(Incident.incident_date_time.isnot(None))
+        .filter(func.date(Incident.incident_date_time) >= one_year_ago)
+        .filter(func.date(Incident.incident_date_time) <= latest_date)
+        .scalar()
+        or 0
+    )
+    trir = _safe_round((recordable_incidents * 200_000) / man_hours) if man_hours else 0.0
+    ltifr = _safe_round((lost_time_incidents * 1_000_000) / man_hours) if man_hours else 0.0
+    ltisr = _safe_round((float(lost_days) * 1_000_000) / man_hours) if man_hours else 0.0
+    restricted_work_cases = 0
+    dart_rate = _safe_round(((lost_time_incidents + restricted_work_cases) * 200_000) / man_hours) if man_hours else 0.0
+    far = _safe_round((0 * 100_000_000) / man_hours) if man_hours else 0.0
+    near_miss_ratio = _safe_round((
+        _org_filter(db.query(NearMiss), NearMiss, org_id).count() / recordable_incidents
+    )) if recordable_incidents else 0.0
 
     # ── Predictive Injury Risk Score ────────────────────────────────────────
-    # Severity-weighted incident mix, comparing the trailing 90 days against the
-    # prior 90 days to derive both a normalized score and a trend direction.
     severity_weight = case(
-        (func.lower(Incident.severity).in_(["critical", "significant"]), 3),
-        (func.lower(Incident.severity).in_(["high", "major"]), 2),
-        (func.lower(Incident.severity).in_(["medium", "moderate"]), 1),
+        (
+            func.lower(Incident.severity).in_(["critical", "significant"]),
+            3,
+        ),
+        (
+            func.lower(Incident.severity).in_(["high", "major"]),
+            2,
+        ),
+        (
+            func.lower(Incident.severity).in_(["medium", "moderate"]),
+            1,
+        ),
         else_=0.5,
     )
 
-    def weighted_risk_score(start, end) -> float:
-        rows = (
-            db.query(func.count(Incident.id), func.sum(severity_weight))
-            .filter(Incident.incident_date_time >= start, Incident.incident_date_time < end)
+    def weighted_risk_score(start_date, end_date) -> float:
+        row = (
+            _org_filter(
+                db.query(
+                    func.count(Incident.id).label("count"),
+                    func.coalesce(func.sum(severity_weight), 0).label("weight_sum"),
+                ),
+                Incident,
+                org_id,
+            )
+            .filter(Incident.incident_date_time.isnot(None))
+            .filter(func.date(Incident.incident_date_time) >= start_date)
+            .filter(func.date(Incident.incident_date_time) < end_date)
             .first()
         )
-        count, weight_sum = rows[0] or 0, float(rows[1] or 0)
+        count = int(row.count or 0)
+        weight_sum = float(row.weight_sum or 0)
         if not count:
             return 0.0
         return min(100.0, (weight_sum / (count * 3)) * 100)
 
-    current_start = today - timedelta(days=90)
-    previous_start = today - timedelta(days=180)
-    current_score = weighted_risk_score(current_start, today)
+    current_start = latest_date - timedelta(days=90)
+    previous_start = latest_date - timedelta(days=180)
+    current_score = weighted_risk_score(current_start, latest_date)
     previous_score = weighted_risk_score(previous_start, current_start)
-    injury_risk_score = round(current_score)
-    injury_risk_trend = round(current_score - previous_score)
+    injury_risk_score = _safe_round(current_score)
+    injury_risk_trend = _safe_round(current_score - previous_score)
 
     # ── Contractor Risk Score ───────────────────────────────────────────────
-    # Relative incident rate of contractors vs. permanent staff (incidents per head).
-    is_contractor = func.lower(Employee.employment_type).like("%contract%")
-    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(is_contractor).count()
-    permanent_employees = max(total_employees - contractor_employees, 0)
+    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
+        func.lower(Employee.employment_type).like("%contract%")
+    ).count()
+    permanent_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
+        func.lower(Employee.employment_type) == "permanent"
+    ).count()
 
     contractor_incidents = (
-        _org_filter(db.query(func.count(Incident.id)), Incident, org_id)
+        _org_filter(
+            db.query(func.count(Incident.id)),
+            Incident,
+            org_id,
+        )
         .join(Employee, Incident.reported_by == Employee.id)
-        .filter(is_contractor)
-        .scalar() or 0
+        .filter(func.lower(Employee.employment_type).like("%contract%"))
+        .scalar()
+        or 0
     )
-    total_attributed_incidents = (
-        _org_filter(db.query(func.count(Incident.id)), Incident, org_id).filter(Incident.reported_by.isnot(None)).scalar() or 0
+    permanent_incidents = (
+        _org_filter(
+            db.query(func.count(Incident.id)),
+            Incident,
+            org_id,
+        )
+        .join(Employee, Incident.reported_by == Employee.id)
+        .filter(func.lower(Employee.employment_type) == "permanent")
+        .scalar()
+        or 0
     )
-    permanent_incidents = max(total_attributed_incidents - contractor_incidents, 0)
 
-    contractor_rate = (contractor_incidents / contractor_employees) if contractor_employees else 0
-    permanent_rate = (permanent_incidents / permanent_employees) if permanent_employees else 0
-    relative_risk = (contractor_rate / permanent_rate) if permanent_rate else (contractor_rate if contractor_rate else 0)
-
-    contractor_risk_score = round(min(100, relative_risk * 50))
+    contractor_rate = _safe_round(contractor_incidents / contractor_employees) if contractor_employees else 0.0
+    permanent_rate = _safe_round(permanent_incidents / permanent_employees) if permanent_employees else 0.0
+    if permanent_rate == 0:
+        relative_risk = contractor_rate if contractor_rate else 0.0
+        contractor_risk_score = 100.0
+    else:
+        relative_risk = _safe_round(contractor_rate / permanent_rate)
+        contractor_risk_score = _safe_round(min(100.0, relative_risk * 50))
     contractor_risk_label = "High" if relative_risk >= 1.5 else ("Medium" if relative_risk >= 1 else "Low")
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
-    # Average safety_walk compliance_rating (1-5 scale) over the trailing 90
-    # days, anchored to safety_walks' own latest real date (independent of
-    # the incident anchor above, since the two tables' date ranges needn't
-    # line up exactly).
-    walk_anchor = latest_walk_dt.date() if latest_walk_dt else today
-    walk_window_start = walk_anchor - timedelta(days=90)
+    walk_window_start = latest_date - timedelta(days=90)
     avg_compliance = (
         _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
-        .filter(SafetyWalk.inspection_date_time >= walk_window_start)
+        .filter(SafetyWalk.inspection_date_time.isnot(None))
+        .filter(func.date(SafetyWalk.inspection_date_time) >= walk_window_start)
+        .filter(func.date(SafetyWalk.inspection_date_time) < latest_date)
         .scalar()
     )
-    audit_readiness_score = round(float(avg_compliance) / 5 * 100) if avg_compliance else 0
+    average_compliance = _safe_round(avg_compliance)
+    audit_readiness_score = _safe_round((average_compliance / 5) * 100) if average_compliance else 0.0
     audit_readiness_label = "Ready" if audit_readiness_score >= 80 else ("Needs Attention" if audit_readiness_score >= 60 else "Not Ready")
 
     return {
         "predictive_injury_risk_score": injury_risk_score,
+        "predictive_injury_risk_previous_score": _safe_round(previous_score),
         "predictive_injury_risk_trend": injury_risk_trend,
         "trir": trir,
-        "ltif": ltif,
+        "ltifr": ltifr,
+        "ltisr": ltisr,
+        "dart_rate": dart_rate,
+        "far": far,
+        "near_miss_ratio": near_miss_ratio,
+        "ltif": ltifr,
         "contractor_risk_label": contractor_risk_label,
+        "contractor_rate": contractor_rate,
+        "permanent_rate": permanent_rate,
+        "relative_risk": relative_risk,
         "contractor_risk_score": contractor_risk_score,
         "audit_readiness_score": audit_readiness_score,
+        "average_compliance": average_compliance,
         "audit_readiness_label": audit_readiness_label,
     }
 

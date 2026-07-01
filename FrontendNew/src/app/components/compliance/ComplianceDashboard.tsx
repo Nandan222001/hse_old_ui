@@ -44,6 +44,34 @@ export function ComplianceDashboard() {
         <h1>Welcome, {user?.name || "User"}</h1>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Compliance Score</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.compliance_score}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.compliance_label ?? ""}</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Legal Register Coverage</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.legal_register_coverage_pct}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.legal_register_label ?? ""}</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Audit Readiness Score</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.audit_readiness_pct}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.audit_readiness_label ?? ""}</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Permit Compliance</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.permit_compliance_pct}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>PTW Compliance</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Policy Review Status</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.policy_review_pct}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>Current policies</div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Compliance Score</div>
