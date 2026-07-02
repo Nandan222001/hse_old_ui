@@ -105,13 +105,25 @@ def _doc_to_dict(row: Document) -> dict:
 # ── Import History ─────────────────────────────────────────────────────────────
 
 @router.get("/imports")
-def list_imports(db: Session = Depends(get_db)) -> dict:
-    rows = db.query(DataImport).order_by(DataImport.id.desc()).limit(200).all()
+def list_imports(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    query = db.query(DataImport)
+    if current_user.org_id and current_user.org_id > 0:
+        query = query.filter(DataImport.organisation_id == current_user.org_id)
+    else:
+        return {"data": []}
+    rows = query.order_by(DataImport.id.desc()).limit(200).all()
     return {"data": [_import_to_dict(r) for r in rows]}
 
 
 @router.post("/imports")
-async def create_import(request: Request, db: Session = Depends(get_db)) -> dict:
+async def create_import(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     try:
         body = await request.json()
     except Exception:
@@ -119,6 +131,7 @@ async def create_import(request: Request, db: Session = Depends(get_db)) -> dict
     payload = body.get("data", body)
     count = int(payload.get("records_estimated") or payload.get("records_total") or 0)
     row = DataImport(
+        organisation_id=current_user.org_id,
         file_name=payload.get("file_name", "unknown"),
         import_type=payload.get("import_type", "excel"),
         data_type=payload.get("data_type", "Unknown"),
@@ -137,27 +150,55 @@ async def create_import(request: Request, db: Session = Depends(get_db)) -> dict
 # ── Validation Logs ────────────────────────────────────────────────────────────
 
 @router.get("/validation-logs")
-def list_validation_logs(db: Session = Depends(get_db)) -> dict:
-    rows = db.query(ValidationLog).order_by(ValidationLog.id.desc()).limit(500).all()
+def list_validation_logs(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not current_user.org_id or current_user.org_id <= 0:
+        return {"data": []}
+    rows = (
+        db.query(ValidationLog)
+        .filter(ValidationLog.organisation_id == current_user.org_id)
+        .order_by(ValidationLog.id.desc())
+        .limit(500)
+        .all()
+    )
     return {"data": [_vlog_to_dict(r) for r in rows]}
 
 
 # ── API Integrations ───────────────────────────────────────────────────────────
 
 @router.get("/integrations")
-def list_integrations(db: Session = Depends(get_db)) -> dict:
-    rows = db.query(ApiIntegration).filter(ApiIntegration.is_active == True).all()
+def list_integrations(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not current_user.org_id or current_user.org_id <= 0:
+        return {"data": []}
+    rows = (
+        db.query(ApiIntegration)
+        .filter(
+            ApiIntegration.organisation_id == current_user.org_id,
+            ApiIntegration.is_active == True,
+        )
+        .all()
+    )
     return {"data": [_integration_to_dict(r) for r in rows]}
 
 
 @router.post("/integrations")
-async def create_integration(request: Request, db: Session = Depends(get_db)) -> dict:
+async def create_integration(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     try:
         body = await request.json()
     except Exception:
         body = {}
     payload = body.get("data", body)
     row = ApiIntegration(
+        organisation_id=current_user.org_id,
         name=payload.get("name", "Integration"),
         type=payload.get("type", "custom"),
         endpoint_url=payload.get("endpoint_url"),
@@ -173,8 +214,19 @@ async def create_integration(request: Request, db: Session = Depends(get_db)) ->
 
 
 @router.delete("/integrations/{integration_id}")
-def delete_integration(integration_id: int, db: Session = Depends(get_db)) -> dict:
-    row = db.query(ApiIntegration).filter(ApiIntegration.id == integration_id).first()
+def delete_integration(
+    integration_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    row = (
+        db.query(ApiIntegration)
+        .filter(
+            ApiIntegration.id == integration_id,
+            ApiIntegration.organisation_id == current_user.org_id,
+        )
+        .first()
+    )
     if row:
         db.delete(row)
         db.commit()
@@ -184,8 +236,18 @@ def delete_integration(integration_id: int, db: Session = Depends(get_db)) -> di
 # ── Documents ──────────────────────────────────────────────────────────────────
 
 @router.get("/documents")
-def list_documents(db: Session = Depends(get_db)) -> dict:
-    rows = db.query(Document).order_by(Document.id.desc()).all()
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not current_user.org_id or current_user.org_id <= 0:
+        return {"data": {"items": []}}
+    rows = (
+        db.query(Document)
+        .filter(Document.organisation_id == current_user.org_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
     return {"data": {"items": [_doc_to_dict(r) for r in rows]}}
 
 
@@ -196,6 +258,7 @@ async def upload_document(
     category: str = Form("pdf"),
     record_type: str = Form(""),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     content = await file.read()
     size = _size_str(len(content))
@@ -212,6 +275,7 @@ async def upload_document(
         dest = ""
 
     row = Document(
+        organisation_id=current_user.org_id,
         file_name=file.filename or "unnamed",
         file_type=ext,
         category=category,
@@ -227,8 +291,19 @@ async def upload_document(
 
 
 @router.delete("/documents/{doc_id}")
-def delete_document(doc_id: int, db: Session = Depends(get_db)) -> dict:
-    row = db.query(Document).filter(Document.id == doc_id).first()
+def delete_document(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    row = (
+        db.query(Document)
+        .filter(
+            Document.id == doc_id,
+            Document.organisation_id == current_user.org_id,
+        )
+        .first()
+    )
     if row:
         if row.file_path and os.path.exists(row.file_path):
             try:
@@ -332,6 +407,7 @@ async def full_import(
 
     # Log the import
     import_row = DataImport(
+        organisation_id=org_id,
         file_name=file.filename or "full_import.xlsx",
         import_type="excel",
         data_type="Full Import (all sheets)",
@@ -525,6 +601,7 @@ async def import_single_file(
 
     # Log the import
     import_row = DataImport(
+        organisation_id=current_user.org_id,
         file_name=filename,
         import_type="excel",
         data_type="Shift Schedule",

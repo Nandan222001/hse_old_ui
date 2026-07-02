@@ -7,7 +7,7 @@ from app.schemas.base import TimestampMixin
 
 
 class HazardBase(BaseModel):
-    category_id: int
+    category_id: Optional[int] = None   # optional so manual entry can omit it
     hazard_name: str
     severity: Optional[str] = None
     probability: Optional[str] = None

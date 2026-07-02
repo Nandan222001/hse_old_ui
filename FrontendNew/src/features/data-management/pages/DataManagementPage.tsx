@@ -39,10 +39,16 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function postData(path: string, body: Record<string, unknown>) {
+  // Strip empty strings so optional FK fields (int) don't fail Pydantic validation.
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (v !== "" && v !== null && v !== undefined) cleaned[k] = v;
+  }
+  // Send body directly — Pydantic endpoints parse from the top level.
   const res  = await fetch(`${API_BASE}${path}`, {
     method:  "POST",
     headers: getAuthHeaders(),
-    body:    JSON.stringify({ data: body }),
+    body:    JSON.stringify(cleaned),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.detail || json?.message || `HTTP ${res.status}`);
@@ -66,67 +72,56 @@ type ManualModule = {
 const MANUAL_MODULES: ManualModule[] = [
   {
     id: "sites", label: "Sites", icon: MapPin, color: "#0E7490", bg: "#ECFEFF",
-    endpoint: "/sites",
+    endpoint: "/sites/",
     fields: [
-      { label: "Site Name",      key: "name",           type: "text",   placeholder: "e.g. London HQ",            required: true },
-      { label: "Site Type",      key: "type",           type: "select", options: ["Office","Warehouse","Manufacturing","Construction","Plant","Offshore","Other"], required: true },
-      { label: "Address",        key: "address",        type: "text",   placeholder: "Full site address" },
-      { label: "Region",         key: "region",         type: "text",   placeholder: "e.g. South Wales" },
-      { label: "Hazard Level",   key: "hazard_level",   type: "select", options: ["Low Risk","Medium Risk","High Risk","Critical Risk"] },
-      { label: "Employee Count", key: "employee_count", type: "number", placeholder: "150" },
+      { label: "Site Name",          key: "site_name",           type: "text",   placeholder: "e.g. London HQ",             required: true },
+      { label: "Site Type",          key: "type",                type: "select", options: ["Office","Warehouse","Manufacturing","Construction","Plant","Offshore","Other"], required: true },
+      { label: "Address",            key: "address",             type: "text",   placeholder: "Full site address" },
+      { label: "City",               key: "city",                type: "text",   placeholder: "e.g. London" },
+      { label: "Postcode",           key: "postcode",            type: "text",   placeholder: "e.g. SW1A 1AA" },
+      { label: "Hazard Level",       key: "hazard_classification", type: "select", options: ["Low Risk","Medium Risk","High Risk","Critical Risk"] },
     ],
   },
   {
     id: "users", label: "Users", icon: Users, color: "#4A57B9", bg: "#EEF2FF",
-    endpoint: "/admin/users/invitations",
+    endpoint: "/org/invite-user",
     fields: [
-      { label: "Full Name",   key: "display_name", type: "text",   placeholder: "e.g. James Thompson", required: true },
-      { label: "Email",       key: "email",        type: "email",  placeholder: "james@company.com",   required: true },
-      { label: "Role",        key: "role",         type: "select", options: ["Admin","HSE Manager","Safety Manager","Supervisor","Auditor","Worker","Contractor"], required: true },
-      { label: "Department",  key: "department",   type: "text",   placeholder: "e.g. Operations" },
-      { label: "Site ID",     key: "site",         type: "text",   placeholder: "SITE-001" },
+      { label: "Full Name",   key: "name",  type: "text",   placeholder: "e.g. James Thompson",   required: true },
+      { label: "Email",       key: "email", type: "email",  placeholder: "james@company.com",      required: true },
+      { label: "Role",        key: "role",  type: "select", options: ["safety_manager","supervisor","operator","viewer"], required: true },
     ],
   },
   {
     id: "incidents", label: "Incidents", icon: AlertTriangle, color: "#EF4444", bg: "#FEE2E2",
-    endpoint: "/incidents",
+    endpoint: "/incidents/",
     fields: [
       { label: "Incident Type",  key: "incident_type", type: "select", options: ["incident_report","unsafe_act","unsafe_condition","near_miss"], required: true },
       { label: "Severity",       key: "severity",      type: "select", options: ["low","medium","high","critical"],   required: true },
       { label: "Description",    key: "description",   type: "textarea", placeholder: "Brief description of what happened...", required: true },
-      { label: "Location",       key: "location_id",   type: "text",   placeholder: "e.g. Site A - Zone 4" },
-      { label: "Date Occurred",  key: "occurred_at",   type: "date" },
-      { label: "Reported By",    key: "reporter_note", type: "text",   placeholder: "Employee name or ID" },
+      { label: "Report Date",    key: "report_date",   type: "date" },
     ],
   },
   {
     id: "employees", label: "Employees", icon: UserCheck, color: "#0891B2", bg: "#ECFEFF",
-    endpoint: "/employees",
+    endpoint: "/employees/",
     fields: [
-      { label: "Employee ID",           key: "employee_id",           type: "text",   placeholder: "EMP001",            required: true },
       { label: "Full Name",             key: "full_name",             type: "text",   placeholder: "e.g. Jessica Hernandez", required: true },
       { label: "Date of Birth",         key: "date_of_birth",         type: "date" },
       { label: "Gender",                key: "gender",                type: "select", options: ["M","F","Other"] },
       { label: "Employment Type",       key: "employment_type",       type: "select", options: ["Permanent","Contract","Part-time","Temporary"] },
       { label: "Employment Start Date", key: "employment_start_date", type: "date" },
-      { label: "Current Role ID",       key: "current_role_id",       type: "text",   placeholder: "ROLE001" },
-      { label: "Department ID",         key: "department_id",         type: "text",   placeholder: "DEPT001" },
       { label: "Shift Pattern",         key: "shift_pattern",         type: "select", options: ["Rotating","Days","Nights","Afternoon","Fixed"] },
-      { label: "Manager ID",            key: "manager_id",            type: "text",   placeholder: "EMP001" },
-      { label: "Induction Date",        key: "induction_date",        type: "date" },
       { label: "Active Status",         key: "active_status",         type: "select", options: ["Active","Inactive","On Leave"] },
     ],
   },
   {
     id: "hazards", label: "Hazards", icon: AlertOctagon, color: "#DC2626", bg: "#FEF2F2",
-    endpoint: "/hazards",
+    endpoint: "/hazards/",
     fields: [
-      { label: "Hazard Title",  key: "title",       type: "text",   placeholder: "e.g. Slippery walkway",    required: true },
-      { label: "Type",          key: "type",        type: "select", options: ["physical","chemical","biological","ergonomic","electrical","fire","environmental"], required: true },
-      { label: "Severity",      key: "severity",    type: "select", options: ["low","medium","high","critical"], required: true },
-      { label: "Location",      key: "location_id", type: "text",   placeholder: "Zone 4 / Site A" },
-      { label: "Description",   key: "description", type: "textarea", placeholder: "Describe the hazard..." },
-      { label: "Mitigation",    key: "mitigation",  type: "textarea", placeholder: "Controls in place..." },
+      { label: "Hazard Name",   key: "hazard_name",  type: "text",   placeholder: "e.g. Slippery walkway",    required: true },
+      { label: "Category ID",   key: "category_id",  type: "number", placeholder: "e.g. 1 (leave blank if unknown)" },
+      { label: "Severity",      key: "severity",     type: "select", options: ["Minor","Moderate","Serious","Critical"], required: true },
+      { label: "Probability",   key: "probability",  type: "select", options: ["Unlikely","Possible","Likely","Almost Certain"] },
     ],
   },
 ];
@@ -752,6 +747,13 @@ function AiImportSection({ onImportDone }: { onImportDone?: () => void }) {
     const h: Record<string, string> = {};
     const jwt = localStorage.getItem("hse_jwt_token") || localStorage.getItem("hse_jwt");
     if (jwt) h["Authorization"] = `Bearer ${jwt}`;
+    // Forward user identity so the backend can stamp organisation_id correctly.
+    try {
+      const u = JSON.parse(localStorage.getItem("hse_user") || "{}");
+      if (u?.email)   h["X-User-Email"] = u.email;
+      if (u?.role)    h["X-User-Role"]  = u.role;
+      if (u?.orgCode) h["X-Tenant-Id"]  = u.orgCode;
+    } catch { /**/ }
     return h;
   }
 

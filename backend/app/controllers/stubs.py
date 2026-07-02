@@ -1016,6 +1016,7 @@ async def org_setup_onboarding_bulk(
 
     label = module.replace("_", " ").title()
     import_row = DataImport(
+        organisation_id=current_user.org_id,
         file_name=file.filename or f"{module}.xlsx",
         import_type="excel",
         data_type=label,
@@ -1027,6 +1028,7 @@ async def org_setup_onboarding_bulk(
     )
     db.add(import_row)
     vlog = ValidationLog(
+        organisation_id=current_user.org_id,
         file_name=file.filename or f"{module}.xlsx",
         rule="Required fields present",
         status="pass" if count > 0 else "fail",

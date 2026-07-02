@@ -1,10 +1,11 @@
-from sqlalchemy import Column, String, Boolean, Text
+from sqlalchemy import Column, Integer, String, Boolean, Text
 from app.models.base import Base
 
 
 class ApiIntegration(Base):
     __tablename__ = "api_integrations"
 
+    organisation_id = Column(Integer, nullable=True, index=True)
     name = Column(String(255), nullable=False)
     type = Column(String(100), nullable=False)
     endpoint_url = Column(String(500), nullable=True)

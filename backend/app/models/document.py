@@ -1,10 +1,11 @@
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column, Integer, String, Text
 from app.models.base import Base
 
 
 class Document(Base):
     __tablename__ = "documents"
 
+    organisation_id = Column(Integer, nullable=True, index=True)
     file_name = Column(String(255), nullable=False)
     file_type = Column(String(20), nullable=False)
     category = Column(String(20), nullable=False, default="pdf")
