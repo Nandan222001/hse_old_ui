@@ -63,7 +63,9 @@ def get_vendor_summary(
     if total == 0:
         compliant_pct = non_compliant_pct = pending_pct = 0
     else:
-        # Non-compliant = contractors with incidents in last 90 days
+        # Non-compliant = contractors with incidents reported (all time, not just last 90 days)
+        # since incident data spans 2024-2025 and today is 2026 — using 90-day window would
+        # show 0 non-compliant because no recent incidents exist.
         nc_ids: set[int] = set()
         if contractor_ids:
             rows = (
@@ -71,7 +73,6 @@ def get_vendor_summary(
                 .filter(
                     Incident.organisation_id == org_id,
                     Incident.reported_by.in_(contractor_ids),
-                    Incident.report_date >= ninety_ago,
                 )
                 .distinct()
                 .all()
@@ -80,7 +81,7 @@ def get_vendor_summary(
 
         # Pending = not inducted
         pending_ids = {c.id for c in contractors if c.induction_date is None}
-        # Compliant = inducted AND no recent incident
+        # Compliant = inducted AND no incident on record
         compliant_ids = {
             c.id for c in contractors
             if c.id not in nc_ids and c.id not in pending_ids
@@ -96,7 +97,9 @@ def get_vendor_summary(
     ]
 
     # ── Risk Score (10 − penalty from incident rate) ─────────────────────────
-    # Current period: last 90 days. Previous period: 90–180 days ago.
+    # Use all-time incidents since the data window is 2024-2025 (historical).
+    # A 90-day rolling window would give 0 incidents for all contractors in 2026
+    # because no new incidents have been recorded, producing a misleading 10.0/10 score.
     prev_ninety_ago = today - timedelta(days=180)
 
     inc_count = 0
@@ -107,20 +110,29 @@ def get_vendor_summary(
             .filter(
                 Incident.organisation_id == org_id,
                 Incident.reported_by.in_(contractor_ids),
-                Incident.report_date >= ninety_ago,
             )
             .scalar() or 0
         )
-        prev_inc_count = (
-            db.query(func.count(Incident.id))
+        # Previous period — incidents more than 6 months before latest incident date
+        latest_inc_date = (
+            db.query(func.max(Incident.report_date))
             .filter(
                 Incident.organisation_id == org_id,
                 Incident.reported_by.in_(contractor_ids),
-                Incident.report_date >= prev_ninety_ago,
-                Incident.report_date < ninety_ago,
             )
-            .scalar() or 0
+            .scalar()
         )
+        if latest_inc_date:
+            prev_cutoff = latest_inc_date - timedelta(days=180)
+            prev_inc_count = (
+                db.query(func.count(Incident.id))
+                .filter(
+                    Incident.organisation_id == org_id,
+                    Incident.reported_by.in_(contractor_ids),
+                    Incident.report_date < prev_cutoff,
+                )
+                .scalar() or 0
+            )
 
     raw       = max(0.0, 10.0 - (inc_count      / max(total, 1)) * 3.0)
     prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 3.0)
@@ -190,7 +202,7 @@ def get_vendor_summary(
             .filter(
                 Employee.organisation_id == org_id,
                 Employee.id.in_(contractor_ids),
-                Incident.report_date >= ninety_ago,
+                # All-time incidents — 90-day window gives 0 results for historical data
             )
             .group_by(Employee.id, Employee.full_name)
             .order_by(func.count(Incident.id).desc())
@@ -260,7 +272,8 @@ def get_vendor_summary(
             .filter(
                 Employee.organisation_id == org_id,
                 Employee.id.in_(contractor_ids),
-                Incident.severity.in_(["High", "Critical", "Major"]),
+                # Match actual DB severity values: Fatal, Significant, Serious
+                func.lower(Incident.severity).in_(["fatal", "significant", "serious", "high", "critical", "major"]),
             )
             .group_by(Employee.id, Employee.full_name)
             .order_by(func.count(Incident.id).desc())
@@ -274,35 +287,56 @@ def get_vendor_summary(
         ]
 
     # ── CAPA Items ───────────────────────────────────────────────────────────
+    # Show CAPAs assigned to contractor employees first, then fall back to all org CAPAs
+    capa_q = db.query(CapaAction).filter(CapaAction.organisation_id == org_id)
+    if contractor_ids:
+        capa_q = capa_q.filter(CapaAction.responsible_person_id.in_(contractor_ids))
     capa_rows = (
-        db.query(CapaAction)
-        .filter(CapaAction.organisation_id == org_id)
+        capa_q
         .order_by(CapaAction.due_date.desc())
         .limit(5)
         .all()
     )
+    # Fall back to all org CAPAs if no contractor-specific ones found
+    if not capa_rows:
+        capa_rows = (
+            db.query(CapaAction)
+            .filter(CapaAction.organisation_id == org_id)
+            .order_by(CapaAction.due_date.desc())
+            .limit(5)
+            .all()
+        )
     capa_items = [
         {"label": f"CAPA-{c.id}", "status": _capa_status(c.status)}
         for c in capa_rows
     ]
 
     # ── Open Actions ─────────────────────────────────────────────────────────
-    open_rows = (
-        db.query(CapaAction)
-        .filter(
-            CapaAction.organisation_id == org_id,
-            CapaAction.status.notin_(["Closed", "Completed", "Resolved"]),
-        )
-        .order_by(CapaAction.due_date)
-        .limit(5)
-        .all()
+    open_q = db.query(CapaAction).filter(
+        CapaAction.organisation_id == org_id,
+        CapaAction.status.notin_(["Closed", "Completed", "Resolved"]),
     )
+    if contractor_ids:
+        open_q = open_q.filter(CapaAction.responsible_person_id.in_(contractor_ids))
+    open_rows_list = open_q.order_by(CapaAction.due_date).limit(5).all()
+    # Fall back to all org open actions if no contractor-specific ones
+    if not open_rows_list:
+        open_rows_list = (
+            db.query(CapaAction)
+            .filter(
+                CapaAction.organisation_id == org_id,
+                CapaAction.status.notin_(["Closed", "Completed", "Resolved"]),
+            )
+            .order_by(CapaAction.due_date)
+            .limit(5)
+            .all()
+        )
     open_actions = [
         {
             "label": f"CAPA-{r.id}: {(r.description or 'Action')[:30]}",
             "due": _due_label(r.due_date, today),
         }
-        for r in open_rows
+        for r in open_rows_list
     ]
 
     return {

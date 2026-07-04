@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 from app.services.organisation import OrganisationService
 from app.schemas.organisation import OrganisationCreate, OrganisationUpdate, OrganisationResponse
 
@@ -9,6 +10,15 @@ router = APIRouter(prefix="/organisations", tags=["Organisations"])
 
 def _svc(db: Session = Depends(get_db)) -> OrganisationService:
     return OrganisationService(db)
+
+
+@router.get("/me", response_model=OrganisationResponse)
+def get_my_organisation(
+    svc: OrganisationService = Depends(_svc),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Return the organisation for the currently authenticated user."""
+    return svc.get(current_user.org_id)
 
 
 @router.get("/", response_model=list[OrganisationResponse])

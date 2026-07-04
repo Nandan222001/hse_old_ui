@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { Upload, Plus, Copy, Eye, EyeOff, Trash2, Palette, FileText, Loader2 } from "lucide-react";
+import axiosInstance from "../../api/axiosInstance";
 
 const integrations = [
   { name: "Jira", status: "Connected", desc: "Issue tracking integration" },
@@ -33,13 +34,63 @@ const knowledgeBaseDocs = [
 
 const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge"];
 
+interface OrgData {
+  id: number;
+  organisation_name: string;
+  country: string | null;
+  industry_sector: string | null;
+  number_of_employees: number | null;
+  headquarters_location: string | null;
+  regulatory_authority: string | null;
+  iso_45001_status: string | null;
+  establishment_date: string | null;
+}
+
 export function SettingsPage() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const initialTab = VALID_SETTINGS_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "general";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isUploading, setIsUploading] = useState(false);
   const [docsList, setDocsList] = useState(knowledgeBaseDocs);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // General tab — real org data
+  const [orgData, setOrgData] = useState<OrgData | null>(null);
+  const [orgLoading, setOrgLoading] = useState(true);
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSaved, setOrgSaved] = useState(false);
+
+  useEffect(() => {
+    axiosInstance
+      .get<OrgData>("/organisations/me")
+      .then((r) => setOrgData(r.data))
+      .catch(console.error)
+      .finally(() => setOrgLoading(false));
+  }, []);
+
+  const handleSaveOrg = async () => {
+    if (!orgData) return;
+    setOrgSaving(true);
+    setOrgSaved(false);
+    try {
+      await axiosInstance.put(`/organisations/${orgData.id}`, {
+        organisation_name: orgData.organisation_name,
+        country: orgData.country,
+        industry_sector: orgData.industry_sector,
+        number_of_employees: orgData.number_of_employees,
+        headquarters_location: orgData.headquarters_location,
+        regulatory_authority: orgData.regulatory_authority,
+        iso_45001_status: orgData.iso_45001_status,
+      });
+      setOrgSaved(true);
+      setTimeout(() => setOrgSaved(false), 3000);
+    } catch (e) {
+      console.error("Failed to save org settings", e);
+    } finally {
+      setOrgSaving(false);
+    }
+  };
 
   const tabs = [
     { id: "general", label: "General" },
@@ -113,41 +164,104 @@ export function SettingsPage() {
         <div className="max-w-xl space-y-6">
           <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
             <h2 className="mb-6">General Settings</h2>
-            <div className="space-y-5">
-              <div>
-                <label className="block mb-1.5">Platform Name</label>
-                <input defaultValue="HSE Intelligence" className="w-full h-10 px-4 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }} />
+            {orgLoading ? (
+              <div className="flex items-center gap-2 py-8 justify-center">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1B5E20' }} />
+                <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Loading organisation…</span>
               </div>
-              <div>
-                <label className="block mb-1.5">Logo</label>
-                <div className="border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-[#F4F7F4] transition-colors" style={{ borderColor: '#E2E8E2' }}>
-                  <Upload className="w-8 h-8 mb-2" style={{ color: '#9CA3AF' }} />
-                  <span className="text-[13px]" style={{ color: '#4A5568' }}>Drag & drop or click to upload</span>
-                  <span className="text-[11px]" style={{ color: '#9CA3AF' }}>PNG, SVG, max 2MB</span>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label className="block mb-1.5">Organisation Name</label>
+                  <input
+                    value={orgData?.organisation_name ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, organisation_name: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Country</label>
+                  <input
+                    value={orgData?.country ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, country: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                    placeholder="e.g. United Kingdom"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Industry Sector</label>
+                  <input
+                    value={orgData?.industry_sector ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, industry_sector: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                    placeholder="e.g. Power & Utilities"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Headquarters Location</label>
+                  <input
+                    value={orgData?.headquarters_location ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, headquarters_location: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                    placeholder="e.g. Sheffield, England"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Number of Employees</label>
+                  <input
+                    type="number"
+                    value={orgData?.number_of_employees ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, number_of_employees: Number(e.target.value) || null } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Regulatory Authority</label>
+                  <input
+                    value={orgData?.regulatory_authority ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, regulatory_authority: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                    placeholder="e.g. Health and Safety Executive (HSE)"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">ISO 45001 Status</label>
+                  <select
+                    value={orgData?.iso_45001_status ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, iso_45001_status: e.target.value } : d)}
+                    className="w-full h-10 px-3 rounded-lg border text-[13px] bg-white"
+                    style={{ borderColor: '#E2E8E2' }}
+                  >
+                    <option value="">Select status</option>
+                    {["Certified", "In Progress", "Planned", "Not Applicable"].map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSaveOrg}
+                    disabled={orgSaving}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white text-[13px] disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+                  >
+                    {orgSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {orgSaving ? "Saving…" : "Save Changes"}
+                  </button>
+                  {orgSaved && (
+                    <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>
+                      ✓ Saved successfully
+                    </span>
+                  )}
                 </div>
               </div>
-              <div>
-                <label className="block mb-1.5">Default Timezone</label>
-                <select className="w-full h-10 px-3 rounded-lg border text-[13px] bg-white" style={{ borderColor: '#E2E8E2' }}>
-                  <option>CST (UTC-6)</option>
-                  <option>EST (UTC-5)</option>
-                  <option>MST (UTC-7)</option>
-                  <option>PST (UTC-8)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5">Default Language</label>
-                <select className="w-full h-10 px-3 rounded-lg border text-[13px] bg-white" style={{ borderColor: '#E2E8E2' }}>
-                  <option>English (US)</option>
-                  <option>Spanish</option>
-                  <option>Portuguese</option>
-                  <option>French</option>
-                </select>
-              </div>
-              <button className="px-6 py-2.5 rounded-lg text-white text-[13px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
-                Save Changes
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}

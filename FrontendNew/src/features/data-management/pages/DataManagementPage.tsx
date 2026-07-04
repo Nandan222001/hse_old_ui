@@ -673,7 +673,7 @@ const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
   ],
   hazards: [
     { label: "Hazard ID",    key: "hazard_id",    type: "text",   placeholder: "HAZ001", required: true },
-    { label: "Hazard Name",  key: "title",        type: "text",   placeholder: "Moving Machinery", required: true },
+    { label: "Hazard Name",  key: "hazard_name",  type: "text",   placeholder: "Moving Machinery", required: true },
     { label: "Category ID",  key: "category_id",  type: "text",   placeholder: "HC001" },
     { label: "Severity",     key: "severity",     type: "select", options: ["Minor","Moderate","Serious","Critical"] },
     { label: "Probability",  key: "probability",  type: "select", options: ["Unlikely","Possible","Likely","Almost Certain"] },

@@ -21,6 +21,7 @@ import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { SubscriptionPage } from "./pages/SubscriptionPage";
 import { NearMissPage } from "./pages/NearMissPage";
 import { RiskPage } from "./pages/RiskPage";
+import { RootCauseAnalysisPage } from "./pages/RootCauseAnalysisPage";
 import { AssetsPage } from "./pages/AssetsPage";
 import { EquipmentCertificationPage } from "./pages/EquipmentCertificationPage";
 import { OnboardingPage } from "./pages/OnboardingPage";

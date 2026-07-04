@@ -351,13 +351,13 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
     )
 
     total_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).count()
-    compliant_permits = _org_filter(
-        db.query(PermitToWork).filter(
-            PermitToWork.deviation_reported != "Yes", PermitToWork.incident_occurred != "Yes"
-        ),
+    # Excel KPI spec (M4_Assets_Operations): PTW Compliance Rate = Closed / Total × 100
+    # "Properly closed" = Status = "Closed"; Expired = non-compliant; Active = excluded from base (still open)
+    closed_permits = _org_filter(
+        db.query(PermitToWork).filter(PermitToWork.status == "Closed"),
         PermitToWork, org_id,
     ).count()
-    permit_compliance_pct = round(compliant_permits / total_permits * 100, 1) if total_permits else 0
+    permit_compliance_pct = round(closed_permits / total_permits * 100, 1) if total_permits else 0
 
     is_contractor = func.lower(Employee.employment_type).like("%contract%")
     contractor_q = db.query(Employee).filter(is_contractor)
@@ -373,11 +373,11 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         contractor_total = _org_filter(
             db.query(PermitToWork).filter(contractor_permit_filter), PermitToWork, org_id
         ).count()
+        # Excel KPI spec (M4): PTW Compliance Rate = Closed / Total × 100
         contractor_compliant = _org_filter(
             db.query(PermitToWork).filter(
                 contractor_permit_filter,
-                PermitToWork.deviation_reported != "Yes",
-                PermitToWork.incident_occurred != "Yes",
+                PermitToWork.status == "Closed",
             ),
             PermitToWork, org_id,
         ).count()
@@ -494,21 +494,21 @@ def get_risk_matrix(
         s = (sev or "").lower()
         if "fatal" in s or "catastrophic" in s:
             return 0
-        if "significant" in s:
+        if "significant" in s or "major" in s or "lost time" in s:
             return 1
-        if "serious" in s or ("moderate" in s and "high" not in s):
+        if "serious" in s or "high" in s:
             return 2
-        if "low" in s or "minor" in s:
+        if "moderate" in s or "medium" in s or "low" in s:
             return 3
-        if "negligible" in s:
+        if "minor" in s or "negligible" in s:
             return 4
         return None
 
     def _prob_col(prob: str) -> int | None:
         p = (prob or "").lower()
-        if "frequent" in p or "likely" in p:
+        if "frequent" in p or "almost certain" in p:
             return 0
-        if "probable" in p:
+        if "probable" in p or "likely" in p:
             return 1
         if "possible" in p or "occasional" in p:
             return 2
@@ -657,11 +657,11 @@ def _rca_status(investigation_status: Optional[str]) -> str:
 
 def _rca_priority(severity: Optional[str]) -> str:
     s = (severity or "").lower()
-    if "critical" in s or "significant" in s or "fatal" in s:
+    if "fatal" in s or "catastrophic" in s or "critical" in s or "significant" in s:
         return "Critical"
-    if "high" in s or "major" in s or "lost time" in s:
+    if "serious" in s or "high" in s or "major" in s or "lost time" in s:
         return "High"
-    if "medium" in s or "moderate" in s or "serious" in s:
+    if "medium" in s or "moderate" in s:
         return "Medium"
     return "Low"
 
@@ -754,13 +754,12 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     org_id = current_user.org_id
 
     total_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).count()
-    compliant_permits = _org_filter(
-        db.query(PermitToWork).filter(
-            PermitToWork.deviation_reported != "Yes", PermitToWork.incident_occurred != "Yes"
-        ),
+    # Excel KPI spec (M4_Assets_Operations): PTW Compliance Rate = Closed / Total × 100
+    closed_permits = _org_filter(
+        db.query(PermitToWork).filter(PermitToWork.status == "Closed"),
         PermitToWork, org_id,
     ).count()
-    permit_compliance_pct = round(compliant_permits / total_permits * 100) if total_permits else 0
+    permit_compliance_pct = round(closed_permits / total_permits * 100) if total_permits else 0
 
     total_policies = _org_filter(db.query(Policy), Policy, org_id).count()
     current_policies = _org_filter(

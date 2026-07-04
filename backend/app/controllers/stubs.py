@@ -912,21 +912,23 @@ def org_setup_step6a_import(payload: dict) -> dict:
 
 # Module → (expected sheet name, insert function) mapping
 _MODULE_SHEET = {
-    "employees":        "Employees",
-    "departments":      "Departments",
-    "working_stations": "Working_Stations",
-    "roles":            "Roles",
-    "policies":         "Policies",
-    "permit_types":     "Permit_Types",
-    "hazard_categories":"Hazard_Categories",
-    "hazards":          "Hazards",
-    "training_programs":"Training_Programs",
-    "permits_to_work":  "Permits_To_Work",
-    "incidents":        "Incidents",
-    "near_misses":      "Near_Misses",
-    "safety_walks":     "Safety_Walks",
-    "capa_actions":     "CAPA_Actions",
-    "shift_schedule":   "Shift_Schedule",
+    "employees":            "Employees",
+    "departments":          "Departments",
+    "working_stations":     "Working_Stations",
+    "roles":                "Roles",
+    "policies":             "Policies",
+    "permit_types":         "Permit_Types",
+    "hazard_categories":    "Hazard_Categories",
+    "hazards":              "Hazards",
+    "training_programs":    "Training_Programs",
+    "permits_to_work":      "Permits_To_Work",
+    "incidents":            "Incidents",
+    "near_misses":          "Near_Misses",
+    "safety_walks":         "Safety_Walks",
+    "capa_actions":         "CAPA_Actions",
+    "shift_schedule":       "Shift_Schedule",
+    # compliance_standards maps to policies table (Category/Jurisdiction = ISO/OSHA)
+    "compliance_standards": "Policies",
 }
 
 
@@ -962,6 +964,8 @@ async def org_setup_onboarding_bulk(
         "safety_walks": _insert_safety_walks,
         "capa_actions": _insert_capa_actions,
         "shift_schedule": _insert_shift_schedule,
+        # compliance_standards imports into policies table
+        "compliance_standards": _insert_policies,
     }
     if module not in _INSERT_FNS:
         return {"count": 0, "errors": [f"Unknown module: {module!r}"]}
