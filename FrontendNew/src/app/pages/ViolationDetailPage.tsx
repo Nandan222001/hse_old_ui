@@ -253,7 +253,7 @@ export function ViolationDetailPage() {
             <div className="space-y-2">
               <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Acknowledge</button>
               <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Mark In Progress</button>
-              <button className="w-full py-2 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 500 }}>Close Violation</button>
+              <button className="w-full py-2 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 500 }}>Close Incident</button>
               <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-gray-50" style={{ borderColor: '#E2E8E2', color: '#9CA3AF', fontWeight: 500 }}>False Positive</button>
               <button className="w-full py-2 rounded-lg text-[14px] text-[#DC2626] border transition-colors hover:bg-red-50" style={{ borderColor: '#FEE2E2', fontWeight: 500 }}>Reopen</button>
             </div>
@@ -316,7 +316,7 @@ export function ViolationDetailPage() {
                 </select>
               </div>
               <button className="w-full py-2.5 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
-                Close Violation
+                Close Incident
               </button>
             </div>
           </div>
