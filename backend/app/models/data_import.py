@@ -5,6 +5,7 @@ from app.models.base import Base
 class DataImport(Base):
     __tablename__ = "data_imports"
 
+    organisation_id = Column(Integer, nullable=True, index=True)
     file_name = Column(String(255), nullable=False)
     import_type = Column(String(50), nullable=False, default="excel")
     data_type = Column(String(100), nullable=False)

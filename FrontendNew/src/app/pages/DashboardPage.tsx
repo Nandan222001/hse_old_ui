@@ -106,7 +106,7 @@ export function DashboardPage() {
           trendDown: leading.predictive_injury_risk_trend < 0,
         },
         {
-          title: "TRIR / LTIF",
+          title: "TRIR / LTIFR",
           value: `${leading.trir} / ${leading.ltif}`,
           sub: "Leading Indicator",
           accent: "#FFFFFF",

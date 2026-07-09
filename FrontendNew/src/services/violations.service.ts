@@ -15,6 +15,10 @@ interface BackendIncident {
   root_cause_category: string;
 }
 
+interface BackendIncidentUpdate {
+  investigation_status?: string;
+}
+
 interface BackendCapa {
   id: number;
   incident_id?: number;
@@ -59,6 +63,14 @@ export const getViolationDetail = (violationId: string) =>
     Thumbnail_URL: '',
     Description: r.data.description ?? '',
   } as unknown as Violation));
+
+export const updateIncidentStatus = (incidentId: number, investigation_status: string) =>
+  axiosInstance.put(`/incidents/${incidentId}`, { investigation_status } satisfies BackendIncidentUpdate);
+
+export const updateCapaAction = (
+  actionId: number,
+  payload: { due_date?: string; responsible_person_id?: number },
+) => axiosInstance.put(`/capa-actions/${actionId}`, payload);
 
 export const getActions = (_violationId?: string, _status?: string) =>
   axiosInstance.get<BackendCapa[]>('/capa-actions/').then((r) =>

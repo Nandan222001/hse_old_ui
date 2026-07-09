@@ -61,7 +61,7 @@ const INDUSTRY_OPTIONS = ['Construction', 'Oil & Gas', 'Manufacturing', 'Mining'
 const SUBSCRIPTION_PLAN_OPTIONS = ['Free', 'Pro', 'Enterprise'];
 const FREE_DEFAULT_MODULES = ['Dashboard', 'Checklists', 'Sites & Zones', 'Violations', 'AI Agent'];
 const PRO_DEFAULT_MODULES = [...MODULE_OPTIONS];
-const FREE_DEFAULT_KPIS = ['TRIR / LTIR', 'PPE Compliance %', 'Near Miss Reporting Rate'];
+const FREE_DEFAULT_KPIS = ['TRIR', 'PPE Compliance %', 'Near Miss Reporting Rate'];
 const FREE_TRIAL_DAYS = 30;
 const FREE_KPI_LIMIT = 3;
 const PRO_KPI_LIMIT = 6;
@@ -99,10 +99,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	Construction: {
 		riskOptions: ['Work at Height (Scaffolds/Roofs)', 'Excavation & Trenching', 'Hot Work & Welding Operations', 'Crane, Lifting & Rigging Operations', 'Mobile Plant & Site Traffic Management', 'Temporary Power & Electrical Isolation (LOTO)'],
 		certificationOptions: ['ISO 45001', 'ISO 14001', 'OSHA Program Alignment', 'Client-led HSE Program'],
-		kpiOptions: ['TRIR / LTIR', 'PPE Compliance %', 'Open Violations', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %'],
+		kpiOptions: ['TRIR', 'PPE Compliance %', 'Open Violations', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %'],
 		defaultRisks: ['Work at Height (Scaffolds/Roofs)', 'Hot Work & Welding Operations'],
 		defaultCertifications: ['ISO 45001'],
-		defaultKpis: ['TRIR / LTIR', 'PPE Compliance %'],
+		defaultKpis: ['TRIR', 'PPE Compliance %'],
 		taxonomy: {
 			sector: 'construction',
 			riskDomainTags: ['height_safety', 'permit_to_work', 'lifting_operations'],
@@ -114,10 +114,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	'Oil & Gas': {
 		riskOptions: ['Process Safety / Hydrocarbon Release Risk', 'Confined Space Entry (CS Entry)', 'Hot Work in Hazardous Areas', 'Pressure Systems & Line Breaking', 'Energy Isolation (LOTO) & SIMOPS', 'Chemical Exposure & H2S Handling'],
 		certificationOptions: ['ISO 45001', 'ISO 14001', 'OSHA Program Alignment', 'Internal HSE Framework'],
-		kpiOptions: ['TRIR / LTIR', 'Critical Incident Count', 'Open Violations', 'Corrective Action Closure SLA', 'Near Miss Reporting Rate', 'Checklist Submission Timeliness'],
+		kpiOptions: ['TRIR', 'Critical Incident Count', 'Open Violations', 'Corrective Action Closure SLA', 'Near Miss Reporting Rate', 'Checklist Submission Timeliness'],
 		defaultRisks: ['Confined Space Entry (CS Entry)', 'Hot Work in Hazardous Areas'],
 		defaultCertifications: ['ISO 45001', 'ISO 14001'],
-		defaultKpis: ['TRIR / LTIR', 'Critical Incident Count'],
+		defaultKpis: ['TRIR', 'Critical Incident Count'],
 		taxonomy: {
 			sector: 'oil_and_gas',
 			riskDomainTags: ['process_safety', 'ptw_controls', 'isolation_management'],
@@ -129,10 +129,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	Manufacturing: {
 		riskOptions: ['Machine Guarding / Rotating Equipment Exposure', 'Energy Isolation (LOTO) During Maintenance', 'Chemical Handling & Industrial Hygiene Exposure', 'Forklift & Internal Traffic Movement', 'Hot Work in Production Areas'],
 		certificationOptions: ['ISO 45001', 'ISO 14001', 'Internal HSE Framework'],
-		kpiOptions: ['TRIR / LTIR', 'PPE Compliance %', 'Open Violations', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %', 'Checklist Submission Timeliness'],
+		kpiOptions: ['TRIR', 'PPE Compliance %', 'Open Violations', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %', 'Checklist Submission Timeliness'],
 		defaultRisks: ['Energy Isolation (LOTO) During Maintenance', 'Chemical Handling & Industrial Hygiene Exposure'],
 		defaultCertifications: ['ISO 45001'],
-		defaultKpis: ['TRIR / LTIR', 'Corrective Action Closure SLA'],
+		defaultKpis: ['TRIR', 'Corrective Action Closure SLA'],
 		taxonomy: {
 			sector: 'manufacturing',
 			riskDomainTags: ['machine_safety', 'energy_isolation', 'industrial_hygiene'],
@@ -144,10 +144,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	Mining: {
 		riskOptions: ['Mobile Equipment & Haul Road Interaction', 'Ground Control / Slope Stability', 'Blasting Operations & Explosives Handling', 'Confined Space (Silos, Bins, Tanks)', 'Dust, Silica & Ventilation Exposure', 'Heavy Lifting & Recovery Operations'],
 		certificationOptions: ['ISO 45001', 'Internal HSE Framework', 'Client-led HSE Program'],
-		kpiOptions: ['TRIR / LTIR', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Open Violations', 'Corrective Action Closure SLA'],
+		kpiOptions: ['TRIR', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Open Violations', 'Corrective Action Closure SLA'],
 		defaultRisks: ['Mobile Equipment & Haul Road Interaction', 'Confined Space (Silos, Bins, Tanks)'],
 		defaultCertifications: ['ISO 45001'],
-		defaultKpis: ['TRIR / LTIR', 'Near Miss Reporting Rate'],
+		defaultKpis: ['TRIR', 'Near Miss Reporting Rate'],
 		taxonomy: {
 			sector: 'mining',
 			riskDomainTags: ['mobile_equipment_safety', 'ground_control', 'high_energy_tasks'],
@@ -159,10 +159,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	'Logistics & Transport': {
 		riskOptions: ['Driver Fatigue & Journey Risk Management', 'Vehicle Reversing / Yard Traffic Interaction', 'Loading-Unloading & Dock Safety', 'Manual Handling & Musculoskeletal Risk', 'Battery Charging / Fuel Handling Safety'],
 		certificationOptions: ['ISO 45001', 'OSHA Program Alignment', 'Client-led HSE Program'],
-		kpiOptions: ['TRIR / LTIR', 'Open Violations', 'Near Miss Reporting Rate', 'Checklist Submission Timeliness', 'Corrective Action Closure SLA'],
+		kpiOptions: ['TRIR', 'Open Violations', 'Near Miss Reporting Rate', 'Checklist Submission Timeliness', 'Corrective Action Closure SLA'],
 		defaultRisks: ['Driver Fatigue & Journey Risk Management'],
 		defaultCertifications: ['ISO 45001'],
-		defaultKpis: ['TRIR / LTIR', 'Checklist Submission Timeliness'],
+		defaultKpis: ['TRIR', 'Checklist Submission Timeliness'],
 		taxonomy: {
 			sector: 'logistics_transport',
 			riskDomainTags: ['fleet_safety', 'loading_unloading', 'route_risk_management'],
@@ -174,10 +174,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	'Power & Utilities': {
 		riskOptions: ['Live Electrical Work / Arc Flash Exposure', 'Switchgear & HV Isolation (LOTO)', 'Work at Height on Towers / Poles', 'Confined Space in Pits / Vaults', 'Hot Work During Shutdown Maintenance', 'Chemical Handling (Water Treatment / Oils)'],
 		certificationOptions: ['ISO 45001', 'ISO 14001', 'Internal HSE Framework'],
-		kpiOptions: ['TRIR / LTIR', 'Critical Incident Count', 'PPE Compliance %', 'Corrective Action Closure SLA', 'Checklist Submission Timeliness'],
+		kpiOptions: ['TRIR', 'Critical Incident Count', 'PPE Compliance %', 'Corrective Action Closure SLA', 'Checklist Submission Timeliness'],
 		defaultRisks: ['Switchgear & HV Isolation (LOTO)', 'Work at Height on Towers / Poles'],
 		defaultCertifications: ['ISO 45001', 'ISO 14001'],
-		defaultKpis: ['TRIR / LTIR', 'Critical Incident Count'],
+		defaultKpis: ['TRIR', 'Critical Incident Count'],
 		taxonomy: {
 			sector: 'power_utilities',
 			riskDomainTags: ['electrical_safety', 'maintenance_control', 'permit_governance'],
@@ -189,10 +189,10 @@ const INDUSTRY_PROFILE_MAP: Record<string, IndustryProfile> = {
 	Other: {
 		riskOptions: ['Work at Height', 'Confined Space Entry', 'Hot Work Operations', 'Energy Isolation (LOTO)', 'Vehicle & Traffic Interaction', 'Chemical Handling & Storage', 'Manual Handling / Ergonomic Risk'],
 		certificationOptions: ['ISO 45001', 'ISO 14001', 'OSHA Program Alignment', 'Internal HSE Framework', 'Client-led HSE Program'],
-		kpiOptions: ['TRIR / LTIR', 'PPE Compliance %', 'Open Violations', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %', 'Checklist Submission Timeliness'],
+		kpiOptions: ['TRIR', 'PPE Compliance %', 'Open Violations', 'Critical Incident Count', 'Near Miss Reporting Rate', 'Corrective Action Closure SLA', 'Toolbox Talk Completion %', 'Checklist Submission Timeliness'],
 		defaultRisks: ['Work at Height'],
 		defaultCertifications: ['ISO 45001'],
-		defaultKpis: ['TRIR / LTIR'],
+		defaultKpis: ['TRIR'],
 		taxonomy: {
 			sector: 'general_industry',
 			riskDomainTags: ['general_hse_controls'],
@@ -1237,7 +1237,7 @@ function Step2(p: any) {
 			<SelBool value={p.onsiteClinicAvailable} onChange={p.setOnsiteClinicAvailable} label="Onsite Clinic" disabled={!p.canEditFullConfig} />
 		</div>
 		<div className="ob-fields-3">
-			<Field label="Incident Frequency Rate (TRIR/LTIR)"><input value={p.incidentRate} onChange={(e: any) => p.setIncidentRate(e.target.value)} className="ob-input" disabled={!p.canEditIncidentRate} /></Field>
+				<Field label="Incident Frequency Rate (TRIR)"><input value={p.incidentRate} onChange={(e: any) => p.setIncidentRate(e.target.value)} className="ob-input" disabled={!p.canEditIncidentRate} /></Field>
 			<Field label="Last Audit Date"><input type="date" value={p.lastAuditDate} onChange={(e: any) => p.setLastAuditDate(e.target.value)} className="ob-input" disabled={!p.canEditLastAudit} /></Field>
 			<Field label="Evacuation Drill Cadence"><input value={p.fireEvacuationDrillCadence} onChange={(e: any) => p.setFireEvacuationDrillCadence(e.target.value)} className="ob-input" disabled={!p.canEditFullConfig} /></Field>
 		</div>

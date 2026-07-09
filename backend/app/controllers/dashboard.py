@@ -105,45 +105,49 @@ def get_leading_indicators(
         or 0.0
     )
 
-    # All trailing windows anchor to the latest actual incident/walk date in the data.
-    latest_incident_date = _latest_org_date(db, Incident, Incident.incident_date_time, org_id)
-    latest_walk_date = _latest_org_date(db, SafetyWalk, SafetyWalk.inspection_date_time, org_id)
-    latest_date = latest_incident_date or latest_walk_date or date.today()
+    data_window_end = date(2025, 12, 31)
+    latest_date = data_window_end
 
-    # ── TRIR / LTIFR (trailing 12 months) ──────────────────────────────────
-    one_year_ago = latest_date - timedelta(days=365)
+    # Workbook formulas are based on the full supplied dataset, not a rolling window.
     recordable_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
-        Incident.incident_date_time.isnot(None),
-        func.date(Incident.incident_date_time) >= one_year_ago,
-        func.date(Incident.incident_date_time) <= latest_date,
+        func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
     ).count()
     lost_time_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
-        Incident.incident_date_time.isnot(None),
-        func.date(Incident.incident_date_time) >= one_year_ago,
-        func.date(Incident.incident_date_time) <= latest_date,
-        func.coalesce(Incident.days_away, 0) > 0,
+        func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
+        func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
     ).count()
-    lost_days = (
-        _org_filter(
-            db.query(func.coalesce(func.sum(func.coalesce(Incident.days_away, 0)), 0)),
-            Incident,
-            org_id,
-        )
-        .filter(Incident.incident_date_time.isnot(None))
-        .filter(func.date(Incident.incident_date_time) >= one_year_ago)
-        .filter(func.date(Incident.incident_date_time) <= latest_date)
-        .scalar()
-        or 0
-    )
+    lost_days = _org_filter(
+        db.query(func.coalesce(func.sum(func.coalesce(Incident.days_away, 0)), 0)),
+        Incident,
+        org_id,
+    ).filter(
+        func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
+        func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
+    ).scalar() or 0
+    fatalities = _org_filter(db.query(Incident), Incident, org_id).filter(
+        func.lower(func.coalesce(Incident.severity, "")).in_(["fatal"]),
+    ).count()
+    near_miss_count = _org_filter(db.query(NearMiss), NearMiss, org_id).count()
+    total_investigations = _org_filter(db.query(Incident), Incident, org_id).count()
+    completed_investigations = _org_filter(db.query(Incident), Incident, org_id).filter(
+        func.lower(func.coalesce(Incident.investigation_status, "")).in_(["completed"]),
+    ).count()
+
     trir = _safe_round((recordable_incidents * 200_000) / man_hours) if man_hours else 0.0
     ltifr = _safe_round((lost_time_incidents * 1_000_000) / man_hours) if man_hours else 0.0
     ltisr = _safe_round((float(lost_days) * 1_000_000) / man_hours) if man_hours else 0.0
-    restricted_work_cases = 0
-    dart_rate = _safe_round(((lost_time_incidents + restricted_work_cases) * 200_000) / man_hours) if man_hours else 0.0
-    far = _safe_round((0 * 100_000_000) / man_hours) if man_hours else 0.0
-    near_miss_ratio = _safe_round((
-        _org_filter(db.query(NearMiss), NearMiss, org_id).count() / recordable_incidents
-    )) if recordable_incidents else 0.0
+    dart_rate = _safe_round((lost_time_incidents * 200_000) / man_hours) if man_hours else 0.0
+    far = _safe_round((fatalities * 100_000_000) / man_hours) if man_hours else 0.0
+    near_miss_ratio = f"{_safe_round(near_miss_count / recordable_incidents, 1)} : 1" if recordable_incidents else "0 : 1"
+    latest_lti_date = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).filter(
+        func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
+        func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
+    ).scalar()
+    safe_days = int((data_window_end - latest_lti_date.date()).days) if latest_lti_date else 0
+    dangerous_occurrence_rate = _org_filter(db.query(Incident), Incident, org_id).filter(
+        func.lower(func.coalesce(Incident.incident_type, "")).in_(["dangerous occurrence"]),
+    ).count()
+    incident_close_out_rate = _safe_round((completed_investigations / total_investigations) * 100) if total_investigations else 0.0
 
     # ── Predictive Injury Risk Score ────────────────────────────────────────
     severity_weight = case(
@@ -254,6 +258,9 @@ def get_leading_indicators(
         "dart_rate": dart_rate,
         "far": far,
         "near_miss_ratio": near_miss_ratio,
+        "safe_days": safe_days,
+        "dangerous_occurrence_rate": dangerous_occurrence_rate,
+        "incident_close_out_rate": incident_close_out_rate,
         "ltif": ltifr,
         "contractor_risk_label": contractor_risk_label,
         "contractor_rate": contractor_rate,

@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getViolationDetail, type ViolationDetail } from "../../services/analytics.service";
+import { updateIncidentStatus, updateCapaAction } from "../../services/violations.service";
+import axiosInstance from "../../api/axiosInstance";
 
 const STATUS_STEPS = ["Detected", "Assigned", "Acknowledged", "In Progress", "Closed"];
 
@@ -38,6 +40,8 @@ export function ViolationDetailPage() {
   const [detail, setDetail] = useState<ViolationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [assignedEmployeeId, setAssignedEmployeeId] = useState<string>("");
 
   useEffect(() => {
     if (!id) return;
@@ -47,6 +51,69 @@ export function ViolationDetailPage() {
       .then((d) => { setDetail(d); setLoading(false); })
       .catch(() => { setNotFound(true); setLoading(false); });
   }, [id]);
+
+  useEffect(() => {
+    if (!detail?.assignee) {
+      setAssignedEmployeeId("");
+      return;
+    }
+    axiosInstance.get<{ id: number; full_name: string }[]>('/employees/')
+      .then((r) => {
+        const match = r.data.find((emp) => emp.full_name === detail.assignee?.name);
+        setAssignedEmployeeId(match ? String(match.id) : "");
+      })
+      .catch(() => setAssignedEmployeeId(""));
+  }, [detail?.assignee]);
+
+  const incidentId = id ? parseInt(id.replace(/^INC-0*/i, ""), 10) : NaN;
+
+  const refreshDetail = async () => {
+    if (Number.isNaN(incidentId)) return;
+    const updated = await getViolationDetail(incidentId);
+    setDetail(updated);
+  };
+
+  const changeStatus = async (nextStatus: string) => {
+    if (Number.isNaN(incidentId) || !detail) return;
+    setActionLoading(true);
+    try {
+      await updateIncidentStatus(incidentId, nextStatus);
+      await refreshDetail();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const getPrimaryCapaActionId = () => {
+    const raw = detail?.capa_actions?.[0]?.id ?? "";
+    const match = raw.match(/(\d+)/);
+    return match ? Number(match[1]) : NaN;
+  };
+
+  const saveDueDate = async (nextDate: string) => {
+    const actionId = getPrimaryCapaActionId();
+    if (Number.isNaN(actionId)) return;
+    setActionLoading(true);
+    try {
+      await updateCapaAction(actionId, { due_date: nextDate || undefined });
+      await refreshDetail();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const reassignAction = async () => {
+    const actionId = getPrimaryCapaActionId();
+    if (Number.isNaN(actionId)) return;
+    if (!assignedEmployeeId) return;
+    setActionLoading(true);
+    try {
+      await updateCapaAction(actionId, { responsible_person_id: Number(assignedEmployeeId) });
+      await refreshDetail();
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -251,11 +318,11 @@ export function ViolationDetailPage() {
               <StatusBadge status={detail.investigation_status} />
             </div>
             <div className="space-y-2">
-              <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Acknowledge</button>
-              <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Mark In Progress</button>
-              <button className="w-full py-2 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 500 }}>Close Incident</button>
-              <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-gray-50" style={{ borderColor: '#E2E8E2', color: '#9CA3AF', fontWeight: 500 }}>False Positive</button>
-              <button className="w-full py-2 rounded-lg text-[14px] text-[#DC2626] border transition-colors hover:bg-red-50" style={{ borderColor: '#FEE2E2', fontWeight: 500 }}>Reopen</button>
+              <button onClick={() => changeStatus("Acknowledged")} disabled={actionLoading} className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Acknowledge</button>
+              <button onClick={() => changeStatus("In Progress")} disabled={actionLoading} className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#0A0A0A', fontWeight: 500 }}>Mark In Progress</button>
+              <button onClick={() => changeStatus("Closed")} disabled={actionLoading} className="w-full py-2 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 500 }}>Close Incident</button>
+              <button onClick={() => changeStatus("False Positive")} disabled={actionLoading} className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-gray-50" style={{ borderColor: '#E2E8E2', color: '#9CA3AF', fontWeight: 500 }}>False Positive</button>
+              <button onClick={() => changeStatus("Open")} disabled={actionLoading} className="w-full py-2 rounded-lg text-[14px] text-[#DC2626] border transition-colors hover:bg-red-50" style={{ borderColor: '#FEE2E2', fontWeight: 500 }}>Reopen</button>
             </div>
           </div>
 
@@ -275,7 +342,7 @@ export function ViolationDetailPage() {
             ) : (
               <p className="text-[13px] mb-4" style={{ color: '#9CA3AF' }}>No assignee yet</p>
             )}
-            <button className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#2E7D32', fontWeight: 500 }}>
+            <button onClick={reassignAction} disabled={actionLoading || !assignedEmployeeId} className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#2E7D32', fontWeight: 500 }}>
               Reassign
             </button>
             {detail.due_date && (
@@ -284,6 +351,7 @@ export function ViolationDetailPage() {
                 <input
                   type="date"
                   defaultValue={detail.due_date}
+                  onChange={(e) => saveDueDate(e.target.value)}
                   className="w-full h-10 px-3 rounded-lg border text-[14px]"
                   style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
                 />
@@ -315,7 +383,7 @@ export function ViolationDetailPage() {
                   <option>Inadequate Signage</option>
                 </select>
               </div>
-              <button className="w-full py-2.5 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
+              <button onClick={() => changeStatus("Closed")} disabled={actionLoading} className="w-full py-2.5 rounded-lg text-white text-[14px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
                 Close Incident
               </button>
             </div>
