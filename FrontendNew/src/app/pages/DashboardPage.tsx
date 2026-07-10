@@ -15,6 +15,40 @@ import {
   type LeadingIndicators,
 } from "../../services/dashboard.service";
 
+// ── date helpers ─────────────────────────────────────────────────────────────
+function toISO(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
+function subtractDays(days: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return toISO(d);
+}
+
+type Preset = "7D" | "30D" | "90D" | "1Y" | "ALL" | "CUSTOM";
+
+const PRESETS: { label: string; key: Preset }[] = [
+  { label: "7D",  key: "7D"  },
+  { label: "30D", key: "30D" },
+  { label: "90D", key: "90D" },
+  { label: "1Y",  key: "1Y"  },
+  { label: "All", key: "ALL" },
+  { label: "Custom", key: "CUSTOM" },
+];
+
+function presetDates(preset: Preset): { start?: string; end?: string } {
+  const today = toISO(new Date());
+  switch (preset) {
+    case "7D":  return { start: subtractDays(7),   end: today };
+    case "30D": return { start: subtractDays(30),  end: today };
+    case "90D": return { start: subtractDays(90),  end: today };
+    case "1Y":  return { start: subtractDays(365), end: today };
+    case "ALL": return {};
+    default:    return {};
+  }
+}
+
 async function repairOrgData() {
   try {
     const jwt = localStorage.getItem("hse_jwt_token");
@@ -74,14 +108,29 @@ export function DashboardPage() {
   const [leading, setLeading] = useState<LeadingIndicators | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // ── date filter state ──────────────────────────────────────────────────────
+  const [preset, setPreset] = useState<Preset>("30D");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+
+  const activeDates = preset === "CUSTOM"
+    ? { start: customStart || undefined, end: customEnd || undefined }
+    : presetDates(preset);
+
+  function handlePreset(key: Preset) {
+    setPreset(key);
+    setShowCustom(key === "CUSTOM");
+  }
+
   useEffect(() => {
-    // First repair any NULL org_id rows so backend returns real data, then load dashboard
+    const { start, end } = activeDates;
     Promise.all([
-        getDashboardStats(),
-        getIncidentsByCategory(),
-        getCapaActions(5),
+        getDashboardStats(start, end),
+        getIncidentsByCategory(start, end),
+        getCapaActions(5, start, end),
         getOverdueCapa(4),
-        getLeadingIndicators(),
+        getLeadingIndicators(start, end),
       ])
       .then(([s, cats, capas, overdue, lead]) => {
         setStats(s as DashboardStats);
@@ -92,7 +141,8 @@ export function DashboardPage() {
         setLastUpdated(new Date());
       })
       .catch(console.error);
-  }, [user?.role]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, preset, customStart, customEnd]);
 
   const demoKpis = leading
     ? [
@@ -152,7 +202,7 @@ export function DashboardPage() {
         },
         {
           title: "Near Miss Ratio",
-          value: `${leading.near_miss_ratio ?? 0}:1`,
+          value: `${leading.near_miss_ratio ?? "0 : 1"}`,
           sub: "Leading Indicator",
           accent: "#FFFFFF",
           border: "#E5E7EB",
@@ -302,12 +352,13 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl border px-5 py-4" style={{ borderColor: '#DCE4F3', background: '#FFFFFF' }}>
-        <div>
-          <h1>Welcome, {firstName}</h1>
-          <p className="text-[14px] mt-1" style={{ color: '#64748B' }}>Focus on leading indicators and high-priority actions first.</p>
-        </div>
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 rounded-2xl border px-5 py-4" style={{ borderColor: '#DCE4F3', background: '#FFFFFF' }}>
+        {/* top row — welcome + updated */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1>Welcome, {firstName}</h1>
+            <p className="text-[14px] mt-1" style={{ color: '#64748B' }}>Focus on leading indicators and high-priority actions first.</p>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-[13px]" style={{ color: '#94A3B8' }}>
               {lastUpdated
@@ -317,6 +368,66 @@ export function DashboardPage() {
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#5B6DE8' }} />
           </div>
         </div>
+
+        {/* date filter row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-semibold" style={{ color: '#475569' }}>Period:</span>
+          {PRESETS.map(({ label, key }) => (
+            <button
+              key={key}
+              onClick={() => handlePreset(key)}
+              className="rounded-full px-3 py-1 text-[13px] font-semibold transition-all duration-150"
+              style={{
+                background: preset === key ? '#5565C1' : '#F1F5F9',
+                color: preset === key ? '#FFFFFF' : '#475569',
+                border: preset === key ? '1.5px solid #5565C1' : '1.5px solid #E2E8F0',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+
+          {/* active date range label */}
+          {preset !== "CUSTOM" && preset !== "ALL" && activeDates.start && (
+            <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>
+              {activeDates.start} → {activeDates.end}
+            </span>
+          )}
+          {preset === "ALL" && (
+            <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>All time</span>
+          )}
+        </div>
+
+        {/* custom date pickers */}
+        {showCustom && (
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="flex items-center gap-2">
+              <label className="text-[13px] font-semibold" style={{ color: '#475569' }}>From</label>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="rounded-lg border px-3 py-1.5 text-[13px] outline-none focus:ring-2"
+                style={{ borderColor: '#CBD5E1', color: '#1F2937', background: '#F8FAFC' }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[13px] font-semibold" style={{ color: '#475569' }}>To</label>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="rounded-lg border px-3 py-1.5 text-[13px] outline-none focus:ring-2"
+                style={{ borderColor: '#CBD5E1', color: '#1F2937', background: '#F8FAFC' }}
+              />
+            </div>
+            {customStart && customEnd && (
+              <span className="text-[12px]" style={{ color: '#94A3B8' }}>
+                {customStart} → {customEnd}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {content}

@@ -1,6 +1,7 @@
 from datetime import date, timedelta
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
@@ -29,6 +30,15 @@ def _org_filter(query, model, org_id):
     return query
 
 
+def _date_filter(query, date_column, start_date: Optional[date], end_date: Optional[date]):
+    """Apply optional start_date / end_date filter on a date or datetime column."""
+    if start_date:
+        query = query.filter(func.date(date_column) >= start_date)
+    if end_date:
+        query = query.filter(func.date(date_column) <= end_date)
+    return query
+
+
 def _latest_org_date(db: Session, model, date_column, org_id):
     latest_value = _org_filter(db.query(func.max(date_column)), model, org_id).scalar()
     return latest_value.date() if latest_value else None
@@ -40,13 +50,27 @@ def _safe_round(value, digits=2):
 
 @router.get("/stats")
 def get_dashboard_stats(
+    start_date: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="Filter to date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     today = date.today()
     org_id = current_user.org_id
 
-    total_incidents = _org_filter(db.query(Incident), Incident, org_id).count()
+    def inc_q():
+        return _date_filter(_org_filter(db.query(Incident), Incident, org_id), Incident.incident_date_time, start_date, end_date)
+
+    def nm_q():
+        return _date_filter(_org_filter(db.query(NearMiss), NearMiss, org_id), NearMiss.event_date_time, start_date, end_date)
+
+    def sw_q():
+        return _date_filter(_org_filter(db.query(SafetyWalk), SafetyWalk, org_id), SafetyWalk.inspection_date_time, start_date, end_date)
+
+    def capa_q():
+        return _date_filter(_org_filter(db.query(CapaAction), CapaAction, org_id), CapaAction.due_date, start_date, end_date)
+
+    total_incidents = inc_q().count()
     open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status != "Completed").count()
     overdue_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
         CapaAction.status != "Completed",
@@ -56,16 +80,17 @@ def get_dashboard_stats(
     active_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).filter(PermitToWork.status == "Active").count()
     total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
     total_sites = _org_filter(db.query(Site), Site, org_id).count()
-    near_misses_count = _org_filter(db.query(NearMiss), NearMiss, org_id).count()
-    safety_walks_count = _org_filter(db.query(SafetyWalk), SafetyWalk, org_id).count()
+    near_misses_count = nm_q().count()
+    safety_walks_count = sw_q().count()
 
-    avg_compliance = _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id).scalar()
-    avg_housekeeping = _org_filter(db.query(func.avg(SafetyWalk.housekeeping_rating)), SafetyWalk, org_id).scalar()
+    avg_compliance = sw_q().with_entities(func.avg(SafetyWalk.compliance_rating)).scalar()
+    avg_housekeeping = sw_q().with_entities(func.avg(SafetyWalk.housekeeping_rating)).scalar()
 
-    critical_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
+    critical_incidents = inc_q().filter(
         func.lower(Incident.severity).in_(["critical", "significant"])
     ).count()
 
+    # capa_completion_rate is org-wide (not date filtered) — it's a point-in-time health metric
     capa_completed = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status == "Completed").count()
     capa_total = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
     capa_completion_rate = round((capa_completed / capa_total * 100) if capa_total else 0, 1)
@@ -88,6 +113,8 @@ def get_dashboard_stats(
 
 @router.get("/leading-indicators")
 def get_leading_indicators(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -105,31 +132,39 @@ def get_leading_indicators(
         or 0.0
     )
 
-    data_window_end = date(2025, 12, 31)
+    data_window_end = end_date or date.today()
+    data_window_start = start_date or None
     latest_date = data_window_end
 
     # Workbook formulas are based on the full supplied dataset, not a rolling window.
-    recordable_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
+    inc_base = _org_filter(db.query(Incident), Incident, org_id)
+    if data_window_start:
+        inc_base = inc_base.filter(func.date(Incident.incident_date_time) >= data_window_start)
+    if data_window_end:
+        inc_base = inc_base.filter(func.date(Incident.incident_date_time) <= data_window_end)
+
+    recordable_incidents = inc_base.filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
     ).count()
-    lost_time_incidents = _org_filter(db.query(Incident), Incident, org_id).filter(
+    lost_time_incidents = inc_base.filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
         func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
     ).count()
-    lost_days = _org_filter(
-        db.query(func.coalesce(func.sum(func.coalesce(Incident.days_away, 0)), 0)),
-        Incident,
-        org_id,
+    lost_days = inc_base.with_entities(
+        func.coalesce(func.sum(func.coalesce(Incident.days_away, 0)), 0)
     ).filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
         func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
     ).scalar() or 0
-    fatalities = _org_filter(db.query(Incident), Incident, org_id).filter(
+    fatalities = inc_base.filter(
         func.lower(func.coalesce(Incident.severity, "")).in_(["fatal"]),
     ).count()
-    near_miss_count = _org_filter(db.query(NearMiss), NearMiss, org_id).count()
-    total_investigations = _org_filter(db.query(Incident), Incident, org_id).count()
-    completed_investigations = _org_filter(db.query(Incident), Incident, org_id).filter(
+    near_miss_count = _date_filter(
+        _org_filter(db.query(NearMiss), NearMiss, org_id),
+        NearMiss.event_date_time, data_window_start, data_window_end
+    ).count()
+    total_investigations = inc_base.count()
+    completed_investigations = inc_base.filter(
         func.lower(func.coalesce(Incident.investigation_status, "")).in_(["completed"]),
     ).count()
 
@@ -236,15 +271,16 @@ def get_leading_indicators(
     contractor_risk_label = "High" if relative_risk >= 1.5 else ("Medium" if relative_risk >= 1 else "Low")
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
-    walk_window_start = latest_date - timedelta(days=90)
-    avg_compliance = (
+    # Use selected date window; fall back to last 90 days anchored on data_window_end
+    walk_window_start = data_window_start if data_window_start else (data_window_end - timedelta(days=90))
+    avg_compliance_walk = (
         _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
         .filter(SafetyWalk.inspection_date_time.isnot(None))
         .filter(func.date(SafetyWalk.inspection_date_time) >= walk_window_start)
-        .filter(func.date(SafetyWalk.inspection_date_time) < latest_date)
+        .filter(func.date(SafetyWalk.inspection_date_time) <= data_window_end)
         .scalar()
     )
-    average_compliance = _safe_round(avg_compliance)
+    average_compliance = _safe_round(avg_compliance_walk)
     audit_readiness_score = _safe_round((average_compliance / 5) * 100) if average_compliance else 0.0
     audit_readiness_label = "Ready" if audit_readiness_score >= 80 else ("Needs Attention" if audit_readiness_score >= 60 else "Not Ready")
 
@@ -276,19 +312,21 @@ def get_leading_indicators(
 @router.get("/capa-actions")
 def get_ranked_capa_actions(
     limit: int = 10,
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     today = date.today()
     org_id = current_user.org_id
-    rows = (
-        _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)
-        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+    q = _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)\
+        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)\
         .filter(CapaAction.status != "Completed")
-        .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
-        .limit(limit)
-        .all()
-    )
+    if start_date:
+        q = q.filter(func.date(CapaAction.due_date) >= start_date)
+    if end_date:
+        q = q.filter(func.date(CapaAction.due_date) <= end_date)
+    rows = q.order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc()).limit(limit).all()
     result = []
     for capa, emp in rows:
         days_until_due = None
@@ -350,23 +388,25 @@ def get_overdue_capa(
 
 @router.get("/incidents-by-category")
 def get_incidents_by_category(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
-    rows = (
-        db.query(
+    inc_q = db.query(
             HazardCategory.category_name,
             func.count(Incident.id).label("count"),
-        )
-        .outerjoin(Hazard, Hazard.category_id == HazardCategory.id)
-        .outerjoin(Incident, Incident.hazard_id == Hazard.id)
-        .filter(Incident.organisation_id == org_id if org_id is not None else True)
-        .group_by(HazardCategory.category_name)
-        .order_by(func.count(Incident.id).desc())
-        .limit(8)
-        .all()
-    )
+        ).outerjoin(Hazard, Hazard.category_id == HazardCategory.id)\
+         .outerjoin(Incident, Incident.hazard_id == Hazard.id)\
+         .filter(Incident.organisation_id == org_id if org_id is not None else True)
+    if start_date:
+        inc_q = inc_q.filter(func.date(Incident.incident_date_time) >= start_date)
+    if end_date:
+        inc_q = inc_q.filter(func.date(Incident.incident_date_time) <= end_date)
+    rows = inc_q.group_by(HazardCategory.category_name)\
+                .order_by(func.count(Incident.id).desc())\
+                .limit(8).all()
     return [{"name": r.category_name, "data": r.count, "intelligence": max(0, r.count - 5)} for r in rows]
 
 

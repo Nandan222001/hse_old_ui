@@ -105,20 +105,28 @@ export interface ActivePermit {
   status: string;
 }
 
-export const getDashboardStats = () =>
-  axiosInstance.get<DashboardStats>('/dashboard/stats').then((r) => r.data);
+export const getDashboardStats = (startDate?: string, endDate?: string) =>
+  axiosInstance.get<DashboardStats>('/dashboard/stats', {
+    params: { start_date: startDate, end_date: endDate },
+  }).then((r) => r.data);
 
-export const getLeadingIndicators = () =>
-  axiosInstance.get<LeadingIndicators>('/dashboard/leading-indicators').then((r) => r.data);
+export const getLeadingIndicators = (startDate?: string, endDate?: string) =>
+  axiosInstance.get<LeadingIndicators>('/dashboard/leading-indicators', {
+    params: { start_date: startDate, end_date: endDate },
+  }).then((r) => r.data);
 
-export const getCapaActions = (limit = 10) =>
-  axiosInstance.get<CapaAction[]>('/dashboard/capa-actions', { params: { limit } }).then((r) => r.data);
+export const getCapaActions = (limit = 10, startDate?: string, endDate?: string) =>
+  axiosInstance.get<CapaAction[]>('/dashboard/capa-actions', {
+    params: { limit, start_date: startDate, end_date: endDate },
+  }).then((r) => r.data);
 
 export const getOverdueCapa = (limit = 10) =>
   axiosInstance.get<OverdueCapa[]>('/dashboard/overdue-capa', { params: { limit } }).then((r) => r.data);
 
-export const getIncidentsByCategory = () =>
-  axiosInstance.get<IncidentByCategory[]>('/dashboard/incidents-by-category').then((r) => r.data);
+export const getIncidentsByCategory = (startDate?: string, endDate?: string) =>
+  axiosInstance.get<IncidentByCategory[]>('/dashboard/incidents-by-category', {
+    params: { start_date: startDate, end_date: endDate },
+  }).then((r) => r.data);
 
 export const getComplianceTrend = (days = 30) =>
   axiosInstance.get<ComplianceTrend[]>('/dashboard/compliance-trend', { params: { days } }).then((r) => r.data);
