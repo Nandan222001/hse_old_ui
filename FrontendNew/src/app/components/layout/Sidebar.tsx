@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
   Lightbulb, ClipboardCheck, BarChart3,
-  FolderClosed, AlertTriangle, Heart,
+  FolderClosed, AlertTriangle,
   LogOut, Shield, Settings, X, Database, HardHat, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -33,7 +33,6 @@ const navGroups: NavGroup[] = [
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Guide", icon: BookOpenText, path: "/checklists" },
       { name: "Reports", icon: BarChart3, path: "/analytics" },
-      { name: "Engagement", icon: Heart, path: "/engagement" },
       { name: "Data", icon: Database, path: "/data-management" },
       { name: "Settings", icon: Settings, path: "/settings" },
     ],

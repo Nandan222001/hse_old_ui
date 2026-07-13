@@ -76,6 +76,8 @@ export function RiskPage() {
   const [kpis, setKpis] = useState<{ control_effectiveness: string; unverified_controls: number; risk_escalations: number } | null>(null);
   const [residualTrend, setResidualTrend] = useState<{ q: string; risk: number }[]>([]);
   const [matrixCounts, setMatrixCounts] = useState<number[][]>(Array.from({ length: 5 }, () => Array(5).fill(0)));
+  const [matrixMeta, setMatrixMeta] = useState<{ active: number; resolved: number; total: number } | null>(null);
+  const [recentlyClosed, setRecentlyClosed] = useState<number>(0);
 
   useEffect(() => {
     getRiskSummary().then((data) => {
@@ -83,9 +85,17 @@ export function RiskPage() {
       setTaskRows(data.task_rows);
       setAgingBars(data.aging_bars);
       setKpis(data.kpis);
+      setRecentlyClosed((data as any).recently_closed_count ?? 0);
     }).catch(console.error);
     getResidualRiskTrend().then(setResidualTrend).catch(console.error);
-    getRiskMatrix().then((d) => setMatrixCounts(d.counts)).catch(console.error);
+    getRiskMatrix().then((d) => {
+      setMatrixCounts(d.counts);
+      setMatrixMeta({
+        active: (d as any).active_hazard_count ?? 0,
+        resolved: (d as any).resolved_hazard_count ?? 0,
+        total: (d as any).total_hazard_count ?? 0,
+      });
+    }).catch(console.error);
   }, []);
 
   return (
@@ -177,6 +187,22 @@ export function RiskPage() {
               Total risks: {matrixCounts.flat().reduce((a, b) => a + b, 0)}
             </span>
           </div>
+          {/* Resolved / closed summary */}
+          {matrixMeta && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>
+                ✅ {matrixMeta.resolved} resolved — auto-removed
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#B45309', fontWeight: 700 }}>
+                ⚠️ {matrixMeta.active} active
+              </span>
+              {recentlyClosed > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: '#EFF6FF', color: '#1D4ED8', fontWeight: 700 }}>
+                  🔒 {recentlyClosed} closed this week
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Risk by Zone / Site / Team */}
@@ -313,6 +339,12 @@ export function RiskPage() {
                 {label}
               </span>
             ))}
+            {recentlyClosed > 0 && (
+              <span className="rounded-full px-3 py-1 text-[11px]"
+                style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>
+                ✅ {recentlyClosed} closed this week
+              </span>
+            )}
           </div>
 
           <ResponsiveContainer width="100%" height={220}>

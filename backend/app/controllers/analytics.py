@@ -490,6 +490,13 @@ def get_risk_matrix(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    """Risk matrix counts active (unresolved) hazards only.
+
+    A hazard is considered RESOLVED and excluded from the matrix when:
+    - All incidents linked to that hazard have investigation_status = 'Completed'
+    - AND all CAPA actions for those incidents are status = 'Completed'
+    This ensures closed risks vanish from the matrix automatically.
+    """
     org_id = current_user.org_id
 
     def _sev_row(sev: str) -> int | None:
@@ -520,18 +527,74 @@ def get_risk_matrix(
             return 4
         return None
 
-    hazards = _org_filter(
-        db.query(Hazard.severity, Hazard.probability), Hazard, org_id
-    ).all()
+    # ── Find hazard IDs that are fully resolved ───────────────────────────────
+    # A hazard is resolved if every incident linked to it is completed AND
+    # every CAPA for those incidents is completed.
+    all_hazard_ids = [
+        h.id for h in _org_filter(db.query(Hazard.id), Hazard, org_id).all()
+    ]
+
+    resolved_hazard_ids: set[int] = set()
+    for hid in all_hazard_ids:
+        linked_incidents = (
+            db.query(Incident)
+            .filter(
+                Incident.hazard_id == hid,
+                *([Incident.organisation_id == org_id] if org_id is not None else []),
+            )
+            .all()
+        )
+        if not linked_incidents:
+            # No incidents linked — hazard stays on matrix (unverified)
+            continue
+
+        all_incidents_closed = all(
+            ("complete" in (inc.investigation_status or "").lower() or
+             "closed" in (inc.investigation_status or "").lower())
+            for inc in linked_incidents
+        )
+        if not all_incidents_closed:
+            continue
+
+        # Check all CAPAs for these incidents are also completed
+        inc_ids = [inc.id for inc in linked_incidents]
+        open_capas = (
+            db.query(CapaAction)
+            .filter(
+                CapaAction.incident_id.in_(inc_ids),
+                CapaAction.status != "Completed",
+                *([CapaAction.organisation_id == org_id] if org_id is not None else []),
+            )
+            .count()
+        )
+        if open_capas == 0:
+            resolved_hazard_ids.add(hid)
+
+    # ── Build matrix from active (unresolved) hazards only ───────────────────
+    hazards = (
+        _org_filter(db.query(Hazard.id, Hazard.severity, Hazard.probability), Hazard, org_id)
+        .all()
+    )
 
     counts = [[0] * 5 for _ in range(5)]
-    for sev, prob in hazards:
+    active_hazard_count = 0
+    resolved_hazard_count = len(resolved_hazard_ids)
+
+    for hid, sev, prob in hazards:
+        if hid in resolved_hazard_ids:
+            continue  # Skip resolved — auto-removed from matrix
         r = _sev_row(sev or "")
         c = _prob_col(prob or "")
         if r is not None and c is not None:
             counts[r][c] += 1
+            active_hazard_count += 1
 
-    return {"counts": counts}
+    return {
+        "counts": counts,
+        "active_hazard_count": active_hazard_count,
+        "resolved_hazard_count": resolved_hazard_count,
+        "total_hazard_count": len(hazards),
+    }
 
 
 @router.get("/risk-summary")
@@ -636,10 +699,20 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
         CapaAction, org_id,
     ).count()
 
+    # Risks closed in last 7 days (vanished from matrix + aging automatically)
+    recently_closed_count = _org_filter(
+        db.query(CapaAction).filter(
+            CapaAction.status == "Completed",
+            CapaAction.due_date >= today - timedelta(days=7),
+        ),
+        CapaAction, org_id,
+    ).count()
+
     return {
         "zone_risk": zone_risk,
         "task_rows": task_rows,
         "aging_bars": aging_bars,
+        "recently_closed_count": recently_closed_count,
         "kpis": {
             "control_effectiveness": f"{effectiveness}%",
             "unverified_controls": open_count,

@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { Download, Calendar, BarChart3, Plus, Clock, Edit, Trash2 } from "lucide-react";
+import { Download, Calendar, BarChart3 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
-import { StatusBadge } from "../components/shared/StatusBadge";
 import { getViolationsSummary, getPermitsSummary, type RcaItem, type SeverityMixItem, type WorkByType } from "../../services/analytics.service";
 import { getSites } from "../../services/infrastructure.service";
 
 const ppeData: { name: string; compliance: number }[] = [];
-const scheduledReports: { name: string; type: string; freq: string; recipients: string; lastSent: string; nextSend: string; status: string }[] = [];
 
 const VALID_TABS = ["overview", "ppe", "contractor", "zone", "trend", "custom"];
 
@@ -450,57 +448,7 @@ export function AnalyticsPage() {
         </div>
       )}
 
-      {/* Scheduled Reports */}
-      {(activeTab === "overview" || activeTab === "custom") && (
-        <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2>Scheduled Reports</h2>
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[12px]" style={{ borderColor: '#2E7D32', color: '#2E7D32', fontWeight: 500 }}>
-              <Plus className="w-3.5 h-3.5" /> Add Schedule
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px]">
-            <thead>
-              <tr style={{ background: '#F4F7F4' }}>
-                {["Report Name", "Type", "Frequency", "Recipients", "Last Sent", "Next Send", "Status", "Actions"].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left">
-                    <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {scheduledReports.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No scheduled reports configured</td>
-                </tr>
-              ) : scheduledReports.map(r => (
-                <tr key={r.name} className="group hover:bg-[#F9FBF9]" style={{ borderBottom: '1px solid #EEF2EE' }}>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{r.name}</td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{r.type}</td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{r.freq}</td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{r.recipients}</td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{r.lastSent}</td>
-                  <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{r.nextSend}</td>
-                  <td className="px-4 py-3"><StatusBadge status={r.status} size="sm" /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-[#E8F5E9]">
-                        <Edit className="w-3.5 h-3.5" style={{ color: '#4A5568' }} />
-                      </button>
-                      <button className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50">
-                        <Trash2 className="w-3.5 h-3.5" style={{ color: '#DC2626' }} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* Scheduled Reports section removed — not yet functional in POC phase */}
     </div>
   );
 }
