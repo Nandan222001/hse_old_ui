@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { Upload, Plus, Copy, Eye, EyeOff, Trash2, Palette, FileText, Loader2 } from "lucide-react";
+import { Upload, Plus, Eye, EyeOff, Trash2, Palette, FileText, Loader2 } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
+import { useAuth } from "../context/AuthContext";
 
 const integrations = [
   { name: "Jira", status: "Connected", desc: "Issue tracking integration" },
@@ -41,6 +42,7 @@ interface OrgData {
   industry_sector: string | null;
   number_of_employees: number | null;
   headquarters_location: string | null;
+  parent_company: string | null;
   regulatory_authority: string | null;
   iso_45001_status: string | null;
   establishment_date: string | null;
@@ -80,8 +82,10 @@ export function SettingsPage() {
         industry_sector: orgData.industry_sector,
         number_of_employees: orgData.number_of_employees,
         headquarters_location: orgData.headquarters_location,
+        parent_company: orgData.parent_company,
         regulatory_authority: orgData.regulatory_authority,
         iso_45001_status: orgData.iso_45001_status,
+        establishment_date: orgData.establishment_date,
       });
       setOrgSaved(true);
       setTimeout(() => setOrgSaved(false), 3000);
@@ -163,7 +167,10 @@ export function SettingsPage() {
       {activeTab === "general" && (
         <div className="max-w-xl space-y-6">
           <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
-            <h2 className="mb-6">General Settings</h2>
+            <h2 className="mb-1">Organisation Profile</h2>
+            <p className="text-[12px] mb-5" style={{ color: '#6B7280' }}>
+              Industry standards and profiles set during onboarding — permanently editable here.
+            </p>
             {orgLoading ? (
               <div className="flex items-center gap-2 py-8 justify-center">
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1B5E20' }} />
@@ -228,6 +235,26 @@ export function SettingsPage() {
                     className="w-full h-10 px-4 rounded-lg border text-[13px]"
                     style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
                     placeholder="e.g. Health and Safety Executive (HSE)"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Parent Company</label>
+                  <input
+                    value={orgData?.parent_company ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, parent_company: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                    placeholder="e.g. Global Holdings PLC (leave blank if independent)"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Establishment Date</label>
+                  <input
+                    type="date"
+                    value={orgData?.establishment_date ?? ""}
+                    onChange={e => setOrgData(d => d ? { ...d, establishment_date: e.target.value } : d)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
                   />
                 </div>
                 <div>
