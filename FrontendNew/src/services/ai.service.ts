@@ -23,14 +23,9 @@ export async function chatWithAIAgent(
   userMessage: string,
   conversationHistory: ChatMessage[] = [],
 ): Promise<string> {
-  const systemPrompt = [
-    'You are an HSE (Health, Safety, and Environment) intelligence assistant.',
-    'Provide concise, practical, and action-oriented responses.',
-    'Use markdown formatting for readability (headings, bullets, short tables where useful).',
-  ].join(' ');
-
+  // System prompt is handled server-side in app/controllers/ai.py
+  // Just pass conversation history + current user message
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt },
     ...conversationHistory,
     { role: 'user', content: userMessage },
   ];

@@ -109,8 +109,8 @@ def create_onboarding(payload: Any = None) -> dict:
 
 
 # ── AI Chat ───────────────────────────────────────────────────────────────────
+# Moved to app/controllers/ai.py — real Claude integration
 
-# ── Org Setup Wizard ─────────────────────────────────────────────────────────
 
 @router.get("/org-setup/progress")
 def org_setup_progress(db: Session = Depends(get_db)) -> dict:
@@ -1223,9 +1223,4 @@ def org_setup_template_download(module: str):
 
 # ── AI Chat ───────────────────────────────────────────────────────────────────
 
-@router.post("/ai/chat")
-def ai_chat(payload: Any = None) -> dict:
-    return {
-        "reply": "AI assistant is not configured. Please set up an AI provider to enable this feature.",
-        "messages": [],
-    }
+# AI Chat is handled by app/controllers/ai.py
