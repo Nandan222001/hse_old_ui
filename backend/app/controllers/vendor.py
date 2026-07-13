@@ -134,10 +134,7 @@ def get_vendor_summary(
                 .scalar() or 0
             )
 
-    raw       = max(0.0, 10.0 - (inc_count      / max(total, 1)) * 3.0)
-    prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 3.0)
-    risk_score = round(raw, 1)
-    delta      = round(raw - prev_raw, 1)  # positive = improved, negative = worsened
+    # Risk score final calculation happens after permit_violations count (see below)
 
     # ── Exposure Hours per month (permits) ───────────────────────────────────
     permit_rows = (
@@ -215,9 +212,9 @@ def get_vendor_summary(
             for r in hr_rows
         ]
 
-    # ── Permit Violations ────────────────────────────────────────────────────
+    # ── Permit Violations (shared logic: permits with deviation_reported = "Yes") ─
     pv_rows = (
-        db.query(Employee.full_name, PermitToWork.date_issued)
+        db.query(Employee.full_name, PermitToWork.date_issued, PermitToWork.id)
         .join(Employee, PermitToWork.issued_by == Employee.id)
         .filter(
             PermitToWork.organisation_id == org_id,
@@ -230,11 +227,25 @@ def get_vendor_summary(
     permit_violations = [
         {
             "name": r.full_name,
-            "desc": "Permit Violation",
+            "desc": f"PTW-{r.id:04d}: Deviation Reported",
             "time": r.date_issued.strftime("%d %b %Y") if r.date_issued else "—",
         }
         for r in pv_rows
     ]
+
+    # ── Risk Score — penalise for incidents AND permit violations ────────────
+    total_permit_violations = (
+        db.query(func.count(PermitToWork.id))
+        .filter(
+            PermitToWork.organisation_id == org_id,
+            PermitToWork.deviation_reported == "Yes",
+        )
+        .scalar() or 0
+    )
+    raw       = max(0.0, 10.0 - (inc_count / max(total, 1)) * 2.0 - (total_permit_violations / max(total, 1)) * 1.0)
+    prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 2.0)
+    risk_score = round(raw, 1)
+    delta      = round(raw - prev_raw, 1)
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: list[dict] = []

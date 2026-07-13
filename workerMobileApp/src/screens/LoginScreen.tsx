@@ -8,6 +8,13 @@ import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { useAuth } from '../hooks/useAuth';
 
+const ROLE_INFO = [
+  { role: 'Worker',      icon: '👷', color: '#1D4ED8', desc: 'Report incidents, near misses, view training' },
+  { role: 'Supervisor',  icon: '🦺', color: '#15803D', desc: 'Tasks, checklists, shift reports' },
+  { role: 'HSE Manager', icon: '🛡️', color: '#7C3AED', desc: 'Permits, compliance, full oversight' },
+  { role: 'Auditor',     icon: '🔍', color: '#B45309', desc: 'Read-only reports and compliance view' },
+];
+
 export default function LoginScreen({ navigation }: any) {
   const [employeeId, setEmployeeId] = useState('');
   const [pin, setPin] = useState('');
@@ -80,8 +87,19 @@ export default function LoginScreen({ navigation }: any) {
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR QUICK ACCESS</Text>
+            <Text style={styles.dividerText}>YOUR ROLE DETERMINES YOUR ACCESS</Text>
             <View style={styles.dividerLine} />
+          </View>
+
+          {/* Role access guide */}
+          <View style={styles.roleGrid}>
+            {ROLE_INFO.map((r) => (
+              <View key={r.role} style={[styles.roleCard, { borderColor: r.color + '30' }]}>
+                <Text style={styles.roleCardIcon}>{r.icon}</Text>
+                <Text style={[styles.roleCardTitle, { color: r.color }]}>{r.role}</Text>
+                <Text style={styles.roleCardDesc}>{r.desc}</Text>
+              </View>
+            ))}
           </View>
 
           <TouchableOpacity>
@@ -92,7 +110,7 @@ export default function LoginScreen({ navigation }: any) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerTop}>🔒 SECURE GROUND ACCESS PROTOCOL</Text>
-          <Text style={styles.footerBottom}>Site: Houston Refinery • Terminal 4</Text>
+          <Text style={styles.footerBottom}>Role is assigned automatically by your credentials</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -121,8 +139,18 @@ const styles = StyleSheet.create({
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: { fontSize: 11, color: Colors.textMuted, marginHorizontal: 10, fontWeight: '600' },
-  forgotLink: { textAlign: 'center', color: Colors.blue, fontWeight: '600', fontSize: 14 },
+  dividerText: { fontSize: 10, color: Colors.textMuted, marginHorizontal: 8, fontWeight: '700', textAlign: 'center', flex: 2 },
+  forgotLink: { textAlign: 'center', color: Colors.blue, fontWeight: '600', fontSize: 14, marginTop: 16 },
+
+  // Role access guide
+  roleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  roleCard: {
+    width: '47%', borderRadius: 12, borderWidth: 1.5,
+    padding: 10, backgroundColor: '#FAFAFA',
+  },
+  roleCardIcon: { fontSize: 20, marginBottom: 4 },
+  roleCardTitle: { fontSize: 12, fontWeight: '800', marginBottom: 2 },
+  roleCardDesc: { fontSize: 10, color: '#6B7280', lineHeight: 14 },
 
   footer: { alignItems: 'center', marginTop: 32 },
   footerTop: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.55)', letterSpacing: 1 },

@@ -129,7 +129,7 @@ export function ViolationDetailPage() {
         <AlertTriangle className="w-10 h-10" style={{ color: '#F59E0B' }} />
         <p className="text-[15px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>Incident not found</p>
         <button onClick={() => navigate("/violations")} className="text-[13px]" style={{ color: '#2E7D32' }}>
-          ← Back to Violations
+          ← Back to Incidents
         </button>
       </div>
     );
@@ -146,7 +146,7 @@ export function ViolationDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <ChevronRight className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
-        <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Violations</span>
+        <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Incidents</span>
         <ChevronRight className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
         <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{detail.id}</span>
       </div>

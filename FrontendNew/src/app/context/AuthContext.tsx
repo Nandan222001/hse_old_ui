@@ -43,9 +43,9 @@ const ENABLE_PROD_SUPERADMIN_HARDCODED_LOGIN = !import.meta.env.DEV && String(im
  *
  * - Admin          : Full system access — all KPIs, all pages, all actions.
  * - HSE Manager    : Full operational + compliance access across all sites.
- * - Safety Manager : Violations, actions, workers, zones, contractors per site.
+ * - Safety Manager : Incidents, actions, workers, zones, contractors per site.
  * - Supervisor     : Day-to-day operational KPIs for their assigned site/shift.
- * - Auditor        : Read-only access to compliance, violations summary & audit trail.
+ * - Auditor        : Read-only access to compliance, incidents summary & audit trail.
  * - Site Inspector : Custom role mapped to Supervisor.
  * - Site Engineer  : Custom role mapped to Safety Manager.
  * - Worker         : Custom role mapped to Auditor.
@@ -55,7 +55,7 @@ export type UserRole = "Admin" | "HSE Manager" | "Safety Manager" | "Supervisor"
 
 export type UiModuleLabel =
   | "Dashboard"
-  | "Violations"
+  | "Incidents"
   | "Actions & SLA"
   | "Checklists"
   | "Compliance"
@@ -68,7 +68,7 @@ export type UiModuleLabel =
 
 const ALL_MODULE_LABELS: UiModuleLabel[] = [
   "Dashboard",
-  "Violations",
+  "Incidents",
   "Actions & SLA",
   "Checklists",
   "Compliance",
@@ -82,7 +82,10 @@ const ALL_MODULE_LABELS: UiModuleLabel[] = [
 
 const ONBOARDING_MODULE_ALIASES: Record<string, UiModuleLabel> = {
   dashboard: "Dashboard",
-  violations: "Violations",
+  violations: "Incidents",
+  incidents: "Incidents",
+  "non-compliance": "Incidents",
+  "incidents / non-compliance": "Incidents",
   "actions & sla": "Actions & SLA",
   actions: "Actions & SLA",
   checklists: "Checklists",
@@ -111,7 +114,7 @@ function normalizeModuleLabel(raw: string): UiModuleLabel | null {
 
 export type KPICategory =
   | "Dashboard"
-  | "Violations"
+  | "Incidents"
   | "Actions & SLA"
   | "Workers & Access"
   | "Sites & Zones"
@@ -146,7 +149,7 @@ export const KPI_REGISTRY: KPI[] = [
   // ── DASHBOARD ──────────────────────────────────────────────────────────────
   {
     id: "total_violations_today",
-    label: "Total Violations Today",
+    label: "Total Incidents Today",
     category: "Dashboard",
     pages: ["Dashboard"],
     dataSource: "/api/dashboard/stats",
@@ -195,64 +198,64 @@ export const KPI_REGISTRY: KPI[] = [
     implemented: true,
   },
 
-  // ── VIOLATIONS ─────────────────────────────────────────────────────────────
+  // ── INCIDENTS ──────────────────────────────────────────────────────────────
   {
     id: "violations_by_severity",
-    label: "Violations by Severity",
-    category: "Violations",
-    pages: ["Dashboard", "Violations", "Analytics"],
+    label: "Incidents by Severity",
+    category: "Incidents",
+    pages: ["Dashboard", "Incidents", "Analytics"],
     dataSource: "/api/violations",
-    computation: "Group Violations by Severity (Critical | High | Medium | Low) — count per bucket",
+    computation: "Group Incidents by Severity (Critical | High | Medium | Low) — count per bucket",
     allowedRoles: ["Admin", "HSE Manager", "Safety Manager", "Supervisor", "Auditor"],
     implemented: false,
   },
   {
     id: "violations_by_shift",
-    label: "Violations by Shift",
-    category: "Violations",
+    label: "Incidents by Shift",
+    category: "Incidents",
     pages: ["Dashboard", "Analytics"],
     dataSource: "/api/violations",
-    computation: "Group Violations by Shift field — count per shift",
+    computation: "Group Incidents by Shift field — count per shift",
     allowedRoles: ["Admin", "HSE Manager", "Safety Manager", "Supervisor"],
     implemented: false,
   },
   {
     id: "violations_by_zone",
-    label: "Violations by Zone",
-    category: "Violations",
-    pages: ["Violations", "Analytics", "Sites & Zones"],
+    label: "Incidents by Zone",
+    category: "Incidents",
+    pages: ["Incidents", "Analytics", "Sites & Zones"],
     dataSource: "/api/violations",
-    computation: "Group Violations by Zone_ID — count per zone",
+    computation: "Group Incidents by Zone_ID — count per zone",
     allowedRoles: ["Admin", "HSE Manager", "Safety Manager", "Supervisor"],
     implemented: false,
   },
   {
     id: "violations_by_ppe_type",
-    label: "Violations by PPE Type",
-    category: "Violations",
-    pages: ["Violations", "Analytics"],
+    label: "Incidents by PPE Type",
+    category: "Incidents",
+    pages: ["Incidents", "Analytics"],
     dataSource: "/api/violations",
-    computation: "Group Violations by PPE_Missing — count per PPE type",
+    computation: "Group Incidents by PPE_Missing — count per PPE type",
     allowedRoles: ["Admin", "HSE Manager", "Safety Manager", "Supervisor", "Auditor"],
     implemented: false,
   },
   {
     id: "false_positive_rate",
     label: "False Positive Rate",
-    category: "Violations",
-    pages: ["Violations", "Analytics"],
+    category: "Incidents",
+    pages: ["Incidents", "Analytics"],
     dataSource: "/api/violations",
-    computation: "count(Status = 'False Positive') / total violations × 100",
+    computation: "count(Status = 'False Positive') / total incidents × 100",
     allowedRoles: ["Admin", "HSE Manager", "Safety Manager"],
     implemented: false,
   },
   {
     id: "avg_confidence_score",
     label: "Avg AI Confidence Score",
-    category: "Violations",
-    pages: ["Violations", "Analytics"],
+    category: "Incidents",
+    pages: ["Incidents", "Analytics"],
     dataSource: "/api/violations",
-    computation: "mean(Violations.Confidence_Score)",
+    computation: "mean(Incidents.Confidence_Score)",
     allowedRoles: ["Admin", "HSE Manager"],
     implemented: false,
   },

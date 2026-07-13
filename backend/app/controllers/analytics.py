@@ -281,23 +281,25 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         for r in by_type_rows
     ]
 
+    # ── Permit Violations (same logic as /vendors/summary for data consistency) ──
+    # Uses permits with deviation_reported = "Yes" — single source of truth
     viol_rows = (
-        db.query(Incident, WorkingStation)
-        .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
+        db.query(PermitToWork, WorkingStation)
+        .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
         .filter(
-            Incident.permit_active == "Yes",
-            *([Incident.organisation_id == org_id] if org_id is not None else []),
+            PermitToWork.deviation_reported == "Yes",
+            *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
         )
-        .order_by(Incident.incident_date_time.desc())
+        .order_by(PermitToWork.date_issued.desc())
         .limit(5)
         .all()
     )
     permit_violations = [
         {
-            "text": f"{ws.station_name if ws else 'Site'}: {inc.incident_type or 'Incident'}",
-            "time": inc.incident_date_time.strftime("%I:%M %p") if inc.incident_date_time else "N/A",
+            "text": f"PTW-{ptw.id:04d} — {ws.station_name if ws else 'Site'}: Deviation Reported",
+            "time": ptw.date_issued.strftime("%d %b %Y") if ptw.date_issued else "N/A",
         }
-        for inc, ws in viol_rows
+        for ptw, ws in viol_rows
     ]
 
     active_rows = (
@@ -557,7 +559,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
             CapaAction, org_id,
         )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
-        .limit(5)
+        .limit(10)  # Increased from 5 to match matrix total display
         .all()
     )
 

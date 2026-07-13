@@ -8,36 +8,41 @@ const matrixCols = ["Frequent 5", "Probable 4", "Occasional 3", "Remote 2", "Imp
 const matrixRows = ["Catastrophic 5", "Significant 4", "Moderate 3", "Low 2", "Negligible 1"];
 
 const matrixCells = [
+  // Catastrophic row — all red
   [
     { score: 25, text: "Catastrophic", tone: "stop" },
     { score: 20, text: "Catastrophic", tone: "stop" },
     { score: 15, text: "Catastrophic", tone: "stop" },
-    { score: 12, text: "Catastrophic", tone: "urgent" },
-    { score: 5,  text: "Catastrophic", tone: "action" },
+    { score: 12, text: "Catastrophic", tone: "stop" },
+    { score: 5,  text: "Catastrophic", tone: "stop" },
   ],
+  // Significant row
   [
     { score: 25, text: "Catastrophic", tone: "stop" },
     { score: 20, text: "Catastrophic", tone: "stop" },
-    { score: 15, text: "Urgent Risk",  tone: "urgent" },
-    { score: 10, text: "Acceptable",   tone: "action" },
-    { score: 4,  text: "Acceptable",   tone: "monitor" },
+    { score: 15, text: "Urgent",       tone: "urgent" },
+    { score: 10, text: "Urgent",       tone: "urgent" },
+    { score: 4,  text: "Borderline",   tone: "action" },
   ],
+  // Moderate row
   [
-    { score: 16, text: "Urgent Risk", tone: "stop" },
-    { score: 13, text: "Urgent Risk", tone: "urgent" },
-    { score: 10, text: "Acceptable",  tone: "action" },
-    { score: 5,  text: "Acceptable",  tone: "action" },
-    { score: 4,  text: "Acceptable",  tone: "monitor" },
+    { score: 16, text: "Urgent",     tone: "urgent" },
+    { score: 13, text: "Urgent",     tone: "urgent" },
+    { score: 10, text: "Borderline", tone: "action" },
+    { score: 5,  text: "Borderline", tone: "action" },
+    { score: 4,  text: "Acceptable", tone: "monitor" },
   ],
+  // Low row
   [
-    { score: 13, text: "Urgent Risk", tone: "urgent" },
-    { score: 10, text: "Acceptable",  tone: "action" },
-    { score: 5,  text: "Acceptable",  tone: "action" },
-    { score: 3,  text: "Acceptable",  tone: "monitor" },
-    { score: 2,  text: "Acceptable",  tone: "monitor" },
+    { score: 13, text: "Urgent",     tone: "urgent" },
+    { score: 10, text: "Borderline", tone: "action" },
+    { score: 5,  text: "Borderline", tone: "action" },
+    { score: 3,  text: "Acceptable", tone: "monitor" },
+    { score: 2,  text: "Acceptable", tone: "monitor" },
   ],
+  // Negligible row — all green
   [
-    { score: 8, text: "Acceptable", tone: "action" },
+    { score: 8, text: "Acceptable", tone: "monitor" },
     { score: 4, text: "Acceptable", tone: "monitor" },
     { score: 2, text: "Acceptable", tone: "monitor" },
     { score: 1, text: "Acceptable", tone: "monitor" },
@@ -46,10 +51,10 @@ const matrixCells = [
 ];
 
 function toneStyle(tone: string) {
-  if (tone === "stop")   return { bg: "#E15759", text: "#FFFFFF" };
-  if (tone === "urgent") return { bg: "#E9A23B", text: "#111827" };
-  if (tone === "action") return { bg: "#F1D458", text: "#111827" };
-  return                        { bg: "#7CC17E", text: "#111827" };
+  if (tone === "stop")   return { bg: "#DC2626", text: "#FFFFFF" }; // Red = Catastrophic
+  if (tone === "urgent") return { bg: "#EA580C", text: "#FFFFFF" }; // Orange = Urgent
+  if (tone === "action") return { bg: "#EAB308", text: "#111827" }; // Yellow = Borderline
+  return                        { bg: "#16A34A", text: "#FFFFFF" }; // Green = Acceptable
 }
 
 function KpiCard({ title, value, subtitle, hint, valueColor = "#1F2937" }: Readonly<{ title: string; value: string; subtitle: string; hint: string; valueColor?: string }>) {
@@ -164,10 +169,13 @@ export function RiskPage() {
           </div>
           {/* Matrix legend */}
           <div className="mt-4 pt-3 flex flex-wrap items-center gap-4 text-[11px]" style={{ color: '#475569', borderTop: '1px solid #F1F5F9' }}>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#E15759' }} />Stop</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#E9A23B' }} />Urgent Action</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#F1D458' }} />Action</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#7CC17E' }} />Monitor / No Action</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#DC2626' }} />Catastrophic</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#EA580C' }} />Urgent</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#EAB308' }} />Borderline</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#16A34A' }} />Acceptable</span>
+            <span className="ml-auto text-[11px]" style={{ color: '#94A3B8' }}>
+              Total risks: {matrixCounts.flat().reduce((a, b) => a + b, 0)}
+            </span>
           </div>
         </div>
 
