@@ -32,14 +32,27 @@ Guidelines:
 """
 
 
-def _call_claude(messages: list[dict], api_key: str, model: str) -> str:
-    """Call Anthropic Claude API and return the assistant reply text."""
+def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str = "") -> str:
+    """Call Anthropic Claude API and return the assistant reply text.
+
+    Supports both:
+    - Standard Anthropic (api_key = sk-ant-...)
+    - Azure AI Foundry (api_key = Azure key, base_url = Azure endpoint)
+    """
     try:
         import anthropic
     except ImportError:
         raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
 
-    client = anthropic.Anthropic(api_key=api_key)
+    # Azure AI Foundry uses a custom base_url and passes the key as api-key header
+    if base_url:
+        client = anthropic.Anthropic(
+            api_key=api_key,
+            base_url=base_url,
+            default_headers={"api-key": api_key},
+        )
+    else:
+        client = anthropic.Anthropic(api_key=api_key)
 
     # Separate system messages from conversation messages
     system_content = _SYSTEM_PROMPT
@@ -50,7 +63,6 @@ def _call_claude(messages: list[dict], api_key: str, model: str) -> str:
         content = msg.get("content", "")
 
         if role == "system":
-            # Append any extra system context to the main system prompt
             system_content += f"\n\n{content}"
         elif role in ("user", "assistant"):
             conversation.append({"role": role, "content": content})
@@ -127,7 +139,12 @@ def ai_chat(
     # ── Try Anthropic Claude first ────────────────────────────────────────────
     if settings.anthropic_api_key:
         try:
-            reply = _call_claude(messages, settings.anthropic_api_key, settings.anthropic_model)
+            reply = _call_claude(
+                messages,
+                settings.anthropic_api_key,
+                settings.anthropic_model,
+                base_url=settings.anthropic_base_url,  # empty string for standard Anthropic
+            )
             logger.info("AI chat via Claude (%s) for user %s", settings.anthropic_model, current_user.email)
             return {"answer": reply, "model": settings.anthropic_model}
         except Exception as exc:
