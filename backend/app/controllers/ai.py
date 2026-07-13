@@ -109,6 +109,18 @@ def _call_azure_openai(messages: list[dict], settings) -> str:
     return response.choices[0].message.content or "No response generated."
 
 
+@router.get("/status")
+def ai_status():
+    """Quick check — shows which AI provider is configured."""
+    settings = get_settings()
+    return {
+        "anthropic_key_set": bool(settings.anthropic_api_key),
+        "anthropic_base_url": settings.anthropic_base_url or "(standard Anthropic)",
+        "anthropic_model": settings.anthropic_model,
+        "azure_openai_configured": bool(settings.azure_openai_api_key and settings.azure_openai_endpoint),
+    }
+
+
 @router.post("/chat")
 def ai_chat(
     payload: dict[str, Any],
@@ -126,7 +138,6 @@ def ai_chat(
     """
     messages: list[dict] = payload.get("messages", [])
     if not messages:
-        # Support single-message format: { "message": "..." }
         single = payload.get("message") or payload.get("content") or ""
         if single:
             messages = [{"role": "user", "content": single}]
@@ -134,6 +145,8 @@ def ai_chat(
     if not messages:
         return {"answer": "No message provided.", "model": "fallback"}
 
+    # Always get fresh settings — bust lru_cache to pick up .env changes
+    get_settings.cache_clear()
     settings = get_settings()
 
     # ── Try Anthropic Claude first ────────────────────────────────────────────
