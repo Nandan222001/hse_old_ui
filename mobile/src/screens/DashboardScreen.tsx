@@ -25,7 +25,20 @@ export function DashboardScreen({ navigation }: Props) {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      refresh();
+    });
+
+    const interval = setInterval(() => {
+      refresh();
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [navigation, refresh]);
 
   return (
     <SafeAreaView style={styles.root}>

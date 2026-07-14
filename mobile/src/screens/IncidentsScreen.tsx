@@ -21,7 +21,20 @@ export function IncidentsScreen({ navigation }: Props) {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      refresh();
+    });
+
+    const interval = setInterval(() => {
+      refresh();
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [navigation, refresh]);
 
   // Fallback high-fidelity incident alert list matching Figma
   const incidentsList = alerts.length > 0 ? alerts : [

@@ -102,6 +102,14 @@ export function ManagerAppRoot() {
     };
     
     fetchRealIncidents();
+
+    const interval = setInterval(() => {
+      fetchRealIncidents();
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [currentScreen]);
 
   const showToast = (msg: string) => {

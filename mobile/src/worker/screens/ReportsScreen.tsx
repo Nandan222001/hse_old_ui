@@ -56,7 +56,22 @@ function showIncidentDetail(incident: Incident) {
 export default function ReportsScreen({ navigation }: any) {
   const { incidents, isLoading, fetchIncidents } = useIncidents();
 
-  useEffect(() => { fetchIncidents(); }, []);
+  useEffect(() => {
+    fetchIncidents();
+
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchIncidents();
+    });
+
+    const interval = setInterval(() => {
+      fetchIncidents();
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [navigation]);
 
   const onRefresh = useCallback(() => { fetchIncidents(); }, []);
 
