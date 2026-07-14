@@ -233,19 +233,63 @@ def get_vendor_summary(
         for r in pv_rows
     ]
 
-    # ── Risk Score — penalise for incidents AND permit violations ────────────
-    total_permit_violations = (
-        db.query(func.count(PermitToWork.id))
+    # ── Risk Score — same formula as dashboard leading-indicators ────────────
+    # Score = 10 - penalty based on incident rate per contractor vs org average
+    # This ensures Vendor page and Dashboard show consistent values
+    total_org_incidents = (
+        db.query(func.count(Incident.id))
         .filter(
-            PermitToWork.organisation_id == org_id,
-            PermitToWork.deviation_reported == "Yes",
+            Incident.organisation_id == org_id,
         )
         .scalar() or 0
     )
-    raw       = max(0.0, 10.0 - (inc_count / max(total, 1)) * 2.0 - (total_permit_violations / max(total, 1)) * 1.0)
-    prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 2.0)
+    total_org_employees = (
+        db.query(func.count(Employee.id))
+        .filter(Employee.organisation_id == org_id)
+        .scalar() or 1
+    )
+
+    if total_org_incidents == 0 or total == 0:
+        raw = 10.0
+        prev_raw = 10.0
+        relative_risk = 0.0
+    else:
+        contractor_inc_rate = inc_count / max(total, 1)
+        overall_inc_rate = total_org_incidents / total_org_employees
+        relative_risk = round(contractor_inc_rate / overall_inc_rate, 2) if overall_inc_rate > 0 else 0.0
+        penalty = min(10.0, relative_risk * 3.0)
+        raw = round(max(0.0, 10.0 - penalty), 1)
+
+        # Previous period for delta
+        if latest_inc_date:
+            prev_cutoff = latest_inc_date - timedelta(days=180)
+            prev_contractor_incs = (
+                db.query(func.count(Incident.id))
+                .filter(
+                    Incident.organisation_id == org_id,
+                    Incident.reported_by.in_(contractor_ids),
+                    Incident.report_date < prev_cutoff,
+                )
+                .scalar() or 0
+            ) if contractor_ids else 0
+            prev_total_incs = (
+                db.query(func.count(Incident.id))
+                .filter(
+                    Incident.organisation_id == org_id,
+                    Incident.report_date < prev_cutoff,
+                )
+                .scalar() or 0
+            )
+            if prev_total_incs > 0 and total > 0:
+                prev_rel_risk = (prev_contractor_incs / total) / (prev_total_incs / total_org_employees)
+                prev_raw = round(max(0.0, 10.0 - min(10.0, prev_rel_risk * 3.0)), 1)
+            else:
+                prev_raw = raw
+        else:
+            prev_raw = raw
+
     risk_score = round(raw, 1)
-    delta      = round(raw - prev_raw, 1)
+    delta = round(raw - prev_raw, 1)
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: list[dict] = []

@@ -132,8 +132,24 @@ def get_leading_indicators(
         or 0.0
     )
 
-    data_window_end = end_date or date.today()
-    data_window_start = start_date or None
+    # ── Anchor dates on actual data, not today ───────────────────────────────
+    # Using today as anchor makes all 90-day windows empty when historical data
+    # is from a past year. Anchor on the latest incident/walk date instead.
+    latest_incident_dt = _org_filter(
+        db.query(func.max(Incident.incident_date_time)), Incident, org_id
+    ).scalar()
+    latest_walk_dt = _org_filter(
+        db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id
+    ).scalar()
+
+    # If user passed explicit date window, respect it; otherwise anchor on data
+    if start_date or end_date:
+        data_window_end = end_date or date.today()
+        data_window_start = start_date or None
+    else:
+        data_window_end = latest_incident_dt.date() if latest_incident_dt else date.today()
+        data_window_start = None
+
     latest_date = data_window_end
 
     # Workbook formulas are based on the full supplied dataset, not a rolling window.
@@ -262,22 +278,48 @@ def get_leading_indicators(
 
     contractor_rate = _safe_round(contractor_incidents / contractor_employees) if contractor_employees else 0.0
     permanent_rate = _safe_round(permanent_incidents / permanent_employees) if permanent_employees else 0.0
-    if permanent_rate == 0:
-        relative_risk = contractor_rate if contractor_rate else 0.0
-        contractor_risk_score = 100.0
+
+    # Contractor Risk Score (0–10 scale, matches Vendors page)
+    # Formula: 10 - penalty from incident rate (per contractor)
+    # If no incidents at all → score = 10 (best)
+    # If contractor incident rate > permanent → high risk
+    total_org_incidents = inc_base.count()
+    if total_org_incidents == 0:
+        # No incidents in org at all — perfect score
+        contractor_risk_score_10 = 10.0
+        relative_risk = 0.0
+    elif contractor_employees == 0:
+        contractor_risk_score_10 = 10.0
+        relative_risk = 0.0
     else:
-        relative_risk = _safe_round(contractor_rate / permanent_rate)
-        contractor_risk_score = _safe_round(min(100.0, relative_risk * 50))
-    contractor_risk_label = "High" if relative_risk >= 1.5 else ("Medium" if relative_risk >= 1 else "Low")
+        # Incident rate per employee
+        contractor_inc_rate = contractor_incidents / contractor_employees
+        overall_inc_rate = total_org_incidents / max(total_employees, 1)
+        # Relative risk = contractor rate vs org average
+        relative_risk = _safe_round(contractor_inc_rate / overall_inc_rate) if overall_inc_rate > 0 else 0.0
+        # Score = 10 minus penalty (capped at 10, floored at 0)
+        penalty = min(10.0, relative_risk * 3.0)
+        contractor_risk_score_10 = _safe_round(max(0.0, 10.0 - penalty))
+
+    # Percentage version for dashboard KPI card
+    contractor_risk_score = _safe_round(contractor_risk_score_10 * 10)
+    contractor_risk_label = "High" if contractor_risk_score_10 < 5 else ("Medium" if contractor_risk_score_10 < 8 else "Low")
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
-    # Use selected date window; fall back to last 90 days anchored on data_window_end
-    walk_window_start = data_window_start if data_window_start else (data_window_end - timedelta(days=90))
+    # Anchor on latest walk date so historical data is not missed
+    latest_walk_anchor = latest_walk_dt.date() if latest_walk_dt else data_window_end
+    if data_window_start:
+        walk_window_start = data_window_start
+        walk_window_end = data_window_end
+    else:
+        walk_window_end = latest_walk_anchor
+        walk_window_start = latest_walk_anchor - timedelta(days=90)
+
     avg_compliance_walk = (
         _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
         .filter(SafetyWalk.inspection_date_time.isnot(None))
         .filter(func.date(SafetyWalk.inspection_date_time) >= walk_window_start)
-        .filter(func.date(SafetyWalk.inspection_date_time) <= data_window_end)
+        .filter(func.date(SafetyWalk.inspection_date_time) <= walk_window_end)
         .scalar()
     )
     average_compliance = _safe_round(avg_compliance_walk)
@@ -303,6 +345,7 @@ def get_leading_indicators(
         "permanent_rate": permanent_rate,
         "relative_risk": relative_risk,
         "contractor_risk_score": contractor_risk_score,
+        "contractor_risk_score_10": contractor_risk_score_10,
         "audit_readiness_score": audit_readiness_score,
         "average_compliance": average_compliance,
         "audit_readiness_label": audit_readiness_label,
