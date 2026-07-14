@@ -233,14 +233,22 @@ def get_vendor_summary(
         for r in pv_rows
     ]
 
-    # ── Risk Score — same formula as dashboard leading-indicators ────────────
-    # Score = 10 - penalty based on incident rate per contractor vs org average
-    # This ensures Vendor page and Dashboard show consistent values
+    # ── Risk Score — incidents + permit violations both penalise score ────────
+    # Client audit rule: "If a violation exists, a 10/10 score is impossible."
+    # Formula: 10 - incident_penalty - violation_penalty
+    # incident_penalty: based on contractor incident rate vs org average (0-7)
+    # violation_penalty: 1 point per permit violation, capped at 3
+    total_permit_violations = (
+        db.query(func.count(PermitToWork.id))
+        .filter(
+            PermitToWork.organisation_id == org_id,
+            PermitToWork.deviation_reported == "Yes",
+        )
+        .scalar() or 0
+    )
     total_org_incidents = (
         db.query(func.count(Incident.id))
-        .filter(
-            Incident.organisation_id == org_id,
-        )
+        .filter(Incident.organisation_id == org_id)
         .scalar() or 0
     )
     total_org_employees = (
@@ -249,16 +257,24 @@ def get_vendor_summary(
         .scalar() or 1
     )
 
-    if total_org_incidents == 0 or total == 0:
+    # Violation penalty: each violation = 0.5 points off, max 3 points
+    violation_penalty = min(3.0, total_permit_violations * 0.5)
+
+    if total == 0:
         raw = 10.0
         prev_raw = 10.0
+        relative_risk = 0.0
+    elif total_org_incidents == 0:
+        # No incidents BUT may still have permit violations
+        raw = round(max(0.0, 10.0 - violation_penalty), 1)
+        prev_raw = raw
         relative_risk = 0.0
     else:
         contractor_inc_rate = inc_count / max(total, 1)
         overall_inc_rate = total_org_incidents / total_org_employees
         relative_risk = round(contractor_inc_rate / overall_inc_rate, 2) if overall_inc_rate > 0 else 0.0
-        penalty = min(10.0, relative_risk * 3.0)
-        raw = round(max(0.0, 10.0 - penalty), 1)
+        incident_penalty = min(7.0, relative_risk * 3.0)
+        raw = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
 
         # Previous period for delta
         if latest_inc_date:
@@ -282,14 +298,12 @@ def get_vendor_summary(
             )
             if prev_total_incs > 0 and total > 0:
                 prev_rel_risk = (prev_contractor_incs / total) / (prev_total_incs / total_org_employees)
-                prev_raw = round(max(0.0, 10.0 - min(10.0, prev_rel_risk * 3.0)), 1)
+                prev_incident_penalty = min(7.0, prev_rel_risk * 3.0)
+                prev_raw = round(max(0.0, 10.0 - prev_incident_penalty - violation_penalty), 1)
             else:
                 prev_raw = raw
         else:
             prev_raw = raw
-
-    risk_score = round(raw, 1)
-    delta = round(raw - prev_raw, 1)
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: list[dict] = []

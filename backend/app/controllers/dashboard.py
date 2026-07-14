@@ -279,29 +279,32 @@ def get_leading_indicators(
     contractor_rate = _safe_round(contractor_incidents / contractor_employees) if contractor_employees else 0.0
     permanent_rate = _safe_round(permanent_incidents / permanent_employees) if permanent_employees else 0.0
 
-    # Contractor Risk Score (0–10 scale, matches Vendors page)
-    # Formula: 10 - penalty from incident rate (per contractor)
-    # If no incidents at all → score = 10 (best)
-    # If contractor incident rate > permanent → high risk
-    total_org_incidents = inc_base.count()
-    if total_org_incidents == 0:
-        # No incidents in org at all — perfect score
-        contractor_risk_score_10 = 10.0
+    # ── Permit violations count (for risk score penalty) ─────────────────────
+    pv_q = db.query(func.count(PermitToWork.id)).filter(PermitToWork.deviation_reported == "Yes")
+    if org_id is not None:
+        pv_q = pv_q.filter(PermitToWork.organisation_id == org_id)
+    total_permit_violations_cont = pv_q.scalar() or 0
+
+    # ── Contractor Risk Score (0–10) — incidents + permit violations ─────────
+    # Client audit rule: "If a violation exists, a 10/10 score is impossible."
+    # Formula: 10 - incident_penalty(0-7) - violation_penalty(0-3)
+    violation_penalty = min(3.0, total_permit_violations_cont * 0.5)
+    total_org_incidents_count = _org_filter(db.query(Incident), Incident, org_id).count()
+    total_all_employees = max(total_employees, 1)
+
+    if contractor_employees == 0:
+        contractor_risk_score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
         relative_risk = 0.0
-    elif contractor_employees == 0:
-        contractor_risk_score_10 = 10.0
+    elif total_org_incidents_count == 0:
+        contractor_risk_score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
         relative_risk = 0.0
     else:
-        # Incident rate per employee
-        contractor_inc_rate = contractor_incidents / contractor_employees
-        overall_inc_rate = total_org_incidents / max(total_employees, 1)
-        # Relative risk = contractor rate vs org average
-        relative_risk = _safe_round(contractor_inc_rate / overall_inc_rate) if overall_inc_rate > 0 else 0.0
-        # Score = 10 minus penalty (capped at 10, floored at 0)
-        penalty = min(10.0, relative_risk * 3.0)
-        contractor_risk_score_10 = _safe_round(max(0.0, 10.0 - penalty))
+        cont_inc_rate = contractor_incidents / contractor_employees
+        org_inc_rate = total_org_incidents_count / total_all_employees
+        relative_risk = _safe_round(cont_inc_rate / org_inc_rate) if org_inc_rate > 0 else 0.0
+        incident_penalty = min(7.0, relative_risk * 3.0)
+        contractor_risk_score_10 = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
 
-    # Percentage version for dashboard KPI card
     contractor_risk_score = _safe_round(contractor_risk_score_10 * 10)
     contractor_risk_label = "High" if contractor_risk_score_10 < 5 else ("Medium" if contractor_risk_score_10 < 8 else "Low")
 
