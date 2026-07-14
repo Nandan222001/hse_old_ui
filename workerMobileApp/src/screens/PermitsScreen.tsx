@@ -1,171 +1,288 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, RefreshControl, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { Card } from '../components/cards/Card';
-import { EmptyState } from '../components/feedback/EmptyState';
 import { Colors } from '../theme/colors';
 import { usePermits } from '../hooks/usePermits';
-import { Permit, PermitStatus } from '../types';
-
-const STATUS_STYLE: Record<PermitStatus, { bg: string; text: string; label: string }> = {
-  active:           { bg: Colors.successBg,  text: Colors.success,  label: 'Active' },
-  approved:         { bg: Colors.successBg,  text: Colors.success,  label: 'Approved' },
-  pending_approval: { bg: Colors.warningBg,  text: Colors.warning,  label: 'Pending' },
-  draft:            { bg: '#F3F4F6',          text: Colors.textMuted, label: 'Draft' },
-  closed:           { bg: '#F3F4F6',          text: Colors.textMuted, label: 'Closed' },
-  rejected:         { bg: Colors.criticalBg, text: Colors.critical,  label: 'Rejected' },
-};
-
-const PERMIT_ICONS: Record<string, string> = {
-  hot_work:          '🔥',
-  confined_space:    '⬜',
-  working_at_height: '🧗',
-  electrical:        '⚡',
-  excavation:        '⛏️',
-};
-
-const FILTERS: { label: string; value: string | null }[] = [
-  { label: 'All',     value: null },
-  { label: 'Active',  value: 'active' },
-  { label: 'Pending', value: 'pending_approval' },
-  { label: 'Closed',  value: 'closed' },
-];
-
-function PermitCard({ permit, onAcknowledge }: { permit: Permit; onAcknowledge: (id: string) => void }) {
-  const st = STATUS_STYLE[permit.status] ?? STATUS_STYLE.draft;
-  const icon = PERMIT_ICONS[permit.permit_type] ?? '📄';
-  const typeLabel = permit.permit_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-  return (
-    <Card style={styles.permitCard} accentColor={st.text} elevation={1}>
-      <View style={styles.permitHeader}>
-        <Text style={styles.permitIcon}>{icon}</Text>
-        <View style={styles.permitMeta}>
-          <Text style={styles.permitRef}>{permit.permit_ref || `Permit #${permit.id.slice(0, 8)}`}</Text>
-          <Text style={styles.permitType}>{typeLabel}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
-          <Text style={[styles.statusText, { color: st.text }]}>{st.label}</Text>
-        </View>
-      </View>
-
-      {permit.work_location ? (
-        <Text style={styles.location}>📍 {permit.work_location}</Text>
-      ) : null}
-
-      {permit.work_description ? (
-        <Text style={styles.description} numberOfLines={2}>{permit.work_description}</Text>
-      ) : null}
-
-      {(permit.start_datetime || permit.end_datetime) ? (
-        <Text style={styles.dates}>
-          🕐 {permit.start_datetime ? permit.start_datetime.slice(0, 16).replace('T', ' ') : '—'}
-          {' → '}
-          {permit.end_datetime ? permit.end_datetime.slice(0, 16).replace('T', ' ') : '—'}
-        </Text>
-      ) : null}
-
-      {permit.status === 'active' && (
-        <TouchableOpacity
-          style={styles.ackBtn}
-          onPress={() => onAcknowledge(permit.id)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.ackBtnText}>✓ Acknowledge</Text>
-        </TouchableOpacity>
-      )}
-    </Card>
-  );
-}
 
 export default function PermitsScreen({ navigation }: any) {
   const { permits, isLoading, fetchPermits, acknowledgePermit } = usePermits();
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [signed, setSigned] = useState(false);
+
+  const activeList = permits.filter(p => p.status === 'active');
+  const pendingList = permits.filter(p => p.status === 'pending_approval' || p.status === 'pending' || p.status === 'draft');
 
   useEffect(() => {
-    fetchPermits(activeFilter ? { status: activeFilter } : undefined);
-  }, [activeFilter]);
+    fetchPermits();
+  }, []);
 
   const onRefresh = useCallback(() => {
-    fetchPermits(activeFilter ? { status: activeFilter } : undefined);
-  }, [activeFilter]);
+    fetchPermits();
+  }, []);
 
   const handleAcknowledge = async (id: string) => {
     const ok = await acknowledgePermit(id);
     if (ok) {
-      onRefresh();
+      fetchPermits();
     }
   };
 
+  const handleSign = () => {
+    setSigned(true);
+    Alert.alert('Digital Signature', 'Signed as Alex Safety.');
+  };
+
+  const handleSubmitSignature = () => {
+    if (!signed) {
+      Alert.alert('Signature Required', 'Please click on the signature area to sign.');
+      return;
+    }
+    Alert.alert('Permit Finalized', 'Permit PTW-0042-24 has been submitted & finalized.');
+  };
+
   return (
-    <ScreenLayout>
-      {/* Header */}
+    <ScreenLayout bg="#F8FAFC">
+      {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>‹</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.headerIcon}>☰</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Permits</Text>
-        {permits.length > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{permits.length}</Text>
-          </View>
-        )}
+        <Text style={styles.headerTitle}>Permits</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
+          <Text style={styles.headerIcon}>🔔</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Filter pills */}
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        contentContainerStyle={styles.filterContent}
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
       >
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={String(f.value)}
-            style={[styles.filterPill, activeFilter === f.value && styles.filterPillActive]}
-            onPress={() => setActiveFilter(f.value)}
-          >
-            <Text style={[styles.filterText, activeFilter === f.value && styles.filterTextActive]}>
-              {f.label}
-            </Text>
+        {/* Stats Column */}
+        <View style={styles.statsContainer}>
+          {/* Card 1: Active Permits */}
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Active Permits</Text>
+            <View style={styles.statValueRow}>
+              <Text style={styles.statValue}>{activeList.length > 0 ? String(activeList.length).padStart(2, '0') : '03'}</Text>
+              <Text style={styles.statTrend}>📈+2</Text>
+            </View>
+          </View>
+
+          {/* Card 2: Pending Approval */}
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Pending Approval</Text>
+            <View style={styles.statValueRow}>
+              <Text style={[styles.statValue, { color: '#8B5CF6' }]}>
+                {pendingList.length > 0 ? String(pendingList.length).padStart(2, '0') : '05'}
+              </Text>
+              <Text style={styles.statStatusUrgent}>Urgent</Text>
+            </View>
+          </View>
+
+          {/* Card 3: Expiry Warning */}
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Expiry Warning</Text>
+            <View style={styles.statValueRow}>
+              <Text style={[styles.statValue, { color: '#EF4444' }]}>03</Text>
+              <Text style={styles.statStatusNext}>Next 2hrs</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Active Permits Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Active Permits</Text>
+          <TouchableOpacity>
+            <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
-        ))}
+        </View>
+
+        {/* Active Permits List */}
+        <View style={styles.permitsList}>
+          {activeList.length > 0 ? (
+            activeList.map((permit) => (
+              <View key={permit.id} style={styles.permitCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={[styles.badge, { backgroundColor: permit.permit_type === 'hot_work' ? '#FEE2E2' : '#E0F2FE' }]}>
+                    <Text style={[styles.badgeText, { color: permit.permit_type === 'hot_work' ? '#EF4444' : '#0EA5E9' }]}>
+                      {permit.permit_type.toUpperCase().replace('_', ' ')}
+                    </Text>
+                  </View>
+                  <Text style={styles.timerText}>🕒 {permit.permit_ref}</Text>
+                </View>
+                <Text style={styles.permitTitle}>{permit.work_description || 'Safety Permit'}</Text>
+                <Text style={styles.permitLoc}>📍 {permit.work_location}</Text>
+                <View style={styles.permitActionRow}>
+                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge(permit.id)}>
+                    <Text style={styles.ackBtnText}>Acknowledge</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.eyeBtn}>
+                    <Text style={styles.eyeIcon}>👁️</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          ) : (
+            <>
+              {/* Card 1 */}
+              <View style={styles.permitCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={[styles.badge, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.badgeText, { color: '#EF4444' }]}>Hot Work</Text>
+                  </View>
+                  <Text style={styles.timerText}>🕒 01:24:05</Text>
+                </View>
+                <Text style={styles.permitTitle}>Welding - Zone B</Text>
+                <Text style={styles.permitLoc}>📍 Maintenance Bay 4, Site Alpha</Text>
+                <View style={styles.permitActionRow}>
+                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('1')}>
+                    <Text style={styles.ackBtnText}>Acknowledge</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.eyeBtn}>
+                    <Text style={styles.eyeIcon}>👁️</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Card 2 */}
+              <View style={styles.permitCard}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={[styles.badge, { backgroundColor: '#F3E5F5' }]}>
+                    <Text style={[styles.badgeText, { color: '#8B5CF6' }]}>Confined Space</Text>
+                  </View>
+                  <Text style={[styles.timerText, { color: '#475569' }]}>🕒 04:12:18</Text>
+                </View>
+                <Text style={styles.permitTitle}>Tank Inspection - T02</Text>
+                <Text style={styles.permitLoc}>📍 Storage Yard West</Text>
+                <View style={styles.permitActionRow}>
+                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('2')}>
+                    <Text style={styles.ackBtnText}>Acknowledge</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.eyeBtn}>
+                    <Text style={styles.eyeIcon}>👁️</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Pending Approval Section */}
+        <Text style={styles.sectionTitle}>Pending Approval</Text>
+        <View style={styles.tableCard}>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.tableCol, { flex: 1.5 }]}>Type</Text>
+            <Text style={styles.tableCol}>Requester</Text>
+            <Text style={[styles.tableCol, { textAlign: 'right' }]}>Action</Text>
+          </View>
+
+          {pendingList.length > 0 ? (
+            pendingList.map((permit) => (
+              <TouchableOpacity key={permit.id} style={styles.tableRow} onPress={() => navigation.navigate('RaisePermit')}>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={styles.courseName}>{permit.permit_type.replace('_', ' ').toUpperCase()}</Text>
+                  <Text style={styles.courseCode}>#{permit.permit_ref}</Text>
+                </View>
+                <Text style={styles.tableCellText}>{permit.requested_by}</Text>
+                <Text style={styles.arrowText}>❯</Text>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <>
+              {/* Row 1 */}
+              <TouchableOpacity style={styles.tableRow} onPress={() => navigation.navigate('RaisePermit')}>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={styles.courseName}>Cold Work</Text>
+                  <Text style={styles.courseCode}>#PTW-8821</Text>
+                </View>
+                <Text style={styles.tableCellText}>John Doe</Text>
+                <Text style={styles.arrowText}>❯</Text>
+              </TouchableOpacity>
+
+              {/* Row 2 */}
+              <TouchableOpacity style={styles.tableRow} onPress={() => navigation.navigate('RaisePermit')}>
+                <View style={{ flex: 1.5 }}>
+                  <Text style={styles.courseName}>Electrical</Text>
+                  <Text style={styles.courseCode}>#PTW-8824</Text>
+                </View>
+                <Text style={styles.tableCellText}>Sarah Miller</Text>
+                <Text style={styles.arrowText}>❯</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* Details Welding - Zone B */}
+        <View style={styles.detailSectionHeader}>
+          <Text style={styles.sectionTitle}>Details: Welding - Zone B</Text>
+          <Text style={styles.highRiskLabel}>HIGH RISK</Text>
+        </View>
+
+        <View style={styles.detailCard}>
+          <View style={styles.detailCardHeader}>
+            <View style={styles.iconBox}><Text style={styles.iconFire}>🔥</Text></View>
+            <View>
+              <Text style={styles.detailCardTitle}>Permit ID: PTW-0042-24</Text>
+              <Text style={styles.detailCardSub}>Hot Work Operations</Text>
+            </View>
+          </View>
+
+          <Text style={styles.mandatoryTitle}>MANDATORY CONDITIONS</Text>
+          <View style={styles.conditionsList}>
+            <View style={styles.conditionItem}>
+              <Text style={styles.checkIcon}>✓</Text>
+              <Text style={styles.conditionText}>Fire watch established and extinguisher available at work area.</Text>
+            </View>
+            <View style={styles.conditionItem}>
+              <Text style={styles.checkIcon}>✓</Text>
+              <Text style={styles.conditionText}>Gas monitoring performed; LEL level is 0%.</Text>
+            </View>
+            <View style={styles.conditionItem}>
+              <Text style={styles.warningIcon}>⚠️</Text>
+              <Text style={styles.conditionText}>Shielding must be in place to prevent sparks reaching floor levels below.</Text>
+            </View>
+          </View>
+
+          <Text style={styles.signatureTitle}>DIGITAL SIGNATURE</Text>
+          <TouchableOpacity style={styles.signatureBox} onPress={handleSign}>
+            {signed ? (
+              <View style={styles.signedContainer}>
+                <Text style={styles.signatureMockText}>Alex Safety</Text>
+                <Text style={styles.signatureDate}>24 Oct 2023, 08:30</Text>
+              </View>
+            ) : (
+              <View style={styles.signaturePlaceholder}>
+                <Text style={styles.signaturePenIcon}>🖊️</Text>
+                <Text style={styles.signaturePlaceholderText}>Click or draw to sign</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.signatureFooter}>
+            <View>
+              <Text style={styles.issuerName}>Alex Safety</Text>
+              <Text style={styles.issuerTitle}>AUTHORIZED ISSUER • 24 OCT 2023, 08:30</Text>
+            </View>
+            <TouchableOpacity style={styles.submitSignatureBtn} onPress={handleSubmitSignature}>
+              <Text style={styles.submitSignatureText}>Submit & Finalize</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* List */}
-      {isLoading && permits.length === 0 ? (
-        <ActivityIndicator color={Colors.primary} size="large" style={{ marginTop: 60 }} />
-      ) : permits.length === 0 ? (
-        <EmptyState
-          icon="📄"
-          title="No Permits"
-          subtitle="You have no permits yet. Tap below to raise a new one."
-        />
-      ) : (
-        <ScrollView
-          style={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
-          }
-        >
-          {permits.map(p => (
-            <PermitCard key={p.id} permit={p} onAcknowledge={handleAcknowledge} />
-          ))}
-          <View style={{ height: 100 }} />
-        </ScrollView>
-      )}
-
-      {/* Raise new permit FAB */}
+      {/* Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate('RaisePermit')}
-        activeOpacity={0.85}
       >
-        <Text style={styles.fabText}>+ Raise Permit</Text>
+        <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
     </ScreenLayout>
   );
@@ -173,44 +290,424 @@ export default function PermitsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingTop: 52, paddingBottom: 14, paddingHorizontal: 20,
-    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  backBtn:     { marginRight: 4 },
-  backIcon:    { fontSize: 28, color: Colors.primary, lineHeight: 30 },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.textDark, flex: 1 },
-  badge:       { backgroundColor: Colors.blue, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText:   { color: Colors.white, fontWeight: '700', fontSize: 13 },
-
-  filterBar:     { maxHeight: 52, backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: 'row' },
-  filterPill:       { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.card },
-  filterPillActive: { borderColor: Colors.blue, backgroundColor: '#EFF5FF' },
-  filterText:       { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
-  filterTextActive: { color: Colors.blue },
-
-  scroll: { flex: 1, padding: 16 },
-
-  permitCard:   { marginBottom: 12 },
-  permitHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  permitIcon:   { fontSize: 28, marginRight: 12 },
-  permitMeta:   { flex: 1 },
-  permitRef:    { fontSize: 14, fontWeight: '700', color: Colors.textDark },
-  permitType:   { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  statusBadge:  { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText:   { fontSize: 11, fontWeight: '700' },
-  location:     { fontSize: 13, color: Colors.textMuted, marginBottom: 4 },
-  description:  { fontSize: 13, color: Colors.textMid, marginBottom: 6, lineHeight: 18 },
-  dates:        { fontSize: 12, color: Colors.textMuted, marginBottom: 8 },
-  ackBtn:       { backgroundColor: Colors.primary, borderRadius: 8, paddingVertical: 9, alignItems: 'center', marginTop: 4 },
-  ackBtnText:   { color: Colors.white, fontWeight: '700', fontSize: 13 },
-
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  headerIcon: {
+    fontSize: 22,
+    color: '#0F172A',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    letterSpacing: -0.5,
+  },
+  scroll: {
+    flex: 1,
+    padding: 16,
+  },
+  statsContainer: {
+    flexDirection: 'column',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '850',
+    color: '#2563EB',
+  },
+  statTrend: {
+    fontSize: 14,
+    color: '#22C55E',
+    fontWeight: '850',
+  },
+  statStatusUrgent: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '700',
+  },
+  statStatusNext: {
+    fontSize: 13,
+    color: '#E2E8F0',
+    backgroundColor: '#475569',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  viewAllText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  permitsList: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  permitCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  timerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  permitTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 10,
+  },
+  permitLoc: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  permitActionRow: {
+    flexDirection: 'row',
+    marginTop: 14,
+    gap: 8,
+  },
+  ackBtn: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ackBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  eyeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeIcon: {
+    fontSize: 16,
+    color: '#475569',
+  },
+  tableCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 24,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  tableCol: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  courseName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  courseCode: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  tableCellText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  arrowText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '800',
+  },
+  detailSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  highRiskLabel: {
+    fontSize: 11,
+    color: '#EF4444',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  detailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
+  },
+  detailCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconFire: {
+    fontSize: 20,
+  },
+  detailCardTitle: {
+    fontSize: 15,
+    fontWeight: '850',
+    color: '#0F172A',
+  },
+  detailCardSub: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  mandatoryTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  conditionsList: {
+    gap: 12,
+    marginBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 16,
+  },
+  conditionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  checkIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  warningIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FEF2F2',
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  conditionText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    lineHeight: 16,
+  },
+  signatureTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  signatureBox: {
+    height: 100,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  signaturePlaceholder: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  signaturePenIcon: {
+    fontSize: 18,
+    color: '#64748B',
+  },
+  signaturePlaceholderText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  signedContainer: {
+    alignItems: 'center',
+  },
+  signatureMockText: {
+    fontSize: 22,
+    fontFamily: Platform.OS === 'ios' ? 'Snell Roundhand' : 'cursive',
+    color: '#1E3A8A',
+    fontWeight: 'bold',
+  },
+  signatureDate: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  signatureFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  issuerName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  issuerTitle: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  submitSignatureBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitSignatureText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   fab: {
-    position: 'absolute', bottom: 24, left: 24, right: 24,
-    backgroundColor: Colors.primary, borderRadius: 14,
-    paddingVertical: 16, alignItems: 'center',
-    elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8,
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#2563EB',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
-  fabText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
+  fabIcon: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    marginTop: -2,
+  },
 });

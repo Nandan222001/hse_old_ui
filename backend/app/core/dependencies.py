@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends, HTTPException, Request, Query, status
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ class PaginationParams:
 class CurrentUser:
     """Decoded JWT payload for the authenticated user."""
 
-    def __init__(self, user_id: int, username: str, email: str, role: str, org_id: int | None):
+    def __init__(self, user_id: int, username: str, email: str, role: str, org_id: Optional[int]):
         self.user_id = user_id
         self.username = username
         self.email = email

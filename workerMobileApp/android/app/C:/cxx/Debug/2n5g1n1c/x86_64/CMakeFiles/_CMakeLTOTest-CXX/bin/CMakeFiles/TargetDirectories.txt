@@ -1,0 +1,4 @@
+/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/foo.dir
+/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/boo.dir
+/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/edit_cache.dir
+/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86_64/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/rebuild_cache.dir

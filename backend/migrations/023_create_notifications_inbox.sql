@@ -23,11 +23,6 @@ CREATE TABLE IF NOT EXISTS notifications (
         FOREIGN KEY (target_invite_id) REFERENCES organisation_invite(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Add organisation_id to existing notifications table if it was created without it
-ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS organisation_id INT NULL AFTER id,
-    ADD INDEX IF NOT EXISTS idx_notifications_org (organisation_id);
-
 -- Per-user read tracking
 CREATE TABLE IF NOT EXISTS notification_reads (
     id                  INT AUTO_INCREMENT PRIMARY KEY,

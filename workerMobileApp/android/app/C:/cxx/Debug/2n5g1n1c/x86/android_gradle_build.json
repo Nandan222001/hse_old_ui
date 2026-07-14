@@ -1,0 +1,93 @@
+{
+  "buildFiles": [
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/react-native-gesture-handler/android/CMakeLists.txt",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/neosoftmailcom/Android/Sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/neosoftmailcom/Android/Sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/C:/cxx/Debug/2n5g1n1c/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "appmodules",
+      "output": "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libappmodules.so",
+      "runtimeFiles": [
+        "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_rngesturehandler_codegen.so",
+        "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_safeareacontext.so",
+        "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_rnscreens.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/0e3514faf7aedd37b06c190b2e47c916/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    },
+    "react_codegen_RNImagePickerSpec::@f66ee9a2efecfb28bee4": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_RNImagePickerSpec"
+    },
+    "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rnasyncstorage"
+    },
+    "react_codegen_rngesturehandler_codegen::@39f233abcd2c728bc6ec": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rngesturehandler_codegen",
+      "output": "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_rngesturehandler_codegen.so",
+      "runtimeFiles": [
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/0e3514faf7aedd37b06c190b2e47c916/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    },
+    "react_codegen_rnscreens::@25bcbd507e98d3a854ad": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_rnscreens",
+      "output": "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_rnscreens.so",
+      "runtimeFiles": [
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/reactnative/libs/android.x86/libreactnative.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/0e3514faf7aedd37b06c190b2e47c916/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so"
+      ]
+    },
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "toolchain": "toolchain",
+      "abi": "x86",
+      "artifactName": "react_codegen_safeareacontext",
+      "output": "/home/neosoftmailcom/Desktop/Hse_old/hse_old_ui/workerMobileApp/android/app/build/intermediates/cxx/Debug/2n5g1n1c/obj/x86/libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/0e3514faf7aedd37b06c190b2e47c916/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/home/neosoftmailcom/.gradle/caches/8.13/transforms/6f116ddd9b2d1bfa83363b27cbde843a/transformed/react-android-0.85.3-debug/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/neosoftmailcom/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/neosoftmailcom/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

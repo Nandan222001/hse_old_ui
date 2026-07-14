@@ -1,3 +1,4 @@
+from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
@@ -21,7 +22,7 @@ def get_my_organisation(
     return svc.get(current_user.org_id)
 
 
-@router.get("/", response_model=list[OrganisationResponse])
+@router.get("/", response_model=List[OrganisationResponse])
 def list_organisations(skip: int = 0, limit: int = 100, svc: OrganisationService = Depends(_svc)):
     return svc.list(skip=skip, limit=limit)
 

@@ -173,11 +173,13 @@ def get_leading_indicators(
     ltisr = _safe_round((float(lost_days) * 1_000_000) / man_hours) if man_hours else 0.0
     dart_rate = _safe_round((lost_time_incidents * 200_000) / man_hours) if man_hours else 0.0
     far = _safe_round((fatalities * 100_000_000) / man_hours) if man_hours else 0.0
-    near_miss_ratio = f"{_safe_round(near_miss_count / recordable_incidents, 1)} : 1" if recordable_incidents else "0 : 1"
+    near_miss_ratio = _safe_round(near_miss_count / recordable_incidents, 1) if recordable_incidents else 0.0
+
     latest_lti_date = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
         func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
     ).scalar()
+
     safe_days = int((data_window_end - latest_lti_date.date()).days) if latest_lti_date else 0
     dangerous_occurrence_rate = _org_filter(db.query(Incident), Incident, org_id).filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["dangerous occurrence"]),

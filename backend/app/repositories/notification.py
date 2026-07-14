@@ -1,3 +1,4 @@
+from typing import List, Dict, Tuple, Set
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -9,7 +10,7 @@ class NotificationRepository:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def get_for_org(self, org_id: int, skip: int = 0, limit: int = 50) -> list[Notification]:
+    def get_for_org(self, org_id: int, skip: int = 0, limit: int = 50) -> List[Notification]:
         return (
             self._db.query(Notification)
             .filter(
@@ -22,7 +23,7 @@ class NotificationRepository:
             .all()
         )
 
-    def get_read_ids_for_user(self, user_id: int) -> set[int]:
+    def get_read_ids_for_user(self, user_id: int) -> Set[int]:
         rows = (
             self._db.query(NotificationRead.notification_id)
             .filter(NotificationRead.user_id == user_id)

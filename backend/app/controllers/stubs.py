@@ -4,7 +4,7 @@ These return empty/default responses so pages render gracefully rather than
 showing API errors.
 """
 from io import BytesIO
-from typing import Any
+from typing import Any, List, Dict, Tuple, Set, Optional
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -361,19 +361,19 @@ def org_setup_step2_post(payload: dict, db: Session = Depends(get_db)) -> dict:
 
 # ── Wizard in-memory state ────────────────────────────────────────────────────
 # All state persists until server restart (acceptable for a one-time setup flow).
-_wizard_users: list[dict] = []
+_wizard_users: List[dict] = []
 _wizard_user_id = 0
 _wizard_step1: dict = {}
 _wizard_step2: dict = {}
 _wizard_step5: dict = {}
 _wizard_step7: dict = {}
-_wizard_documents: list[dict] = []
+_wizard_documents: List[dict] = []
 _wizard_doc_id: int = 0
-_wizard_imports: list[dict] = []
+_wizard_imports: List[dict] = []
 _wizard_import_id: int = 0
 # Tracks the org being configured in the current wizard session.
 # Set when step 1 is saved; cleared on reset. Used by step 3/4 to scope DB queries.
-_wizard_org_id: int | None = None
+_wizard_org_id: Optional[int] = None
 
 
 def _reset_wizard_state() -> None:
@@ -422,11 +422,11 @@ def _site_to_dict(s) -> dict:
     }
 
 
-def _parse_sites_file(content: bytes, filename: str) -> list[dict]:
+def _parse_sites_file(content: bytes, filename: str) -> List[dict]:
     """Return a list of site dicts parsed from an xlsx/xls/csv file."""
     from io import BytesIO
     fname = filename.lower()
-    rows: list[list] = []
+    rows: List[list] = []
 
     if fname.endswith(".csv"):
         import csv, io
@@ -589,10 +589,10 @@ def org_setup_step3_template():
 
 # ── Step 4 — Users ────────────────────────────────────────────────────────────
 
-def _parse_users_file(content: bytes, filename: str) -> list[dict]:
+def _parse_users_file(content: bytes, filename: str) -> List[dict]:
     """Return a list of user dicts parsed from xlsx/csv."""
     fname = filename.lower()
-    rows: list[list] = []
+    rows: List[list] = []
 
     if fname.endswith(".csv"):
         import csv, io
@@ -638,7 +638,7 @@ _WIZARD_ROLE_MAP = {
 }
 
 
-def _step4_org_id(request: Request, db: Session) -> int | None:
+def _step4_org_id(request: Request, db: Session) -> Optional[int]:
     """Resolve the wizard organisation from persisted user state.
 
     The module-level wizard id is only a fallback: it is not shared between
@@ -667,7 +667,7 @@ def _step4_org_id(request: Request, db: Session) -> int | None:
     return _wizard_org_id
 
 
-def _create_wizard_user(d: dict, db: Session, org_id: int | None = None) -> dict:
+def _create_wizard_user(d: dict, db: Session, org_id: Optional[int] = None) -> dict:
     """Create a real DB User from wizard Step-4 data. Returns serialisable dict."""
     import re, secrets, string, bcrypt
     from app.models.user import User
@@ -1120,7 +1120,7 @@ def org_setup_activate(request: Request, payload: Any = None, db: Session = Depe
 
     return {"success": True}
 
-_CSV_TEMPLATES: dict[str, tuple[str, str]] = {
+_CSV_TEMPLATES: Dict[str, Tuple[str, str]] = {
     "employees": (
         "employee_id,full_name,date_of_birth,gender,employment_type,employment_start_date,"
         "role_id,department_id,shift_pattern,manager_id,induction_date,active_status\n"

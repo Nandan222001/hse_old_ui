@@ -1,0 +1,381 @@
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useAuth } from '../hooks/useAuth';
+import { Colors } from '../theme/colors';
+import { Colors as WorkerColors } from '../worker/theme/colors';
+import { LoadingScreen } from '../components';
+
+// ==========================================
+// 1. MANAGER SCREEN
+// ==========================================
+import { ManagerAppRoot } from '../manager/ManagerAppRoot';
+
+// ==========================================
+// 2. SUPERVISOR SCREENS
+// ==========================================
+import { LoginScreen } from '../screens/LoginScreen';
+import { DashboardScreen } from '../screens/DashboardScreen';
+import { OperationsScreen } from '../screens/OperationsScreen';
+import { TeamAttendanceScreen } from '../screens/TeamAttendanceScreen';
+import { ShiftMonitoringScreen } from '../screens/ShiftMonitoringScreen';
+import { ToolboxTalkScreen } from '../screens/ToolboxTalkScreen';
+import { SafetyComplianceScreen } from '../screens/SafetyComplianceScreen';
+import { PermitsScreen } from '../screens/PermitsScreen';
+import { AcknowledgePermitScreen } from '../screens/AcknowledgePermitScreen';
+import { IncidentsScreen } from '../screens/IncidentsScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+
+// Figma detail screens (Supervisor)
+import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
+import { TeamManagementScreen } from '../screens/TeamManagementScreen';
+import { TeamPerformanceMetricsScreen } from '../screens/TeamPerformanceMetricsScreen';
+import { SessionManagementScreen } from '../screens/SessionManagementScreen';
+import { ToolboxTalkManagementScreen } from '../screens/ToolboxTalkManagementScreen';
+import { SafetyObservationManagementScreen } from '../screens/SafetyObservationManagementScreen';
+import { InspectionManagementScreen } from '../screens/InspectionManagementScreen';
+import { AuditPreparationScreen } from '../screens/AuditPreparationScreen';
+import { CAPAManagementScreen } from '../screens/CAPAManagementScreen';
+import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
+import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
+import { RiskManagementScreen } from '../screens/RiskManagementScreen';
+import { DocumentManagementScreen } from '../screens/DocumentManagementScreen';
+import { AISafetyInsightsScreen } from '../screens/AISafetyInsightsScreen';
+import { AppSettingsScreen } from '../screens/AppSettingsScreen';
+import { ReportsAnalyticsScreen } from '../screens/ReportsAnalyticsScreen';
+import { SiteMonitoringOverviewScreen } from '../screens/SiteMonitoringOverviewScreen';
+
+// ==========================================
+// 3. WORKER SCREENS
+// ==========================================
+import WorkerDashboardScreen from '../worker/screens/DashboardScreen';
+import WorkerTasksScreen from '../worker/screens/TasksScreen';
+import WorkerPermitsScreen from '../worker/screens/PermitsScreen';
+import WorkerProfileScreen from '../worker/screens/ProfileScreen';
+import PerformTaskScreen from '../worker/screens/PerformTaskScreen';
+import RaisePermitScreen from '../worker/screens/RaisePermitScreen';
+import ReportNearMissScreen from '../worker/screens/ReportNearMissScreen';
+import ReportUnsafeActScreen from '../worker/screens/ReportUnsafeActScreen';
+import ReportIncidentScreen from '../worker/screens/ReportIncidentScreen';
+import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
+import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
+import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
+import WorkerNotificationsScreen from '../worker/screens/NotificationsScreen';
+import SafetyTrainingDetailScreen from '../worker/screens/SafetyTrainingDetailScreen';
+import AISafetyAssistantScreen from '../worker/screens/AISafetyAssistantScreen';
+import WorkerReportsScreen from '../worker/screens/ReportsScreen';
+
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// ==========================================
+// SUPERVISOR NAVIGATORS
+// ==========================================
+function SupervisorHomeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="DashboardHome" component={DashboardScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SupervisorOperationsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="OperationsHome" component={OperationsScreen} />
+      <Stack.Screen name="TeamAttendance" component={TeamAttendanceScreen} />
+      <Stack.Screen name="ShiftMonitoring" component={ShiftMonitoringScreen} />
+      <Stack.Screen name="ToolboxTalk" component={ToolboxTalkScreen} />
+      <Stack.Screen name="SafetyCompliance" component={SafetyComplianceScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SupervisorPermitsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="PermitsList" component={PermitsScreen} />
+      <Stack.Screen name="AcknowledgePermit" component={AcknowledgePermitScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SupervisorIncidentsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="IncidentsHome" component={IncidentsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+function SupervisorProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileHome" component={ProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
+const SUPERVISOR_TAB_ICONS: Record<string, string> = {
+  Home: '🏠',
+  Operations: '⚡',
+  Permits: '📋',
+  Incidents: '🚨',
+  Profile: '👤',
+};
+
+function SupervisorMainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: Colors.navActive,
+        tabBarInactiveTintColor: Colors.navInactive,
+        tabBarStyle: {
+          backgroundColor: Colors.white,
+          borderTopColor: Colors.border,
+          height: 64,
+          paddingBottom: 10,
+          paddingTop: 4,
+        },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        tabBarIcon: ({ focused }) => (
+          <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
+            {SUPERVISOR_TAB_ICONS[route.name] ?? '⚪'}
+          </Text>
+        ),
+      })}
+    >
+      <Tab.Screen name="Home" component={SupervisorHomeStack} />
+      <Tab.Screen name="Operations" component={SupervisorOperationsStack} />
+      <Tab.Screen name="Permits" component={SupervisorPermitsStack} />
+      <Tab.Screen name="Incidents" component={SupervisorIncidentsStack} />
+      <Tab.Screen name="Profile" component={SupervisorProfileStack} />
+    </Tab.Navigator>
+  );
+}
+
+// ==========================================
+// WORKER NAVIGATORS
+// ==========================================
+const WORKER_TAB_ICONS: Record<string, string> = {
+  Home: '🏠',
+  Tasks: '📋',
+  Report: '🚨',
+  Checklist: '✅',
+  Profile: '👤',
+};
+
+function WorkerTabBar({ state, descriptors, navigation }: any) {
+  return (
+    <View style={styles.tabBarContainer}>
+      {state.routes.map((route: any, index: number) => {
+        const { options } = descriptors[route.key];
+        const label =
+          options.tabBarLabel !== undefined
+            ? options.tabBarLabel
+            : options.title !== undefined
+            ? options.title
+            : route.name;
+
+        const isFocused = state.index === index;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name, route.params);
+          }
+        };
+
+        const onLongPress = () => {
+          navigation.emit({
+            type: 'tabLongPress',
+            target: route.key,
+          });
+        };
+
+        const icon = WORKER_TAB_ICONS[route.name] ?? '•';
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            style={styles.tabItem}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.tabContent, isFocused && styles.activePill]}>
+              <Text style={[styles.tabIcon, isFocused && styles.activeText]}>{icon}</Text>
+              <Text style={[styles.tabLabelText, isFocused && styles.activeText]}>{label}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function WorkerTabNavigator() {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <WorkerTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={WorkerDashboardScreen} />
+      <Tab.Screen name="Tasks" component={WorkerTasksScreen} />
+      <Tab.Screen name="Report" component={WorkerReportsScreen} />
+      <Tab.Screen name="Checklist" component={SafetyChecklistScreen} />
+      <Tab.Screen name="Profile" component={WorkerProfileScreen} />
+    </Tab.Navigator>
+  );
+}
+
+function SplashScreen() {
+  return (
+    <View style={styles.splash}>
+      <Text style={styles.splashIcon}>🛡️</Text>
+      <ActivityIndicator color={WorkerColors.blue || Colors.primary} size="large" style={{ marginTop: 20 }} />
+    </View>
+  );
+}
+
+// ==========================================
+// MAIN APP NAVIGATOR
+// ==========================================
+export function AppNavigator() {
+  const { isAuthenticated, isLoading, selectedRole, restoreSession } = useAuth();
+
+  useEffect(() => {
+    restoreSession();
+  }, []);
+
+  if (isLoading) return <SplashScreen />;
+
+  const currentRole = selectedRole || 'supervisor';
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          currentRole === 'manager' ? (
+            // ==========================================
+            // MANAGER NAVIGATION STACK
+            // ==========================================
+            <Stack.Screen name="ManagerRoot" component={ManagerAppRoot} />
+          ) : currentRole === 'supervisor' ? (
+            // ==========================================
+            // SUPERVISOR NAVIGATION STACK
+            // ==========================================
+            <>
+              <Stack.Screen name="Main" component={SupervisorMainTabs} />
+              <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
+              <Stack.Screen name="TeamManagement" component={TeamManagementScreen} />
+              <Stack.Screen name="TeamPerformanceMetrics" component={TeamPerformanceMetricsScreen} />
+              <Stack.Screen name="SessionManagement" component={SessionManagementScreen} />
+              <Stack.Screen name="ToolboxTalkManagement" component={ToolboxTalkManagementScreen} />
+              <Stack.Screen name="SafetyObservationManagement" component={SafetyObservationManagementScreen} />
+              <Stack.Screen name="InspectionManagement" component={InspectionManagementScreen} />
+              <Stack.Screen name="AuditPreparation" component={AuditPreparationScreen} />
+              <Stack.Screen name="CAPAManagement" component={CAPAManagementScreen} />
+              <Stack.Screen name="NearMissManagement" component={NearMissManagementScreen} />
+              <Stack.Screen name="PermitRequestManagement" component={PermitRequestManagementScreen} />
+              <Stack.Screen name="RiskManagement" component={RiskManagementScreen} />
+              <Stack.Screen name="DocumentManagement" component={DocumentManagementScreen} />
+              <Stack.Screen name="AISafetyInsights" component={AISafetyInsightsScreen} />
+              <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
+              <Stack.Screen name="ReportsAnalytics" component={ReportsAnalyticsScreen} />
+              <Stack.Screen name="SiteMonitoringOverview" component={SiteMonitoringOverviewScreen} />
+            </>
+          ) : (
+            // ==========================================
+            // WORKER NAVIGATION STACK
+            // ==========================================
+            <>
+              <Stack.Screen name="Main" component={WorkerTabNavigator} />
+              <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+              <Stack.Screen name="PerformTask" component={PerformTaskScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="RaisePermit" component={RaisePermitScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="Notifications" component={WorkerNotificationsScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />
+            </>
+          )
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBarContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1.5,
+    borderTopColor: '#E2E8F0',
+    height: 84,
+    paddingBottom: 22,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+  },
+  tabContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 76,
+    height: 48,
+    borderRadius: 24,
+    gap: 1,
+  },
+  activePill: {
+    backgroundColor: '#2563EB',
+  },
+  tabIcon: {
+    fontSize: 20,
+    color: '#475569',
+  },
+  tabLabelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  activeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  splash: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashIcon: {
+    fontSize: 64,
+  },
+});

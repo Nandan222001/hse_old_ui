@@ -32,6 +32,8 @@ from app.controllers import (
     notification as notification_controller,
     vendor as vendor_controller,
     ai as ai_controller,
+    driver as driver_controller,
+    incident_workflow as incident_workflow_controller,
 )
 
 settings = get_settings()
@@ -92,6 +94,8 @@ def create_app() -> FastAPI:
     app.include_router(notification_controller.router, prefix=prefix)
     app.include_router(vendor_controller.router, prefix=prefix)
     app.include_router(ai_controller.router, prefix=prefix)
+    app.include_router(driver_controller.router, prefix=prefix)
+    app.include_router(incident_workflow_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

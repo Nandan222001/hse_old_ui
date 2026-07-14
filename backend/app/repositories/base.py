@@ -3,7 +3,7 @@ BaseRepository — generic CRUD implementation (OCP: open for extension).
 Subclasses declare  model_class = MyModel  and call __init__(db) only.
 """
 
-from typing import Generic, TypeVar, Optional, Type, ClassVar
+from typing import Generic, TypeVar, Optional, Type, ClassVar, List, Dict
 from sqlalchemy.orm import Session
 from app.repositories.interface import IRepository
 
@@ -18,7 +18,7 @@ class BaseRepository(IRepository[T], Generic[T]):
 
     # ── IRepository contract ──────────────────────────────────────────────────
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> list[T]:
+    def get_all(self, skip: int = 0, limit: int = 100) -> List[T]:
         return (
             self._db.query(self.model_class)
             .offset(skip)
@@ -26,7 +26,7 @@ class BaseRepository(IRepository[T], Generic[T]):
             .all()
         )
 
-    def get_all_by_org(self, org_id: int, skip: int = 0, limit: int = 100) -> list[T]:
+    def get_all_by_org(self, org_id: int, skip: int = 0, limit: int = 100) -> List[T]:
         """Return records for the organisation only."""
         return (
             self._db.query(self.model_class)

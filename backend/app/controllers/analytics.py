@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
@@ -412,7 +412,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         .group_by(PermitType.permit_type_name, PermitToWork.status)
         .all()
     )
-    by_type_status: dict[str, dict[str, int]] = {}
+    by_type_status: Dict[str, Dict[str, int]] = {}
     for type_name, status_val, cnt in type_status_rows:
         by_type_status.setdefault(type_name, {})[status_val or "Unknown"] = cnt
     work_by_type = []
@@ -499,7 +499,7 @@ def get_risk_matrix(
     """
     org_id = current_user.org_id
 
-    def _sev_row(sev: str) -> int | None:
+    def _sev_row(sev: str) -> Optional[int]:
         s = (sev or "").lower()
         if "fatal" in s or "catastrophic" in s:
             return 0
@@ -513,7 +513,7 @@ def get_risk_matrix(
             return 4
         return None
 
-    def _prob_col(prob: str) -> int | None:
+    def _prob_col(prob: str) -> Optional[int]:
         p = (prob or "").lower()
         if "frequent" in p or "almost certain" in p:
             return 0
@@ -773,7 +773,7 @@ def get_root_cause_analysis(
         if incident_ids
         else []
     )
-    capa_by_incident: dict[int, list[CapaAction]] = {}
+    capa_by_incident: Dict[int, List[CapaAction]] = {}
     for c in capa_rows:
         capa_by_incident.setdefault(c.incident_id, []).append(c)
 
@@ -1054,7 +1054,7 @@ def get_asset_summary(
     ]
 
     # ── Barrier checklist — cert types with their completion ratio ────────────
-    type_counts: dict[str, dict] = {}
+    type_counts: Dict[str, dict] = {}
     for c in all_certs:
         t = c.certification_type or "General"
         if t not in type_counts:
@@ -1072,7 +1072,7 @@ def get_asset_summary(
 
     # ── Heat map — equipment type vs site ─────────────────────────────────────
     site_ids = {c.site_id for c in all_certs if c.site_id}
-    site_map: dict[int, str] = {}
+    site_map: Dict[int, str] = {}
     if site_ids:
         for s in db.query(Site).filter(Site.id.in_(site_ids)).all():
             site_map[s.id] = s.site_name
@@ -1080,7 +1080,7 @@ def get_asset_summary(
     types_list  = sorted({c.equipment_type or "Unknown" for c in all_certs})[:6]
     sites_list  = sorted({site_map.get(c.site_id, "Unknown") for c in all_certs})[:6]
 
-    heat_vals: list[list[float]] = []
+    heat_vals: List[List[float]] = []
     for t in types_list:
         row_vals = []
         for s in sites_list:

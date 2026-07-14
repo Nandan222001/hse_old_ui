@@ -57,7 +57,13 @@ def run_migrations():
         for statement in sql.split(";"):
             statement = statement.strip()
             if statement:
-                cursor.execute(statement)
+                try:
+                    cursor.execute(statement)
+                except pymysql.err.OperationalError as e:
+                    if e.args[0] in (1050, 1060, 1061):
+                        print(f"\n  [info] Skipped duplicate: {e.args[1]}")
+                    else:
+                        raise
 
         cursor.execute(
             "INSERT INTO _migrations (filename) VALUES (%s)", (sql_file.name,)

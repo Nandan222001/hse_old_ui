@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,9 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Colors } from '../theme/colors';
 import { useAuthStore } from '../store/authStore';
 
-// ── Screens ───────────────────────────────────────────────────────────────────
 import LoginScreen from '../screens/LoginScreen';
-import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import TasksScreen from '../screens/TasksScreen';
 import ReportsScreen from '../screens/ReportsScreen';
@@ -21,149 +19,94 @@ import ReportUnsafeActScreen from '../screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../screens/ReportIncidentScreen';
 import SafetyChecklistScreen from '../screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../screens/SafetyTrainingScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import PermitsScreen from '../screens/PermitsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import SafetyTrainingDetailScreen from '../screens/SafetyTrainingDetailScreen';
+import AISafetyAssistantScreen from '../screens/AISafetyAssistantScreen';
 
-// ── Role type ─────────────────────────────────────────────────────────────────
-export type AppRole = 'Worker' | 'Supervisor' | 'HSE Manager' | 'Auditor';
-
-function normaliseRole(raw: string | undefined): AppRole {
-  if (!raw) return 'Worker';
-  const r = raw.toLowerCase();
-  if (r.includes('hse') || r.includes('manager') || r.includes('safety manager')) return 'HSE Manager';
-  if (r.includes('supervisor') || r.includes('inspector') || r.includes('engineer')) return 'Supervisor';
-  if (r.includes('auditor') || r.includes('viewer') || r.includes('contractor')) return 'Auditor';
-  return 'Worker';
-}
-
-// ── Role colour map ───────────────────────────────────────────────────────────
-const ROLE_COLOR: Record<AppRole, string> = {
-  'Worker':      '#1D4ED8',
-  'Supervisor':  '#15803D',
-  'HSE Manager': '#7C3AED',
-  'Auditor':     '#B45309',
-};
-
-const ROLE_ICON: Record<AppRole, string> = {
-  'Worker':      '👷',
-  'Supervisor':  '🦺',
-  'HSE Manager': '🛡️',
-  'Auditor':     '🔍',
-};
-
-// ── Tab config per role ───────────────────────────────────────────────────────
-type TabConfig = { name: string; icon: string; component: React.ComponentType<any> };
-
-function getTabsForRole(role: AppRole): TabConfig[] {
-  const base: TabConfig[] = [
-    { name: 'Dashboard', icon: '🏠', component: DashboardScreen },
-    { name: 'Profile',   icon: '👤', component: ProfileScreen },
-  ];
-
-  switch (role) {
-    case 'HSE Manager':
-      return [
-        { name: 'Dashboard',  icon: '🏠', component: DashboardScreen },
-        { name: 'Permits',    icon: '📋', component: PermitsScreen },
-        { name: 'Incidents',  icon: '⚠️', component: ReportsScreen },
-        { name: 'Checklist',  icon: '✅', component: SafetyChecklistScreen },
-        { name: 'Profile',    icon: '👤', component: ProfileScreen },
-      ];
-
-    case 'Supervisor':
-      return [
-        { name: 'Dashboard', icon: '🏠', component: DashboardScreen },
-        { name: 'Tasks',     icon: '📋', component: TasksScreen },
-        { name: 'Checklist', icon: '✅', component: SafetyChecklistScreen },
-        { name: 'Reports',   icon: '📊', component: ReportsScreen },
-        { name: 'Profile',   icon: '👤', component: ProfileScreen },
-      ];
-
-    case 'Auditor':
-      return [
-        { name: 'Dashboard', icon: '🏠', component: DashboardScreen },
-        { name: 'Reports',   icon: '📊', component: ReportsScreen },
-        { name: 'Profile',   icon: '👤', component: ProfileScreen },
-      ];
-
-    case 'Worker':
-    default:
-      return [
-        { name: 'Dashboard', icon: '🏠', component: DashboardScreen },
-        { name: 'Tasks',     icon: '📋', component: TasksScreen },
-        { name: 'Training',  icon: '📚', component: SafetyTrainingScreen },
-        { name: 'Profile',   icon: '👤', component: ProfileScreen },
-      ];
-  }
-}
-
-// ── Tab navigator (role-aware) ────────────────────────────────────────────────
+const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function RoleTabNavigator({ role }: { role: AppRole }) {
-  const tabs = getTabsForRole(role);
-  const activeColor = ROLE_COLOR[role];
+const TAB_ICONS: Record<string, string> = {
+  Home: '🏠',
+  Tasks: '📋',
+  Checklist: '✅',
+  Alerts: '⚠️',
+  Profile: '👤',
+};
 
+function MyTabBar({ state, descriptors, navigation }: any) {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: activeColor,
-        tabBarInactiveTintColor: Colors.navInactive,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarIcon: ({ focused }) => {
-          const tab = tabs.find((t) => t.name === route.name);
-          return (
-            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.45 }}>
-              {tab?.icon ?? '•'}
-            </Text>
-          );
-        },
+    <View style={styles.tabBarContainer}>
+      {state.routes.map((route: any, index: number) => {
+        const { options } = descriptors[route.key];
+        const label =
+          options.tabBarLabel !== undefined
+            ? options.tabBarLabel
+            : options.title !== undefined
+            ? options.title
+            : route.name;
+
+        const isFocused = state.index === index;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name, route.params);
+          }
+        };
+
+        const onLongPress = () => {
+          navigation.emit({
+            type: 'tabLongPress',
+            target: route.key,
+          });
+        };
+
+        const icon = TAB_ICONS[route.name] ?? '•';
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            style={styles.tabItem}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.tabContent, isFocused && styles.activePill]}>
+              <Text style={[styles.tabIcon, isFocused && styles.activeText]}>{icon}</Text>
+              <Text style={[styles.tabLabelText, isFocused && styles.activeText]}>{label}</Text>
+            </View>
+          </TouchableOpacity>
+        );
       })}
-    >
-      {tabs.map((tab) => (
-        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
-      ))}
-    </Tab.Navigator>
-  );
-}
-
-// ── Role badge (shown in tab bar header area) ─────────────────────────────────
-function RoleBadge({ role }: { role: AppRole }) {
-  return (
-    <View style={[styles.roleBadge, { backgroundColor: ROLE_COLOR[role] + '18', borderColor: ROLE_COLOR[role] + '40' }]}>
-      <Text style={styles.roleBadgeIcon}>{ROLE_ICON[role]}</Text>
-      <Text style={[styles.roleBadgeText, { color: ROLE_COLOR[role] }]}>{role}</Text>
     </View>
   );
 }
 
-// ── Main navigator wrapper ────────────────────────────────────────────────────
-const Stack = createStackNavigator();
-
-function MainStack({ role }: { role: AppRole }) {
+function TabNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Tabs">
-        {() => <RoleTabNavigator role={role} />}
-      </Stack.Screen>
-      <Stack.Screen name="PerformTask"          component={PerformTaskScreen}          options={{ presentation: 'card' }} />
-      <Stack.Screen name="RaisePermit"          component={RaisePermitScreen}          options={{ presentation: 'modal' }} />
-      <Stack.Screen name="ReportNearMiss"       component={ReportNearMissScreen}       options={{ presentation: 'modal' }} />
-      <Stack.Screen name="ReportUnsafeAct"      component={ReportUnsafeActScreen}      options={{ presentation: 'modal' }} />
-      <Stack.Screen name="ReportIncident"       component={ReportIncidentScreen}       options={{ presentation: 'modal' }} />
-      <Stack.Screen name="SafetyChecklist"      component={SafetyChecklistScreen}      options={{ presentation: 'card' }} />
-      <Stack.Screen name="SafetyTraining"       component={SafetyTrainingScreen}       options={{ presentation: 'card' }} />
-      <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
-      <Stack.Screen name="Permits"              component={PermitsScreen}              options={{ presentation: 'card' }} />
-      <Stack.Screen name="Notifications"        component={NotificationsScreen}        options={{ presentation: 'card' }} />
-    </Stack.Navigator>
+    <Tab.Navigator
+      tabBar={(props) => <MyTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Home" component={DashboardScreen} />
+      <Tab.Screen name="Tasks" component={TasksScreen} />
+      <Tab.Screen name="Checklist" component={SafetyChecklistScreen} />
+      <Tab.Screen name="Alerts" component={PermitsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
   );
 }
 
-// ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashScreen() {
   return (
     <View style={styles.splash}>
@@ -173,11 +116,8 @@ function SplashScreen() {
   );
 }
 
-// ── Root navigator ────────────────────────────────────────────────────────────
-const RootStack = createStackNavigator();
-
 export default function AppNavigator() {
-  const { isAuthenticated, isLoading, restoreSession, user } = useAuthStore();
+  const { isAuthenticated, isLoading, restoreSession } = useAuthStore();
 
   useEffect(() => {
     restoreSession();
@@ -185,65 +125,74 @@ export default function AppNavigator() {
 
   if (isLoading) return <SplashScreen />;
 
-  const role = normaliseRole(user?.role);
-
   return (
     <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          <>
-            <RootStack.Screen name="Login" component={LoginScreen} />
-            <RootStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-          </>
-        ) : (
-          <RootStack.Screen name="Main">
-            {() => (
-              <View style={{ flex: 1 }}>
-                <RoleBadge role={role} />
-                <MainStack role={role} />
-              </View>
-            )}
-          </RootStack.Screen>
-        )}
-      </RootStack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={isAuthenticated ? 'Main' : 'Login'}>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="Main" component={TabNavigator} />
+        <Stack.Screen name="PerformTask" component={PerformTaskScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="RaisePermit" component={RaisePermitScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="Permits" component={PermitsScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: Colors.card,
-    borderTopColor: Colors.border,
-    borderTopWidth: 1,
-    paddingTop: 8,
-    paddingBottom: 12,
-    height: 70,
-    elevation: 8,
+  tabBarContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1.5,
+    borderTopColor: '#E2E8F0',
+    height: 84,
+    paddingBottom: 22,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    elevation: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.06,
     shadowRadius: 8,
   },
-  tabLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  splash: {
+  tabItem: {
     flex: 1,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
   },
-  splashIcon: { fontSize: 64 },
-  roleBadge: {
-    flexDirection: 'row',
+  tabContent: {
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    marginRight: 12,
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 4,
+    justifyContent: 'center',
+    width: 76,
+    height: 48,
+    borderRadius: 24,
+    gap: 1,
   },
-  roleBadgeIcon: { fontSize: 13 },
-  roleBadgeText: { fontSize: 12, fontWeight: '700' },
+  activePill: {
+    backgroundColor: '#2563EB',
+  },
+  tabIcon: {
+    fontSize: 20,
+    color: '#475569',
+  },
+  tabLabelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  activeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  splash: { flex: 1, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  splashIcon: { fontSize: 64 },
 });

@@ -19,6 +19,25 @@ import { AcknowledgePermitScreen } from '../screens/AcknowledgePermitScreen';
 import { IncidentsScreen } from '../screens/IncidentsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 
+// Figma detail screens
+import { NotificationCenterScreen } from '../screens/NotificationCenterScreen';
+import { TeamManagementScreen } from '../screens/TeamManagementScreen';
+import { TeamPerformanceMetricsScreen } from '../screens/TeamPerformanceMetricsScreen';
+import { SessionManagementScreen } from '../screens/SessionManagementScreen';
+import { ToolboxTalkManagementScreen } from '../screens/ToolboxTalkManagementScreen';
+import { SafetyObservationManagementScreen } from '../screens/SafetyObservationManagementScreen';
+import { InspectionManagementScreen } from '../screens/InspectionManagementScreen';
+import { AuditPreparationScreen } from '../screens/AuditPreparationScreen';
+import { CAPAManagementScreen } from '../screens/CAPAManagementScreen';
+import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
+import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
+import { RiskManagementScreen } from '../screens/RiskManagementScreen';
+import { DocumentManagementScreen } from '../screens/DocumentManagementScreen';
+import { AISafetyInsightsScreen } from '../screens/AISafetyInsightsScreen';
+import { AppSettingsScreen } from '../screens/AppSettingsScreen';
+import { ReportsAnalyticsScreen } from '../screens/ReportsAnalyticsScreen';
+import { SiteMonitoringOverviewScreen } from '../screens/SiteMonitoringOverviewScreen';
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -117,7 +136,26 @@ export function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="NotificationCenter" component={NotificationCenterScreen} />
+            <Stack.Screen name="TeamManagement" component={TeamManagementScreen} />
+            <Stack.Screen name="TeamPerformanceMetrics" component={TeamPerformanceMetricsScreen} />
+            <Stack.Screen name="SessionManagement" component={SessionManagementScreen} />
+            <Stack.Screen name="ToolboxTalkManagement" component={ToolboxTalkManagementScreen} />
+            <Stack.Screen name="SafetyObservationManagement" component={SafetyObservationManagementScreen} />
+            <Stack.Screen name="InspectionManagement" component={InspectionManagementScreen} />
+            <Stack.Screen name="AuditPreparation" component={AuditPreparationScreen} />
+            <Stack.Screen name="CAPAManagement" component={CAPAManagementScreen} />
+            <Stack.Screen name="NearMissManagement" component={NearMissManagementScreen} />
+            <Stack.Screen name="PermitRequestManagement" component={PermitRequestManagementScreen} />
+            <Stack.Screen name="RiskManagement" component={RiskManagementScreen} />
+            <Stack.Screen name="DocumentManagement" component={DocumentManagementScreen} />
+            <Stack.Screen name="AISafetyInsights" component={AISafetyInsightsScreen} />
+            <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
+            <Stack.Screen name="ReportsAnalytics" component={ReportsAnalyticsScreen} />
+            <Stack.Screen name="SiteMonitoringOverview" component={SiteMonitoringOverviewScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}

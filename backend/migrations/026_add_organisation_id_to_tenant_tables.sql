@@ -3,13 +3,13 @@
 -- api_integrations, and documents so each org only sees its own data.
 
 ALTER TABLE validation_logs
-    ADD COLUMN IF NOT EXISTS organisation_id INT NULL AFTER id,
-    ADD INDEX  IF NOT EXISTS idx_vlogs_org (organisation_id);
+    ADD COLUMN organisation_id INT NULL AFTER id,
+    ADD INDEX  idx_vlogs_org (organisation_id);
 
 ALTER TABLE api_integrations
-    ADD COLUMN IF NOT EXISTS organisation_id INT NULL AFTER id,
-    ADD INDEX  IF NOT EXISTS idx_integrations_org (organisation_id);
+    ADD COLUMN organisation_id INT NULL AFTER id,
+    ADD INDEX  idx_integrations_org (organisation_id);
 
 ALTER TABLE documents
-    ADD COLUMN IF NOT EXISTS organisation_id INT NULL AFTER id,
-    ADD INDEX  IF NOT EXISTS idx_documents_org (organisation_id);
+    ADD COLUMN organisation_id INT NULL AFTER id,
+    ADD INDEX  idx_documents_org (organisation_id);

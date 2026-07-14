@@ -4,7 +4,7 @@ AI Chat endpoint — powered by Anthropic Claude.
 Falls back gracefully when ANTHROPIC_API_KEY is not set, so the
 rest of the app keeps working even without an AI key configured.
 """
-from typing import Any
+from typing import Any, List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 

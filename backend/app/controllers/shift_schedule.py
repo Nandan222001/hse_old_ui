@@ -1,3 +1,4 @@
+from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
@@ -12,7 +13,7 @@ def _svc(db: Session = Depends(get_db)) -> ShiftScheduleService:
     return ShiftScheduleService(db)
 
 
-@router.get("/", response_model=list[ShiftScheduleResponse])
+@router.get("/", response_model=List[ShiftScheduleResponse])
 def list_shift_schedules(skip: int = 0, limit: int = 100, svc: ShiftScheduleService = Depends(_svc), current_user: CurrentUser = Depends(get_current_user)):
     return svc.list(skip=skip, limit=limit, org_id=current_user.org_id)
 

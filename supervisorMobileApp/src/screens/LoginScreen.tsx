@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, KeyboardAvoidingView, Platform, ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Image,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { Input, PINInput, LoadingOverlay } from '../components';
 import { Colors } from '../theme/colors';
+
+const LOGO_IMAGE = require('../../assets/icon.png');
 
 export function LoginScreen() {
   const { login, isLoading, error, clearError } = useAuth();
@@ -32,7 +41,7 @@ export function LoginScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
       <LoadingOverlay visible={isLoading} message="Signing in..." />
 
       <ScrollView
@@ -42,7 +51,7 @@ export function LoginScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBox}>
-            <Text style={styles.logoIcon}>🛡️</Text>
+            <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
           </View>
           <Text style={styles.appName}>SafetyCore HSE</Text>
           <Text style={styles.tagline}>Enterprise Site Management</Text>
@@ -87,7 +96,6 @@ export function LoginScreen() {
           >
             <Text style={styles.loginBtnText}>🔐  Log In to Site</Text>
           </TouchableOpacity>
-
         </View>
 
         {/* Footer */}
@@ -101,39 +109,65 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.primary },
+  root: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   scroll: {
     flexGrow: 1,
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingVertical: 40,
   },
-
-  header: { alignItems: 'center', marginBottom: 32 },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
   logoBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
-  logoIcon: { fontSize: 36 },
-  appName: { fontSize: 28, fontWeight: '800', color: Colors.white, letterSpacing: 0.5 },
-  tagline: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 4 },
-
+  logo: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: 0.5,
+  },
+  tagline: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 4,
+  },
   card: {
     backgroundColor: Colors.card,
     borderRadius: 20,
     padding: 24,
     shadowColor: '#000',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.06,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 4,
   },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: Colors.textDark, marginBottom: 20 },
-
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.textDark,
+    marginBottom: 20,
+  },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -143,9 +177,14 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  errorIcon: { fontSize: 16 },
-  errorText: { fontSize: 13, color: Colors.critical, flex: 1 },
-
+  errorIcon: {
+    fontSize: 16,
+  },
+  errorText: {
+    fontSize: 13,
+    color: Colors.critical,
+    flex: 1,
+  },
   loginBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -157,15 +196,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
   },
-  loginBtnDisabled: { opacity: 0.5 },
-  loginBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
-
-  footer: { alignItems: 'center', marginTop: 32 },
+  loginBtnDisabled: {
+    opacity: 0.55,
+  },
+  loginBtnText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 32,
+  },
   footerTop: {
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.55)',
+    color: Colors.textMuted,
     letterSpacing: 1,
   },
-  footerBottom: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 },
+  footerBottom: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginTop: 4,
+  },
 });

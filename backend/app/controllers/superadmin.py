@@ -1,3 +1,4 @@
+from typing import List, Dict, Optional
 import re
 import secrets
 import string
@@ -185,7 +186,7 @@ def list_tenants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
 def list_organisations_summary(db: Session = Depends(get_db)):
     orgs = db.query(Organisation).order_by(Organisation.created_at.desc()).all()
     invites = db.query(OrganisationInvite).all()
-    invite_map: dict[str, str] = {}
+    invite_map: Dict[str, str] = {}
     for inv in invites:
         invite_map[inv.organisation_name.lower()] = inv.status
 
@@ -298,7 +299,7 @@ def delete_invite(invite_id: int, db: Session = Depends(get_db)):
 
 # ── Platform Users ─────────────────────────────────────────────────────────────
 
-def _user_to_dict(u: User, role: AppRole | None) -> dict:
+def _user_to_dict(u: User, role: Optional[AppRole]) -> dict:
     return {
         "id":          u.id,
         "username":    u.username,
@@ -321,7 +322,7 @@ def list_platform_users(skip: int = 0, limit: int = 200, db: Session = Depends(g
         .limit(limit)
         .all()
     )
-    role_map: dict[int, AppRole] = {r.id: r for r in db.query(AppRole).all()}
+    role_map: Dict[int, AppRole] = {r.id: r for r in db.query(AppRole).all()}
     total = db.query(User).count()
     items = [_user_to_dict(u, role_map.get(u.app_role_id)) for u in users]
     return {"total": total, "items": items}
@@ -337,7 +338,7 @@ def list_roles(db: Session = Depends(get_db)):
         .group_by(User.app_role_id)
         .all()
     )
-    counts: dict[int, int] = {row.app_role_id: row.cnt for row in counts_q}
+    counts: Dict[int, int] = {row.app_role_id: row.cnt for row in counts_q}
     return [
         {
             "id":          r.id,
@@ -443,7 +444,7 @@ _PLAN_DEFAULTS = {
 }
 
 
-def _sub_to_dict(sub: Subscription, invite: OrganisationInvite | None) -> dict:
+def _sub_to_dict(sub: Subscription, invite: Optional[OrganisationInvite]) -> dict:
     return {
         "id":            sub.id,
         "invite_id":     sub.invite_id,
@@ -472,7 +473,7 @@ def list_subscriptions(skip: int = 0, limit: int = 200, db: Session = Depends(ge
         .limit(limit)
         .all()
     )
-    invite_map: dict[int, OrganisationInvite] = {
+    invite_map: Dict[int, OrganisationInvite] = {
         i.id: i for i in db.query(OrganisationInvite).all()
     }
     total = db.query(Subscription).count()
@@ -709,7 +710,7 @@ _EDITABLE_KEYS = {
 
 
 def _read_env_file() -> dict:
-    result: dict[str, str] = {}
+    result: Dict[str, str] = {}
     if _ENV_FILE.exists():
         for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
@@ -808,8 +809,8 @@ def get_platform_settings():
 @router.patch("/settings", summary="Update editable platform settings (restart required)")
 def update_platform_settings(payload: dict):
     env_dict = _read_env_file()
-    updated: list[str] = []
-    rejected: list[str] = []
+    updated: List[str] = []
+    rejected: List[str] = []
 
     for key, value in payload.items():
         if key not in _EDITABLE_KEYS:
@@ -817,11 +818,11 @@ def update_platform_settings(payload: dict):
             continue
         env_key = key.upper()
         if isinstance(value, bool):
-            env_dict[env_key] = str(value).lower()
+            env_Dict[env_key] = str(value).lower()
         elif isinstance(value, list):
-            env_dict[env_key] = ",".join(str(v) for v in value)
+            env_Dict[env_key] = ",".join(str(v) for v in value)
         else:
-            env_dict[env_key] = str(value)
+            env_Dict[env_key] = str(value)
         updated.append(key)
 
     _write_env_file(env_dict)
@@ -830,7 +831,7 @@ def update_platform_settings(payload: dict):
 
 # ── Notifications ──────────────────────────────────────────────────────────────
 
-def _notif_to_dict(n: Notification, invite: OrganisationInvite | None) -> dict:
+def _notif_to_dict(n: Notification, invite: Optional[OrganisationInvite]) -> dict:
     return {
         "id":               n.id,
         "title":            n.title,
@@ -856,7 +857,7 @@ def list_notifications(skip: int = 0, limit: int = 100, db: Session = Depends(ge
         .order_by(Notification.created_at.desc())
         .offset(skip).limit(limit).all()
     )
-    invite_map: dict[int, OrganisationInvite] = {i.id: i for i in db.query(OrganisationInvite).all()}
+    invite_map: Dict[int, OrganisationInvite] = {i.id: i for i in db.query(OrganisationInvite).all()}
     stats = {
         "total":  total,
         "sent":   db.query(sqlfunc.count(Notification.id)).filter(Notification.status == "sent").scalar() or 0,
