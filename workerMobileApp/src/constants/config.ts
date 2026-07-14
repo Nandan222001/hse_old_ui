@@ -1,7 +1,7 @@
 // Debug build → local emulator; Release build → production Azure server.
 export const API_BASE_URL =
   process.env.API_BASE_URL ??
-  (__DEV__ ? 'http://localhost:8000/api/v1' : 'https://20.65.202.44/api/v1');
+  (__DEV__ ? 'http://192.168.31.79:8000/api/v1' : 'https://20.65.202.44/api/v1');
 
 export const API_TIMEOUT = 15000;
 
