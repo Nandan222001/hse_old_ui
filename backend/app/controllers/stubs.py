@@ -1267,7 +1267,7 @@ def get_supervisor_alerts(
             "worker_name": "Worker One"
         })
         
-    return {"success": True, "data": alerts}
+    return alerts
 
 
 @router.get("/supervisor/dashboard")
@@ -1275,13 +1275,10 @@ def get_supervisor_dashboard(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     return {
-        "success": True,
-        "data": {
-            "attendance_pct": 94,
-            "safety_compliance_pct": 98,
-            "active_permits": 5,
-            "pending_permits": 2
-        }
+        "attendance_pct": 94,
+        "safety_compliance_pct": 98,
+        "active_permits": 5,
+        "pending_permits": 2
     }
 
 
@@ -1290,13 +1287,10 @@ def get_supervisor_shift_status(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     return {
-        "success": True,
-        "data": {
-            "total": 15,
-            "logged_in": 12,
-            "pending": 3,
-            "is_live": True
-        }
+        "total": 15,
+        "logged_in": 12,
+        "pending": 3,
+        "is_live": True
     }
 
 
@@ -1305,25 +1299,22 @@ def get_supervisor_permits(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     return {
-        "success": True,
-        "data": {
-            "items": [
-                {
-                    "id": "1",
-                    "permit_ref": "PTW-2026-081",
-                    "permit_type": "Hot Work",
-                    "title": "Welding in Tank Farm 3",
-                    "location": "Sector 4 - Tank Farm",
-                    "requestor": "John Doe",
-                    "status": "pending",
-                    "risk_level": "high",
-                    "validity_start": "2026-07-14T08:00:00",
-                    "validity_end": "2026-07-14T17:00:00"
-                }
-            ],
-            "total": 1,
-            "pending_count": 1,
-            "approved_today": 0,
-            "risk_flags": 1
-        }
+        "items": [
+            {
+                "id": "1",
+                "permit_ref": "PTW-2026-081",
+                "permit_type": "Hot Work",
+                "title": "Welding in Tank Farm 3",
+                "location": "Sector 4 - Tank Farm",
+                "requestor": "John Doe",
+                "status": "pending",
+                "risk_level": "high",
+                "validity_start": "2026-07-14T08:00:00",
+                "validity_end": "2026-07-14T17:00:00"
+            }
+        ],
+        "total": 1,
+        "pending_count": 1,
+        "approved_today": 0,
+        "risk_flags": 1
     }
