@@ -330,15 +330,28 @@ export function RiskPage() {
         {/* Risk Aging */}
         <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
           <div className="mb-3 text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Risk Aging</div>
+          {agingBars.length > 0 && agingBars[3]?.critical > 0 && agingBars.slice(0,3).every(b => b.line === 0) && (
+            <div className="mb-3 px-3 py-2 rounded-lg text-[12px] font-semibold" style={{ background: '#FEF2F2', color: '#991B1B', border: '1px solid #FECACA' }}>
+              ⚠ All {agingBars[3].critical} open CAPAs are critically overdue (&gt;90 days). Immediate action required.
+            </div>
+          )}
 
           {/* Age bucket pills */}
           <div className="flex flex-wrap gap-2 mb-4">
-            {['0–30 Days', '31–60 Days', '61–90 Days', '>90 Days'].map((label) => (
-              <span key={label} className="rounded-full px-3 py-1 text-[11px]"
-                style={{ background: '#EEF2FF', color: '#334155', fontWeight: 600 }}>
-                {label}
-              </span>
-            ))}
+            {['0–30 Days', '31–60 Days', '61–90 Days', '>90 Days'].map((label, i) => {
+              const bucketCount = agingBars[i]?.line ?? 0;
+              return (
+                <span key={label} className="rounded-full px-3 py-1 text-[11px]"
+                  style={{
+                    background: bucketCount > 0 ? (i === 3 ? '#FEE2E2' : '#EEF2FF') : '#F1F5F9',
+                    color: bucketCount > 0 ? (i === 3 ? '#991B1B' : '#334155') : '#9CA3AF',
+                    fontWeight: bucketCount > 0 ? 700 : 500,
+                    border: bucketCount > 0 && i === 3 ? '1px solid #FECACA' : '1px solid transparent',
+                  }}>
+                  {label} {bucketCount > 0 ? `(${bucketCount})` : '(0)'}
+                </span>
+              );
+            })}
             {recentlyClosed > 0 && (
               <span className="rounded-full px-3 py-1 text-[11px]"
                 style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>
