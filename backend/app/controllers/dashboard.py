@@ -20,6 +20,9 @@ from app.models.site import Site
 from app.models.shift_schedule import ShiftSchedule
 from app.models.working_station import WorkingStation
 
+from app.utils.logger import get_logger
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
@@ -307,6 +310,8 @@ def get_leading_indicators(
 
     contractor_risk_score = _safe_round(contractor_risk_score_10 * 10)
     contractor_risk_label = "High" if contractor_risk_score_10 < 5 else ("Medium" if contractor_risk_score_10 < 8 else "Low")
+    logger.info("CONTRACTOR_RISK: score_10=%s score_pct=%s label=%s violations=%s",
+                contractor_risk_score_10, contractor_risk_score, contractor_risk_label, total_permit_violations_cont)
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
     # Anchor on latest walk date so historical data is not missed
@@ -352,6 +357,68 @@ def get_leading_indicators(
         "audit_readiness_score": audit_readiness_score,
         "average_compliance": average_compliance,
         "audit_readiness_label": audit_readiness_label,
+    }
+
+
+@router.get("/contractor-debug")
+def get_contractor_debug(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Debug endpoint to verify contractor risk score calculation."""
+    org_id = current_user.org_id
+
+    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
+        func.lower(Employee.employment_type).like("%contract%")
+    ).count()
+
+    pv_q = db.query(func.count(PermitToWork.id)).filter(PermitToWork.deviation_reported == "Yes")
+    if org_id is not None:
+        pv_q = pv_q.filter(PermitToWork.organisation_id == org_id)
+    total_permit_violations = pv_q.scalar() or 0
+
+    total_org_incidents = _org_filter(db.query(Incident), Incident, org_id).count()
+    total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
+
+    violation_penalty = min(3.0, total_permit_violations * 0.5)
+
+    if contractor_employees == 0:
+        score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
+    elif total_org_incidents == 0:
+        score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
+    else:
+        contractor_incidents = (
+            _org_filter(db.query(func.count(Incident.id)), Incident, org_id)
+            .join(Employee, Incident.reported_by == Employee.id)
+            .filter(func.lower(Employee.employment_type).like("%contract%"))
+            .scalar() or 0
+        )
+        cont_inc_rate = contractor_incidents / contractor_employees
+        org_inc_rate = total_org_incidents / max(total_employees, 1)
+        rel_risk = round(cont_inc_rate / org_inc_rate, 2) if org_inc_rate > 0 else 0.0
+        incident_penalty = min(7.0, rel_risk * 3.0)
+        score_10 = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
+        return {
+            "contractor_employees": contractor_employees,
+            "contractor_incidents": contractor_incidents,
+            "total_org_incidents": total_org_incidents,
+            "total_employees": total_employees,
+            "cont_inc_rate": cont_inc_rate,
+            "org_inc_rate": org_inc_rate,
+            "rel_risk": rel_risk,
+            "incident_penalty": incident_penalty,
+            "violation_penalty": violation_penalty,
+            "score_10": score_10,
+            "score_pct": score_10 * 10,
+        }
+
+    return {
+        "contractor_employees": contractor_employees,
+        "total_permit_violations": total_permit_violations,
+        "total_org_incidents": total_org_incidents,
+        "violation_penalty": violation_penalty,
+        "score_10": score_10,
+        "score_pct": score_10 * 10,
     }
 
 

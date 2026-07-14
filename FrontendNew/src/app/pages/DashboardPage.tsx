@@ -193,18 +193,10 @@ export function DashboardPage() {
         },
         {
           title: "Contractor Risk Score",
-          value: (() => {
-            const score10 = (leading as any).contractor_risk_score_10;
-            const scoreVal = score10 !== undefined && score10 !== null
-              ? score10
-              : leading.contractor_risk_score > 10
-                ? leading.contractor_risk_score / 10
-                : leading.contractor_risk_score;
-            return `${leading.contractor_risk_label} / ${Number(scoreVal).toFixed(1)}/10`;
-          })(),
-          sub: "Limiting Indicator",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
+          value: `${leading.contractor_risk_label} / ${Number((leading as any).contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
+          sub: ((leading as any).contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
+          accent: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
+          border: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
           inline: "",
           trendDown: false,
         },
