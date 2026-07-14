@@ -99,7 +99,6 @@ export default function SafetyChecklistScreen({ navigation }: any) {
       setActiveTemplate(template);
       setResponses({});
     } catch (err: any) {
-      console.error('Create checklist error:', err?.response?.status, err?.response?.data, err?.message);
       Alert.alert('Error', 'Failed to create checklist submission. Please try again.');
     } finally {
       setCreatingDraft(false);
@@ -124,7 +123,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
     if (unanswered.length > 0) {
       Alert.alert(
         'Incomplete',
-        `You must answer all required items before submitting. ${unanswered.length} item(s) still need Pass or Fail.`
+        `Please answer all required items. ${unanswered.length} item(s) remaining.`
       );
       return;
     }
@@ -154,7 +153,6 @@ export default function SafetyChecklistScreen({ navigation }: any) {
         { text: 'OK', onPress: () => goBackToList() },
       ]);
     } catch (err: any) {
-      console.error('Submit checklist error:', err?.response?.status, err?.response?.data, err?.message);
       Alert.alert('Error', 'Failed to submit checklist. Please try again.');
     } finally {
       setSubmitting(false);
