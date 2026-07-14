@@ -36,7 +36,7 @@ interface DraftSubmission {
   submit_due_at: string;
 }
 
-type ResponseValue = 'Pass' | 'Fail' | null;
+type ResponseValue = 'Yes' | 'No' | null;
 
 // ─── Template Card Icons ─────────────────────────────────────────────────────
 
@@ -268,34 +268,34 @@ export default function SafetyChecklistScreen({ navigation }: any) {
                   <TouchableOpacity
                     style={[
                       styles.toggleBtn,
-                      responses[item.item_no] === 'Pass' && styles.toggleBtnPass,
+                      responses[item.item_no] === 'Yes' && styles.toggleBtnPass,
                     ]}
-                    onPress={() => setItemResponse(item.item_no, 'Pass')}
+                    onPress={() => setItemResponse(item.item_no, 'Yes')}
                   >
                     <Text
                       style={[
                         styles.toggleBtnText,
-                        responses[item.item_no] === 'Pass' && styles.toggleBtnTextActive,
+                        responses[item.item_no] === 'Yes' && styles.toggleBtnTextActive,
                       ]}
                     >
-                      Pass
+                      Yes
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[
                       styles.toggleBtn,
-                      responses[item.item_no] === 'Fail' && styles.toggleBtnFail,
+                      responses[item.item_no] === 'No' && styles.toggleBtnFail,
                     ]}
-                    onPress={() => setItemResponse(item.item_no, 'Fail')}
+                    onPress={() => setItemResponse(item.item_no, 'No')}
                   >
                     <Text
                       style={[
                         styles.toggleBtnText,
-                        responses[item.item_no] === 'Fail' && styles.toggleBtnTextActive,
+                        responses[item.item_no] === 'No' && styles.toggleBtnTextActive,
                       ]}
                     >
-                      Fail
+                      No
                     </Text>
                   </TouchableOpacity>
                 </View>
