@@ -305,6 +305,9 @@ def get_vendor_summary(
         else:
             prev_raw = raw
 
+    risk_score = round(raw, 1)
+    delta = round(raw - prev_raw, 1)
+
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: list[dict] = []
     if contractor_ids:
