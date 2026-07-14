@@ -70,8 +70,11 @@ export function CAPAManagementScreen({ route, navigation }: any) {
       await incidentWorkflowService.acknowledge(incidentId);
       Alert.alert('Acknowledged', 'Incident acknowledged successfully!');
       fetchIncidentDetails();
-    } catch (e) {
-      Alert.alert('Error', 'Acknowledge request failed.');
+    } catch (e: any) {
+      console.log('Acknowledge Error:', e);
+      const detail = e.response?.data?.detail;
+      const errMsg = typeof detail === 'string' ? detail : (typeof detail === 'object' && detail !== null ? JSON.stringify(detail) : (e.message || 'Unknown error'));
+      Alert.alert('Error', `Acknowledge request failed: ${errMsg}`);
     } finally {
       setSubmitting(false);
     }
@@ -133,8 +136,11 @@ export function CAPAManagementScreen({ route, navigation }: any) {
       await incidentWorkflowService.investigate(incidentId, payload);
       Alert.alert('Success', 'RCA Investigation & CAPA plan submitted to Manager!');
       navigation.goBack();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to submit investigation to server.');
+    } catch (e: any) {
+      console.log('RCA Submit Error:', e);
+      const detail = e.response?.data?.detail;
+      const errMsg = typeof detail === 'string' ? detail : (typeof detail === 'object' && detail !== null ? JSON.stringify(detail) : (e.message || 'Unknown error'));
+      Alert.alert('Error', `Failed to submit investigation: ${errMsg}`);
     } finally {
       setSubmitting(false);
     }
