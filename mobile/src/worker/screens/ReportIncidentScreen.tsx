@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, ActivityIndicator,
+  Alert, TextInput, ActivityIndicator, Modal,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
@@ -10,6 +10,7 @@ import { useIncidents } from '../hooks/useIncidents';
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
   const [incidentType, setIncidentType] = useState('Injury');
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<number>(3);
 
@@ -77,15 +78,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
         {/* Incident Type Dropdown */}
         <Text style={styles.inputLabel}>Incident Type</Text>
-        <TouchableOpacity style={styles.dropdown} onPress={() => {
-          Alert.alert('Select Incident Type', '', [
-            { text: 'Injury', onPress: () => setIncidentType('Injury') },
-            { text: 'Spill', onPress: () => setIncidentType('Spill') },
-            { text: 'Fire', onPress: () => setIncidentType('Fire') },
-            { text: 'Equipment Damage', onPress: () => setIncidentType('Equipment Damage') },
-            { text: 'Near Miss', onPress: () => setIncidentType('Near Miss') },
-          ]);
-        }}>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setPickerVisible(true)}>
           <Text style={styles.dropdownValue}>{incidentType}</Text>
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
@@ -141,6 +134,47 @@ export default function ReportIncidentScreen({ navigation }: any) {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Bottom Sheet Picker Modal */}
+      <Modal
+        visible={pickerVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setPickerVisible(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Incident Type</Text>
+              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                <Text style={styles.pickerCloseBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {['Injury', 'Spill', 'Fire', 'Equipment Damage', 'Near Miss'].map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[styles.pickerItem, incidentType === type && styles.pickerItemActive]}
+                onPress={() => {
+                  setIncidentType(type);
+                  setPickerVisible(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, incidentType === type && styles.pickerItemTextActive]}>
+                  {type}
+                </Text>
+                {incidentType === type && (
+                  <Text style={styles.checkmarkIcon}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScreenLayout>
   );
 }
@@ -337,5 +371,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 12,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  pickerCloseBtn: {
+    fontSize: 18,
+    color: '#64748B',
+    paddingHorizontal: 8,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  pickerItemActive: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  pickerItemText: {
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  pickerItemTextActive: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  checkmarkIcon: {
+    fontSize: 14,
+    color: '#2563EB',
+    fontWeight: '800',
   },
 });
