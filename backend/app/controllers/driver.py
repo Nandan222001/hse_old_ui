@@ -353,15 +353,18 @@ def report_incident(
 
     emp_id = user_row["employee_id"] if user_row else None
     
+    import json
     # Save to incidents table
     db.execute(
         text("""
             INSERT INTO incidents (
                 organisation_id, report_date, incident_date_time, incident_type,
-                severity, description, immediate_cause, investigation_status, reported_by, workflow_status
+                severity, description, immediate_cause, anyone_injured, injured_person_name,
+                evidence_json, investigation_status, reported_by, workflow_status
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :incident_type,
-                :severity, :description, :immediate_cause, :investigation_status, :reported_by, :workflow_status
+                :severity, :description, :immediate_cause, :anyone_injured, :injured_person_name,
+                :evidence_json, :investigation_status, :reported_by, :workflow_status
             )
         """),
         {
@@ -371,7 +374,10 @@ def report_incident(
             "incident_type": data.get("incident_type", "injury"),
             "severity": data.get("severity", "medium"),
             "description": data.get("description", ""),
-            "immediate_cause": data.get("immediate_actions", "Area secured"),
+            "immediate_cause": data.get("reason", ""),
+            "anyone_injured": data.get("anyone_injured", "No"),
+            "injured_person_name": data.get("injured_person_name", None),
+            "evidence_json": json.dumps(data.get("photos", [])),
             "investigation_status": "open",
             "reported_by": emp_id,
             "workflow_status": "reported"

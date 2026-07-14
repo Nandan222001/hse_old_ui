@@ -13,10 +13,39 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<number>(3);
+  const [reason, setReason] = useState('');
+  const [anyoneInjured, setAnyoneInjured] = useState<'Yes' | 'No'>('No');
+  const [injuredPersonName, setInjuredPersonName] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  const handleAddPhoto = () => {
+    const mockPhotoNames = [
+      'evidence_spill_01.jpg',
+      'floor_strap_obstruction.jpg',
+      'damaged_scaffolding_clip.jpg',
+      'exhaust_steam_leak.jpg',
+      'valve_gasket_wear.jpg'
+    ];
+    const nextPhoto = mockPhotoNames[Math.floor(Math.random() * mockPhotoNames.length)];
+    const timeStamp = new Date().getTime().toString().slice(-4);
+    setPhotos(prev => [...prev, `${timeStamp}_${nextPhoto}`]);
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleNext = async () => {
     if (!description.trim()) {
       Alert.alert('Required', 'Please enter a description of the incident.');
+      return;
+    }
+    if (!reason.trim()) {
+      Alert.alert('Required', 'Please enter the reason / immediate cause.');
+      return;
+    }
+    if (anyoneInjured === 'Yes' && !injuredPersonName.trim()) {
+      Alert.alert('Required', 'Please enter the name of the injured person.');
       return;
     }
     
@@ -32,11 +61,15 @@ export default function ReportIncidentScreen({ navigation }: any) {
       incident_type: incidentType.toLowerCase() as any,
       severity: (severityMap[severity] || 'medium') as any,
       description: description.trim(),
+      reason: reason.trim(),
+      anyone_injured: anyoneInjured,
+      injured_person_name: anyoneInjured === 'Yes' ? injuredPersonName.trim() : '',
+      mockPhotos: photos,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0].substring(0, 5),
       location: 'Zone B - Sector 4',
-      immediate_actions: 'Area cordoned off, first aid applied.',
-    });
+      immediate_actions: 'Area secured',
+    } as any);
 
     if (ok) {
       Alert.alert(
@@ -116,6 +149,73 @@ export default function ReportIncidentScreen({ navigation }: any) {
         <View style={styles.severityLimitsRow}>
           <Text style={styles.limitText}>LOW</Text>
           <Text style={styles.limitText}>CRITICAL</Text>
+        </View>
+
+        {/* Incident Reason */}
+        <Text style={styles.inputLabel}>Reason / Immediate Cause</Text>
+        <View style={styles.textAreaContainer}>
+          <TextInput
+            style={[styles.textArea, { height: 75 }]}
+            placeholder="Explain why the incident occurred..."
+            placeholderTextColor="#94A3B8"
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            value={reason}
+            onChangeText={setReason}
+          />
+        </View>
+
+        {/* Was anyone injured toggle */}
+        <Text style={styles.inputLabel}>Was anyone injured?</Text>
+        <View style={styles.toggleGroup}>
+          <TouchableOpacity
+            style={[styles.toggleOption, anyoneInjured === 'Yes' && styles.toggleOptionActive]}
+            onPress={() => setAnyoneInjured('Yes')}
+          >
+            <Text style={[styles.toggleOptionText, anyoneInjured === 'Yes' && styles.toggleOptionTextActive]}>Yes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleOption, anyoneInjured === 'No' && styles.toggleOptionActive]}
+            onPress={() => setAnyoneInjured('No')}
+          >
+            <Text style={[styles.toggleOptionText, anyoneInjured === 'No' && styles.toggleOptionTextActive]}>No</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Injured Person Name */}
+        {anyoneInjured === 'Yes' && (
+          <View>
+            <Text style={styles.inputLabel}>Injured Person Name</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter full name of the injured person..."
+                placeholderTextColor="#94A3B8"
+                value={injuredPersonName}
+                onChangeText={setInjuredPersonName}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Photos Upload Section */}
+        <Text style={styles.inputLabel}>Photos / Evidence</Text>
+        <View style={styles.photoContainer}>
+          <TouchableOpacity style={styles.photoAddBtn} onPress={handleAddPhoto}>
+            <Text style={styles.photoAddText}>📸 Add Evidence Photo</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.photoWrapper}>
+            {photos.map((item, idx) => (
+              <View key={idx} style={styles.photoTag}>
+                <Text style={styles.photoLabel}>🖼️ {item}</Text>
+                <TouchableOpacity onPress={() => handleRemovePhoto(idx)}>
+                  <Text style={styles.photoRemoveBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View style={{ height: 40 }} />
@@ -429,5 +529,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2563EB',
     fontWeight: '800',
+  },
+  toggleGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  toggleOption: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleOptionActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  toggleOptionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  toggleOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  inputContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  textInput: {
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  photoContainer: {
+    marginBottom: 20,
+  },
+  photoAddBtn: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  photoAddText: {
+    color: '#2563EB',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  photoWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  photoTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  photoLabel: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  photoRemoveBtn: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '800',
+    paddingHorizontal: 4,
   },
 });

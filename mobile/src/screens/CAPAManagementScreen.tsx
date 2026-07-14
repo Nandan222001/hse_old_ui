@@ -203,10 +203,36 @@ export function CAPAManagementScreen({ route, navigation }: any) {
                 </View>
               </View>
               <Text style={styles.detailType}>Type: {incident.incident_type?.toUpperCase()}</Text>
-              <Text style={styles.detailDesc}>{incident.description || 'No description provided.'}</Text>
-              {incident.immediate_cause && (
-                <Text style={styles.detailCause}>Worker Action: {incident.immediate_cause}</Text>
+              <Text style={styles.detailDesc}>Description: {incident.description || 'No description provided.'}</Text>
+              
+              {incident.immediate_cause ? (
+                <Text style={styles.detailReason}>Reason / Cause: {incident.immediate_cause}</Text>
+              ) : null}
+
+              {incident.anyone_injured === 'Yes' && (
+                <Text style={styles.detailInjured}>⚠️ Injured Person: {incident.injured_person_name}</Text>
               )}
+
+              {(() => {
+                try {
+                  const photos = typeof incident.evidence_json === 'string'
+                    ? JSON.parse(incident.evidence_json)
+                    : incident.evidence_json;
+                  if (Array.isArray(photos) && photos.length > 0) {
+                    return (
+                      <View style={styles.photosWrapper}>
+                        <Text style={styles.photosTitle}>Evidence Photos:</Text>
+                        <View style={styles.photosRow}>
+                          {photos.map((p: string, idx: number) => (
+                            <Text key={idx} style={styles.photoTag}>📸 {p}</Text>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  }
+                } catch (e) {}
+                return null;
+              })()}
             </View>
           )}
 
@@ -324,5 +350,11 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginTop: 12, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 10, padding: 10, fontSize: 13, color: '#2D3748', backgroundColor: '#F8FAFC', marginBottom: 8 },
   submitBtn: { backgroundColor: '#10B981', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, marginTop: 20 },
-  submitBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' }
+  submitBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  detailReason: { fontSize: 13, color: '#334155', marginTop: 6, fontWeight: '600' },
+  detailInjured: { fontSize: 13, color: '#EF4444', marginTop: 6, fontWeight: '700' },
+  photosWrapper: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 8 },
+  photosTitle: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6 },
+  photosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  photoTag: { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, color: '#334155', fontWeight: '600' }
 });
