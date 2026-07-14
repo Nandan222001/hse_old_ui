@@ -86,9 +86,10 @@ export interface LeadingIndicators {
   ltisr?: number;
   dart_rate?: number;
   far?: number;
-  near_miss_ratio?: number;
+  near_miss_ratio?: number | string;
   contractor_risk_label: string;
   contractor_risk_score: number;
+  contractor_risk_score_10?: number;
   audit_readiness_score: number;
   audit_readiness_label: string;
 }
