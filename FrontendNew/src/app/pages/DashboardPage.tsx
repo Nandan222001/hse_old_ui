@@ -193,7 +193,15 @@ export function DashboardPage() {
         },
         {
           title: "Contractor Risk Score",
-          value: `${leading.contractor_risk_label} / ${(leading.contractor_risk_score_10 ?? (leading.contractor_risk_score / 10)).toFixed(1)}/10`,
+          value: (() => {
+            const score10 = (leading as any).contractor_risk_score_10;
+            const scoreVal = score10 !== undefined && score10 !== null
+              ? score10
+              : leading.contractor_risk_score > 10
+                ? leading.contractor_risk_score / 10
+                : leading.contractor_risk_score;
+            return `${leading.contractor_risk_label} / ${Number(scoreVal).toFixed(1)}/10`;
+          })(),
           sub: "Limiting Indicator",
           accent: "#FFFFFF",
           border: "#E5E7EB",
