@@ -144,82 +144,86 @@ export function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role, preset, customStart, customEnd]);
 
-  const demoKpis = leading
-    ? [
-        {
-          title: "Predictive Injury Risk Score",
-          value: `${leading.predictive_injury_risk_score}%`,
-          sub: "Leading Indicator",
-          accent: "#E9EDFF",
-          border: "#6173C5",
-          inline: `${Math.abs(leading.predictive_injury_risk_trend)}%`,
-          trendDown: leading.predictive_injury_risk_trend < 0,
-        },
-        {
-          title: "TRIR / LTIFR",
-          value: `${leading.trir} / ${leading.ltif}`,
-          sub: "Leading Indicator",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "LTISR",
-          value: `${leading.ltisr ?? 0}`,
-          sub: "Incident Severity Rate",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "DART Rate",
-          value: `${leading.dart_rate ?? 0}`,
-          sub: "Days Away / Restricted",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "FAR",
-          value: `${leading.far ?? 0}`,
-          sub: "Fatal Accident Rate",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "Contractor Risk Score",
-          value: `${leading.contractor_risk_label} / ${Number((leading as any).contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
-          sub: ((leading as any).contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
-          accent: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
-          border: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "Near Miss Ratio",
-          value: `${leading.near_miss_ratio ?? "0 : 1"}`,
-          sub: "Leading Indicator",
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-        {
-          title: "Audit Readiness Score",
-          value: `${leading.audit_readiness_score}% / ${leading.audit_readiness_label}`,
-          sub: leading.audit_readiness_label,
-          accent: "#FFFFFF",
-          border: "#E5E7EB",
-          inline: "",
-          trendDown: false,
-        },
-      ]
-    : [];
+  const leadingKpis = leading ? [
+    {
+      title: "Predictive Injury Risk Score",
+      value: `${leading.predictive_injury_risk_score}%`,
+      sub: "Leading Indicator",
+      accent: "#E9EDFF",
+      border: "#6173C5",
+      inline: `${Math.abs(leading.predictive_injury_risk_trend)}%`,
+      trendDown: leading.predictive_injury_risk_trend < 0,
+    },
+    {
+      title: "TRIR / LTIFR",
+      value: `${leading.trir} / ${leading.ltif}`,
+      sub: "Leading Indicator",
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+    {
+      title: "Near Miss Ratio",
+      value: `${leading.near_miss_ratio ?? "0 : 1"}`,
+      sub: "Leading Indicator",
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+    {
+      title: "Audit Readiness Score",
+      value: `${leading.audit_readiness_score}% / ${leading.audit_readiness_label}`,
+      sub: leading.audit_readiness_label,
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+  ] : [];
+
+  const limitingKpis = leading ? [
+    {
+      title: "DART Rate",
+      value: `${leading.dart_rate ?? 0}`,
+      sub: "Limiting Indicator",
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+    {
+      title: "LTISR",
+      value: `${leading.ltisr ?? 0}`,
+      sub: "Limiting Indicator",
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+    {
+      title: "FAR",
+      value: `${leading.far ?? 0}`,
+      sub: "Limiting Indicator",
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+    {
+      title: "Contractor Risk Score",
+      value: `${leading.contractor_risk_label} / ${Number((leading as any).contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
+      sub: ((leading as any).contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
+      accent: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
+      border: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
+      inline: "",
+      trendDown: false,
+    },
+  ] : [];
+
+  // Keep demoKpis for backward compat (unused after layout change)
+  const demoKpis = [...leadingKpis, ...limitingKpis];
 
   const content = (
       <>
@@ -231,29 +235,74 @@ export function DashboardPage() {
             Forces attention toward leading predictive metrics first,<br />
             balancing compliance with immediate action triggers.
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-            {demoKpis.map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border px-4 py-3"
-                style={{
-                  background: item.accent,
-                  borderColor: item.border,
-                  boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
-                }}
-              >
-                <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
-                  {item.inline && (
-                    <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                      {item.trendDown ? '↘' : '↗'} {item.inline}
-                    </span>
-                  )}
+
+          {/* Leading Indicators Row */}
+          <div className="mb-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#E9EDFF', color: '#4A5568' }}>
+                ↑ Leading Indicators
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+              {leadingKpis.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border px-4 py-3"
+                  style={{
+                    background: item.accent,
+                    borderColor: item.border,
+                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
+                    {item.inline && (
+                      <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
+                        {item.trendDown ? '↘' : '↗'} {item.inline}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
                 </div>
-                <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="my-3 border-t" style={{ borderColor: '#DBEAFE' }} />
+
+          {/* Limiting Indicators Row */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                ↓ Limiting Indicators
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+              {limitingKpis.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-2xl border px-4 py-3"
+                  style={{
+                    background: item.accent,
+                    borderColor: item.border,
+                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
+                    {item.inline && (
+                      <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
+                        {item.trendDown ? '↘' : '↗'} {item.inline}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
