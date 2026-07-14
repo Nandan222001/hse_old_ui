@@ -6,9 +6,9 @@ export const API_BASE_URL =
 export const API_TIMEOUT = 15000;
 
 export const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'sup_access_token',
-  REFRESH_TOKEN: 'sup_refresh_token',
-  USER: 'sup_user',
+  ACCESS_TOKEN: 'worker_access_token',
+  REFRESH_TOKEN: 'worker_refresh_token',
+  USER: 'worker_user',
 } as const;
 
 export const APP_CONFIG = {

@@ -59,9 +59,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     }
 
     access_token = create_access_token(token_payload)
+    from datetime import timedelta
+    refresh_token = create_access_token(token_payload, expires_delta=timedelta(days=7))
 
     return TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=TokenData(
             user_id=user.id,

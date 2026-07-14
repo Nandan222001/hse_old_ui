@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
-import { apiClient } from '../../api/client';
+import apiClient from '../api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
