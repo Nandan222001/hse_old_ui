@@ -1232,7 +1232,7 @@ def org_setup_template_download(module: str):
 def get_supervisor_alerts(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
-) -> dict:
+) -> list:
     from datetime import datetime
     # Query incidents from DB for this organisation
     rows = db.execute(
