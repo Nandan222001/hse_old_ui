@@ -345,15 +345,23 @@ def report_incident(
 ) -> dict:
     data = payload.get("data", payload)
     
+    # Find employee linked to this user
+    user_row = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id}
+    ).mappings().first()
+
+    emp_id = user_row["employee_id"] if user_row else None
+    
     # Save to incidents table
     db.execute(
         text("""
             INSERT INTO incidents (
                 organisation_id, report_date, incident_date_time, incident_type,
-                severity, description, immediate_cause, investigation_status
+                severity, description, immediate_cause, investigation_status, reported_by, workflow_status
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :incident_type,
-                :severity, :description, :immediate_cause, :investigation_status
+                :severity, :description, :immediate_cause, :investigation_status, :reported_by, :workflow_status
             )
         """),
         {
@@ -364,13 +372,42 @@ def report_incident(
             "severity": data.get("severity", "medium"),
             "description": data.get("description", ""),
             "immediate_cause": data.get("immediate_actions", "Area secured"),
-            "investigation_status": "open"
+            "investigation_status": "open",
+            "reported_by": emp_id,
+            "workflow_status": "reported"
         }
     )
     db.commit()
     new_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
     
     return {"success": True, "data": {"id": str(new_id), "status": "submitted"}}
+
+
+@router.get("/incidents")
+def list_driver_incidents(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    # Query all incidents for this organisation, ordered by ID desc
+    rows = db.execute(
+        text("SELECT * FROM incidents WHERE organisation_id = :org_id ORDER BY id DESC"),
+        {"org_id": current_user.org_id}
+    ).mappings().all()
+    
+    items = []
+    for r in rows:
+        items.append({
+            "id": str(r["id"]),
+            "incident_type": r["incident_type"] or "injury",
+            "severity": r["severity"] or "medium",
+            "description": r["description"] or "",
+            "location": "Zone B - Sector 4",  # Default placeholder
+            "status": r["workflow_status"] or "reported",
+            "created_at": r["created_at"].isoformat() if r["created_at"] else datetime.now().isoformat(),
+            "incident_ref": f"INC-{r['id']}"
+        })
+        
+    return {"success": True, "data": {"items": items, "total": len(items)}}
 
 
 # ─── Checklists Endpoints ─────────────────────────────────────────────────────
