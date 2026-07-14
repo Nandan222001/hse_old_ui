@@ -52,6 +52,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
   // State: Template list view
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [userRole, setUserRole] = useState<string>('');
 
   // State: Checklist fill view
   const [activeTemplate, setActiveTemplate] = useState<ChecklistTemplate | null>(null);
@@ -63,21 +64,57 @@ export default function SafetyChecklistScreen({ navigation }: any) {
   // ─── Fetch Templates ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchTemplates();
+    const initialize = async () => {
+      let role = '';
+      try {
+        const workerStorage = require('../utils/storage').TokenStorage;
+        const u = await workerStorage.getUser();
+        if (u && u.role) role = u.role;
+      } catch (e) {}
+
+      if (!role) {
+        try {
+          const supStorage = require('../../utils/storage').TokenStorage;
+          const u = await supStorage.getUser();
+          if (u && u.role) role = u.role;
+        } catch (e) {}
+      }
+
+      setUserRole(role);
+      await fetchTemplates(role);
+    };
+
+    initialize();
   }, []);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (role: string) => {
     try {
       setLoadingTemplates(true);
       const res = await apiClient.get('checklists/templates');
       const all: ChecklistTemplate[] = res.data;
-      // Filter to worker-relevant templates
-      const workerTypes = [
-        'worker_pre_shift',
-        'worker_vehicle_pre_start',
-        'worker_post_shift',
-      ];
-      const filtered = all.filter((t) => workerTypes.includes(t.checklist_type));
+      
+      let filtered = all;
+      const roleLower = (role || '').toLowerCase();
+      
+      if (roleLower === 'auditor') {
+        filtered = all.filter((t) => t.checklist_type === 'auditor_periodic_audit');
+      } else if (roleLower === 'operator' || roleLower === 'worker') {
+        const workerTypes = [
+          'worker_pre_shift',
+          'worker_vehicle_pre_start',
+          'worker_post_shift',
+        ];
+        filtered = all.filter((t) => workerTypes.includes(t.checklist_type));
+      } else {
+        const excludeWorkerAuditor = [
+          'worker_pre_shift',
+          'worker_vehicle_pre_start',
+          'worker_post_shift',
+          'auditor_periodic_audit',
+        ];
+        filtered = all.filter((t) => !excludeWorkerAuditor.includes(t.checklist_type));
+      }
+
       setTemplates(filtered.length > 0 ? filtered : all);
     } catch (err: any) {
       Alert.alert('Error', 'Failed to load checklist templates. Please try again.');
