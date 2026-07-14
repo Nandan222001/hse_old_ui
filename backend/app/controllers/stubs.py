@@ -1236,7 +1236,14 @@ def get_supervisor_alerts(
     from datetime import datetime
     # Query incidents from DB for this organisation
     rows = db.execute(
-        text("SELECT * FROM incidents WHERE organisation_id = :org_id ORDER BY id DESC LIMIT 10"),
+        text("""
+            SELECT i.*, ws.station_name as location_name 
+            FROM incidents i 
+            LEFT JOIN working_stations ws ON i.location_station_id = ws.id 
+            WHERE i.organisation_id = :org_id 
+            ORDER BY i.id DESC 
+            LIMIT 10
+        """),
         {"org_id": current_user.org_id}
     ).mappings().all()
     
@@ -1262,7 +1269,7 @@ def get_supervisor_alerts(
             "id": str(r["id"]),
             "type": alert_type,
             "message": f"{r['incident_type'].upper()}: {r['description']}",
-            "zone": "Zone B - Sector 4",
+            "zone": r["location_name"] or "Zone B - Sector 4",
             "time_ago": time_ago,
             "worker_name": "Worker One"
         })

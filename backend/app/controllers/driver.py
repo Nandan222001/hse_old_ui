@@ -354,15 +354,23 @@ def report_incident(
     emp_id = user_row["employee_id"] if user_row else None
     
     import json
+    # Resolve working station id by name
+    loc_name = data.get("location", "Heavy Assembly Station 1")
+    loc_row = db.execute(
+        text("SELECT id FROM working_stations WHERE station_name = :name AND organisation_id = :org_id"),
+        {"name": loc_name, "org_id": current_user.org_id}
+    ).mappings().first()
+    loc_id = loc_row["id"] if loc_row else 1
+
     # Save to incidents table
     db.execute(
         text("""
             INSERT INTO incidents (
-                organisation_id, report_date, incident_date_time, incident_type,
+                organisation_id, report_date, incident_date_time, location_station_id, incident_type,
                 severity, description, immediate_cause, anyone_injured, injured_person_name,
                 evidence_json, investigation_status, reported_by, workflow_status
             ) VALUES (
-                :org_id, :report_date, :incident_date_time, :incident_type,
+                :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
                 :severity, :description, :immediate_cause, :anyone_injured, :injured_person_name,
                 :evidence_json, :investigation_status, :reported_by, :workflow_status
             )
@@ -371,6 +379,7 @@ def report_incident(
             "org_id": current_user.org_id,
             "report_date": date.today(),
             "incident_date_time": datetime.now(),
+            "loc_id": loc_id,
             "incident_type": data.get("incident_type", "injury"),
             "severity": data.get("severity", "medium"),
             "description": data.get("description", ""),
@@ -396,7 +405,13 @@ def list_driver_incidents(
 ) -> dict:
     # Query all incidents for this organisation, ordered by ID desc
     rows = db.execute(
-        text("SELECT * FROM incidents WHERE organisation_id = :org_id ORDER BY id DESC"),
+        text("""
+            SELECT i.*, ws.station_name as location_name 
+            FROM incidents i 
+            LEFT JOIN working_stations ws ON i.location_station_id = ws.id 
+            WHERE i.organisation_id = :org_id 
+            ORDER BY i.id DESC
+        """),
         {"org_id": current_user.org_id}
     ).mappings().all()
     
@@ -407,7 +422,7 @@ def list_driver_incidents(
             "incident_type": r["incident_type"] or "injury",
             "severity": r["severity"] or "medium",
             "description": r["description"] or "",
-            "location": "Zone B - Sector 4",  # Default placeholder
+            "location": r["location_name"] or "Zone B - Sector 4",
             "status": r["workflow_status"] or "reported",
             "created_at": r["created_at"].isoformat() if r["created_at"] else datetime.now().isoformat(),
             "incident_ref": f"INC-{r['id']}"

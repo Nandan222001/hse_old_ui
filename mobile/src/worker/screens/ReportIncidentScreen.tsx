@@ -11,6 +11,8 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
   const [incidentType, setIncidentType] = useState('Injury');
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [location, setLocation] = useState('Heavy Assembly Station 1');
+  const [locationPickerVisible, setLocationPickerVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<number>(3);
   const [reason, setReason] = useState('');
@@ -67,7 +69,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
       mockPhotos: photos,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0].substring(0, 5),
-      location: 'Zone B - Sector 4',
+      location: location,
       immediate_actions: 'Area secured',
     } as any);
 
@@ -113,6 +115,13 @@ export default function ReportIncidentScreen({ navigation }: any) {
         <Text style={styles.inputLabel}>Incident Type</Text>
         <TouchableOpacity style={styles.dropdown} onPress={() => setPickerVisible(true)}>
           <Text style={styles.dropdownValue}>{incidentType}</Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
+
+        {/* Location Dropdown */}
+        <Text style={styles.inputLabel}>Location / Station</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setLocationPickerVisible(true)}>
+          <Text style={styles.dropdownValue}>{location}</Text>
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
 
@@ -268,6 +277,47 @@ export default function ReportIncidentScreen({ navigation }: any) {
                   {type}
                 </Text>
                 {incidentType === type && (
+                  <Text style={styles.checkmarkIcon}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Location Picker Modal */}
+      <Modal
+        visible={locationPickerVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setLocationPickerVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setLocationPickerVisible(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Location</Text>
+              <TouchableOpacity onPress={() => setLocationPickerVisible(false)}>
+                <Text style={styles.pickerCloseBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {['Heavy Assembly Station 1', 'Welding Station 1', 'Testing Station 1', 'Quality Inspection Station 1', 'Maintenance Station 1'].map((loc) => (
+              <TouchableOpacity
+                key={loc}
+                style={[styles.pickerItem, location === loc && styles.pickerItemActive]}
+                onPress={() => {
+                  setLocation(loc);
+                  setLocationPickerVisible(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, location === loc && styles.pickerItemTextActive]}>
+                  {loc}
+                </Text>
+                {location === loc && (
                   <Text style={styles.checkmarkIcon}>✓</Text>
                 )}
               </TouchableOpacity>
