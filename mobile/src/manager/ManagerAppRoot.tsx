@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { StyleSheet, View, Text, Animated } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuth } from "../hooks/useAuth";
+import { incidentWorkflowService } from "../services/incidentWorkflowService";
 
 // Mock Data
 import {
@@ -78,6 +79,30 @@ export function ManagerAppRoot() {
       logout();
     }
   }, [currentScreen, logout]);
+
+  // Load real incidents for manager queue
+  useEffect(() => {
+    const fetchRealIncidents = async () => {
+      try {
+        const list = await incidentWorkflowService.getManagerQueue();
+        if (Array.isArray(list)) {
+          const mapped = list.map((item: any) => ({
+            id: String(item.id),
+            title: `${item.incident_type.toUpperCase()} - ${item.severity.toUpperCase()}`,
+            desc: item.description || "No description provided",
+            severity: item.severity === 'critical' ? 'Critical' : item.severity === 'high' ? 'High' : 'Medium',
+            status: item.workflow_status.toUpperCase(),
+            raw: item
+          }));
+          setIncidents(mapped);
+        }
+      } catch (e) {
+        console.log("Failed to load manager queue:", e);
+      }
+    };
+    
+    fetchRealIncidents();
+  }, [currentScreen]);
 
   const showToast = (msg: string) => {
     setToast(msg);

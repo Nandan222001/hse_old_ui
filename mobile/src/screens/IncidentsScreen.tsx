@@ -190,7 +190,7 @@ export function IncidentsScreen({ navigation }: Props) {
                   <Text style={styles.feedReporter}>Reported by: {item.worker_name}</Text>
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => navigation.navigate('CAPAManagement')}
+                    onPress={() => navigation.navigate('CAPAManagement', { incidentId: item.id })}
                   >
                     <Text style={styles.actionBtnText}>Resolve</Text>
                     <Ionicons name="chevron-forward" size={14} color="#004AC6" />

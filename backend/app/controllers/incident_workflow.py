@@ -31,8 +31,8 @@ router = APIRouter(prefix="/incident-workflow", tags=["Incident Workflow"])
 
 # ── Role constants ────────────────────────────────────────────────────────────
 WORKER_ROLES = {"Worker", "Employee", "Operator", "Technician"}
-SUPERVISOR_ROLES = {"Supervisor", "Site Inspector", "Safety Manager", "Site Engineer"}
-MANAGER_ROLES = {"Manager", "HSE Manager", "Admin", "Director"}
+SUPERVISOR_ROLES = {"Supervisor", "Site Inspector", "Safety Manager", "Safety_Manager", "Site Engineer"}
+MANAGER_ROLES = {"Manager", "HSE Manager", "Admin", "Superadmin", "Safety Manager", "Safety_Manager", "Director"}
 ALL_ELEVATED_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES
 
 

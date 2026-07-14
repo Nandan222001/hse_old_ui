@@ -1224,3 +1224,106 @@ def org_setup_template_download(module: str):
 # ── AI Chat ───────────────────────────────────────────────────────────────────
 
 # AI Chat is handled by app/controllers/ai.py
+
+
+# ── Supervisor Endpoints ──────────────────────────────────────────────────────
+
+@router.get("/supervisor/alerts")
+def get_supervisor_alerts(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    from datetime import datetime
+    # Query incidents from DB for this organisation
+    rows = db.execute(
+        text("SELECT * FROM incidents WHERE organisation_id = :org_id ORDER BY id DESC LIMIT 10"),
+        {"org_id": current_user.org_id}
+    ).mappings().all()
+    
+    alerts = []
+    for r in rows:
+        severity = r["severity"] or "medium"
+        alert_type = "critical" if severity in ["critical", "high"] else "warning"
+        
+        # Format time ago
+        time_ago = "Just now"
+        if r["created_at"]:
+            diff = datetime.now() - r["created_at"]
+            if diff.days > 0:
+                time_ago = f"{diff.days}d ago"
+            elif diff.seconds >= 3600:
+                time_ago = f"{diff.seconds // 3600}h ago"
+            elif diff.seconds >= 60:
+                time_ago = f"{diff.seconds // 60}m ago"
+            else:
+                time_ago = "1m ago"
+                
+        alerts.append({
+            "id": str(r["id"]),
+            "type": alert_type,
+            "message": f"{r['incident_type'].upper()}: {r['description']}",
+            "zone": "Zone B - Sector 4",
+            "time_ago": time_ago,
+            "worker_name": "Worker One"
+        })
+        
+    return {"success": True, "data": alerts}
+
+
+@router.get("/supervisor/dashboard")
+def get_supervisor_dashboard(
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    return {
+        "success": True,
+        "data": {
+            "attendance_pct": 94,
+            "safety_compliance_pct": 98,
+            "active_permits": 5,
+            "pending_permits": 2
+        }
+    }
+
+
+@router.get("/supervisor/team/shift-status")
+def get_supervisor_shift_status(
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    return {
+        "success": True,
+        "data": {
+            "total": 15,
+            "logged_in": 12,
+            "pending": 3,
+            "is_live": True
+        }
+    }
+
+
+@router.get("/supervisor/permits")
+def get_supervisor_permits(
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    return {
+        "success": True,
+        "data": {
+            "items": [
+                {
+                    "id": "1",
+                    "permit_ref": "PTW-2026-081",
+                    "permit_type": "Hot Work",
+                    "title": "Welding in Tank Farm 3",
+                    "location": "Sector 4 - Tank Farm",
+                    "requestor": "John Doe",
+                    "status": "pending",
+                    "risk_level": "high",
+                    "validity_start": "2026-07-14T08:00:00",
+                    "validity_end": "2026-07-14T17:00:00"
+                }
+            ],
+            "total": 1,
+            "pending_count": 1,
+            "approved_today": 0,
+            "risk_flags": 1
+        }
+    }

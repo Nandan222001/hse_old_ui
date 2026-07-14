@@ -32,8 +32,12 @@ class CurrentUser:
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> CurrentUser:
     """FastAPI dependency — validates JWT and returns the current user with org_id."""
+    import logging
+    logger = logging.getLogger("app.core.middleware")
     auth_header = request.headers.get("Authorization", "")
+    logger.info(f"DEBUG AUTH: Authorization Header is: '{auth_header}'")
     if not auth_header.startswith("Bearer "):
+        logger.info("DEBUG AUTH: Missing or invalid Authorization header prefix")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
@@ -41,7 +45,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
 
     token = auth_header.removeprefix("Bearer ").strip()
     payload = decode_access_token(token)
+    logger.info(f"DEBUG AUTH: Decoded payload: {payload}")
     if payload is None:
+        logger.info(f"DEBUG AUTH: Token decoding failed for token: {token[:30]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

@@ -36,4 +36,13 @@ export const ENDPOINTS = {
     STATS:  '/supervisor/dashboard',
     ALERTS: '/supervisor/alerts',
   },
+  INCIDENT_WORKFLOW: {
+    ACKNOWLEDGE: (id: string) => `/incident-workflow/${id}/acknowledge`,
+    INVESTIGATE: (id: string) => `/incident-workflow/${id}/investigate`,
+    ESCALATE: (id: string) => `/incident-workflow/${id}/escalate`,
+    MANAGER_QUEUE: '/incident-workflow/manager-queue',
+    APPROVE: (id: string) => `/incident-workflow/${id}/approve-investigation`,
+    CLOSE: (id: string) => `/incident-workflow/${id}/close`,
+    DETAIL: (id: string) => `/incident-workflow/${id}`,
+  },
 } as const;
