@@ -41,12 +41,13 @@ def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str =
 
     # Azure AI Foundry uses a different endpoint + auth header
     if base_url:
-        # Use httpx directly to avoid the 'proxies' kwarg issue with some anthropic versions
         import httpx
+        # Azure AI Foundry Claude requires these exact headers
         headers = {
             "api-key": api_key,
-            "anthropic-version": "2023-06-01",
             "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "messages-2023-12-15",
         }
         # Separate system from conversation
         system_content = _SYSTEM_PROMPT
@@ -67,8 +68,19 @@ def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str =
             "system": system_content,
             "messages": conversation,
         }
+        # Azure AI Foundry endpoint format
         endpoint = base_url.rstrip("/") + "/v1/messages"
+        logger.info("Calling Azure AI Foundry: %s", endpoint)
+
         response = httpx.post(endpoint, json=payload, headers=headers, timeout=30.0)
+        if response.status_code == 401:
+            # Try with Bearer token format as fallback
+            headers_bearer = {
+                "Authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+            }
+            response = httpx.post(endpoint, json=payload, headers=headers_bearer, timeout=30.0)
         response.raise_for_status()
         data = response.json()
         return data["content"][0]["text"] if data.get("content") else "No response."
