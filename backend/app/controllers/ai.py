@@ -33,52 +33,64 @@ Guidelines:
 
 
 def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str = "") -> str:
-    """Call Anthropic Claude API and return the assistant reply text.
-
-    Supports both:
-    - Standard Anthropic (api_key = sk-ant-...)
-    - Azure AI Foundry (api_key = Azure key, base_url = Azure endpoint)
-    """
+    """Call Anthropic Claude API — supports both standard Anthropic and Azure AI Foundry."""
     try:
         import anthropic
     except ImportError:
-        raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
+        raise RuntimeError("anthropic package not installed. Run: pip install 'anthropic>=0.40.0'")
 
-    # Azure AI Foundry uses a custom base_url and passes the key as api-key header
+    # Azure AI Foundry uses a different endpoint + auth header
     if base_url:
-        client = anthropic.Anthropic(
-            api_key=api_key,
-            base_url=base_url,
-            default_headers={"api-key": api_key},
-        )
+        # Use httpx directly to avoid the 'proxies' kwarg issue with some anthropic versions
+        import httpx
+        headers = {
+            "api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        # Separate system from conversation
+        system_content = _SYSTEM_PROMPT
+        conversation: list[dict] = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_content += f"\n\n{content}"
+            elif role in ("user", "assistant"):
+                conversation.append({"role": role, "content": content})
+        if not conversation or conversation[0]["role"] != "user":
+            conversation.insert(0, {"role": "user", "content": "Hello"})
+
+        payload = {
+            "model": model,
+            "max_tokens": 1024,
+            "system": system_content,
+            "messages": conversation,
+        }
+        endpoint = base_url.rstrip("/") + "/v1/messages"
+        response = httpx.post(endpoint, json=payload, headers=headers, timeout=30.0)
+        response.raise_for_status()
+        data = response.json()
+        return data["content"][0]["text"] if data.get("content") else "No response."
     else:
+        # Standard Anthropic
         client = anthropic.Anthropic(api_key=api_key)
-
-    # Separate system messages from conversation messages
-    system_content = _SYSTEM_PROMPT
-    conversation: list[dict] = []
-
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-
-        if role == "system":
-            system_content += f"\n\n{content}"
-        elif role in ("user", "assistant"):
-            conversation.append({"role": role, "content": content})
-
-    # Ensure conversation starts with a user message (Claude requirement)
-    if not conversation or conversation[0]["role"] != "user":
-        conversation.insert(0, {"role": "user", "content": "Hello"})
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=system_content,
-        messages=conversation,
-    )
-
-    return response.content[0].text if response.content else "No response generated."
+        system_content = _SYSTEM_PROMPT
+        conversation = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_content += f"\n\n{content}"
+            elif role in ("user", "assistant"):
+                conversation.append({"role": role, "content": content})
+        if not conversation or conversation[0]["role"] != "user":
+            conversation.insert(0, {"role": "user", "content": "Hello"})
+        response = client.messages.create(
+            model=model, max_tokens=1024,
+            system=system_content, messages=conversation,
+        )
+        return response.content[0].text if response.content else "No response."
 
 
 def _call_azure_openai(messages: list[dict], settings) -> str:
