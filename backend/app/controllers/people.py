@@ -120,16 +120,18 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     exposure_tone = "red" if exposure_index > 30 else ("amber" if exposure_index >= 10 else "green")
     exposure_subtitle = "High Risk" if exposure_index > 30 else ("Medium Risk" if exposure_index >= 10 else "Low Risk")
 
-    supervisor_role_ids = [r.id for r in _of(db.query(Role).filter(Role.safety_signatory == "Yes"), Role, org_id).all()]
+    # Join through employee's actual role to check safety_signatory directly,
+    # avoiding org mismatch when employees reference roles from another org.
     avg_supervisor_compliance = (
         db.query(func.avg(SafetyWalk.compliance_rating))
         .join(Employee, SafetyWalk.inspector_id == Employee.id)
+        .join(Role, Employee.role_id == Role.id)
         .filter(
-            Employee.role_id.in_(supervisor_role_ids),
+            Role.safety_signatory == "Yes",
             *([SafetyWalk.organisation_id == org_id] if org_id is not None else []),
         )
         .scalar()
-    ) if supervisor_role_ids else None
+    )
     supervisor_score = round(float(avg_supervisor_compliance) / 5 * 100) if avg_supervisor_compliance else 0
     supervisor_subtitle = "Highly Effective" if supervisor_score >= 90 else ("Effective" if supervisor_score >= 70 else "Needs Coaching")
 
