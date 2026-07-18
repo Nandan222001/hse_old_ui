@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from '../display/Icon';
 import { View, Text, TouchableOpacity, Image, StyleSheet, ViewStyle } from 'react-native';
 import { Colors } from '../../theme/colors';
 
@@ -32,7 +33,7 @@ export function PhotoUploadBox({
         {/* Add button */}
         {canAdd && (
           <TouchableOpacity style={styles.addBox} onPress={onTakePhoto} activeOpacity={0.8}>
-            <Text style={styles.addIcon}>📷+</Text>
+            <Icon name="camera" style={styles.addIcon} color={Colors.blue} />
             <Text style={styles.addTitle}>{title}</Text>
             {onPickGallery && (
               <TouchableOpacity onPress={onPickGallery}>
@@ -48,7 +49,7 @@ export function PhotoUploadBox({
             <Image source={{ uri }} style={styles.thumb} />
             {onRemove && (
               <TouchableOpacity style={styles.removeBtn} onPress={() => onRemove(i)}>
-                <Text style={styles.removeIcon}>✕</Text>
+                <Icon emoji="✕" style={styles.removeIcon} />
               </TouchableOpacity>
             )}
           </View>
@@ -79,7 +80,7 @@ interface AttachBoxProps {
 export function AttachBox({ icon = '☁️', title = 'Attach file', subtitle = 'PDF, JPG, or PNG (Max 5MB)', onPress, style }: AttachBoxProps) {
   return (
     <TouchableOpacity style={[styles.attachBox, style]} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.attachIcon}>{icon}</Text>
+      <Icon emoji={icon} style={styles.attachIcon} color={Colors.blue} />
       <Text style={styles.attachTitle}>{title}</Text>
       <Text style={styles.attachSub}>{subtitle}</Text>
     </TouchableOpacity>

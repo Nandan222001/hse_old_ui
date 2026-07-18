@@ -33,7 +33,9 @@ export function NearMissPage() {
   const [filters, setFilters] = useState<NearMissFilters>({});
 
   const fetchData = async () => {
-    setLoading(true);
+    if (records.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await getNearMiss(filters);
@@ -129,7 +131,7 @@ export function NearMissPage() {
         <CardContent className="p-0">
           {error ? (
             <div className="p-6 text-center text-sm text-red-500">{error}</div>
-          ) : loading ? (
+          ) : (loading && records.length === 0) ? (
             <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
           ) : records.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">No records found.</div>

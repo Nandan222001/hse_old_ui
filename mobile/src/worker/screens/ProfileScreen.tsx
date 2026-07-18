@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, Image, TextInput,
@@ -66,11 +67,11 @@ export default function ProfileScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn}>
-          <Text style={styles.headerIcon}>☰</Text>
+          <Icon emoji="☰" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{name}'s Profile</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -83,7 +84,7 @@ export default function ProfileScreen({ navigation }: any) {
               style={styles.avatar as any}
             />
             <TouchableOpacity style={styles.editBtn}>
-              <Text style={styles.editIcon}>🖊️</Text>
+              <Icon emoji="🖊️" style={styles.editIcon} />
             </TouchableOpacity>
           </View>
           <View style={styles.verifiedBadge}>
@@ -93,10 +94,19 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.roleSub}>{role} • {department}</Text>
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailText}>📍 {site}</Text>
-            <Text style={styles.detailText}>🆔 Emp ID: #{empId}</Text>
+            <View style={styles.detailItem}>
+              <Icon name="map-pin" size={12} color="#475569" style={styles.detailItemIcon} />
+              <Text style={styles.detailText}>{site}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Icon name="hash" size={12} color="#475569" style={styles.detailItemIcon} />
+              <Text style={styles.detailText}>Emp ID: #{empId}</Text>
+            </View>
           </View>
-          <Text style={styles.joinedText}>📅 Joined Sept 2021</Text>
+          <View style={[styles.detailItem, { marginTop: 8 }]}>
+            <Icon name="calendar" size={11} color="#64748B" style={styles.detailItemIcon} />
+            <Text style={styles.joinedText}>Joined Sept 2021</Text>
+          </View>
 
           <View style={styles.btnRow}>
             <TouchableOpacity style={styles.btnPrimary}>
@@ -161,7 +171,7 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.achieveRow}>
             <View style={styles.achieveItem}>
               <View style={[styles.achieveIconBox, { backgroundColor: '#E8F5E9' }]}>
-                <Text style={styles.achieveIcon}>🏆</Text>
+                <Icon emoji="🏆" style={styles.achieveIcon} />
               </View>
               <Text style={styles.achieveTitle}>Safety Lead</Text>
               <Text style={styles.achieveDesc}>500 Days Clean</Text>
@@ -169,7 +179,7 @@ export default function ProfileScreen({ navigation }: any) {
 
             <View style={styles.achieveItem}>
               <View style={[styles.achieveIconBox, { backgroundColor: '#F3E5F5' }]}>
-                <Text style={styles.achieveIcon}>⚡</Text>
+                <Icon emoji="⚡" style={styles.achieveIcon} />
               </View>
               <Text style={styles.achieveTitle}>First Responder</Text>
               <Text style={styles.achieveDesc}>L3 Certified</Text>
@@ -177,7 +187,7 @@ export default function ProfileScreen({ navigation }: any) {
 
             <View style={styles.achieveItem}>
               <View style={[styles.achieveIconBox, { backgroundColor: '#E3F2FD' }]}>
-                <Text style={styles.achieveIcon}>⚙️</Text>
+                <Icon emoji="⚙️" style={styles.achieveIcon} />
               </View>
               <Text style={styles.achieveTitle}>Risk Guru</Text>
               <Text style={styles.achieveDesc}>100 Inspections</Text>
@@ -188,7 +198,7 @@ export default function ProfileScreen({ navigation }: any) {
         {/* Emergency Contact */}
         <View style={styles.emergencyCard}>
           <View style={styles.emergencyHeader}>
-            <Text style={styles.emergencyIcon}>📞</Text>
+            <Icon emoji="📞" style={styles.emergencyIcon} />
             <Text style={styles.emergencyTitle}>Emergency Contact</Text>
           </View>
           <Text style={styles.emergencyName}>Sarah Safety (Spouse)</Text>
@@ -198,7 +208,10 @@ export default function ProfileScreen({ navigation }: any) {
             {sosLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.sosBtnText}>📞 SOS Call</Text>
+              <View style={styles.inlineBtnContent}>
+                <Icon name="phone" size={15} color="#FFFFFF" style={styles.inlineBtnIcon} />
+                <Text style={styles.sosBtnText}>SOS Call</Text>
+              </View>
             )}
           </TouchableOpacity>
         </View>
@@ -228,7 +241,7 @@ export default function ProfileScreen({ navigation }: any) {
             {/* Row 1 */}
             <View style={styles.tableRow}>
               <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🧯</Text></View>
+                <View style={styles.tableIconBox}><Icon emoji="🧯" style={styles.tableIcon} /></View>
                 <View>
                   <Text style={styles.courseName}>Advanced Fire Safety</Text>
                   <Text style={styles.courseCode}>HSE-7021</Text>
@@ -241,7 +254,7 @@ export default function ProfileScreen({ navigation }: any) {
             {/* Row 2 */}
             <View style={styles.tableRow}>
               <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🩹</Text></View>
+                <View style={styles.tableIconBox}><Icon emoji="🩹" style={styles.tableIcon} /></View>
                 <View>
                   <Text style={styles.courseName}>Emergency First Aid</Text>
                   <Text style={styles.courseCode}>HSE-1105</Text>
@@ -254,7 +267,7 @@ export default function ProfileScreen({ navigation }: any) {
             {/* Row 3 */}
             <View style={styles.tableRow}>
               <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🔧</Text></View>
+                <View style={styles.tableIconBox}><Icon emoji="🔧" style={styles.tableIcon} /></View>
                 <View>
                   <Text style={styles.courseName}>Work at Height</Text>
                   <Text style={styles.courseCode}>HSE-4482</Text>
@@ -268,7 +281,10 @@ export default function ProfileScreen({ navigation }: any) {
 
         {/* Settings / Logs */}
         <TouchableOpacity style={styles.changePasswordBtn} onPress={() => navigation.navigate('ChangePassword')}>
-          <Text style={styles.changePasswordText}>🔑 Change Access PIN</Text>
+          <View style={styles.inlineBtnContent}>
+            <Icon name="key" size={15} color="#475569" style={styles.inlineBtnIcon} />
+            <Text style={styles.changePasswordText}>Change Access PIN</Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -385,11 +401,25 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontWeight: '600',
   },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailItemIcon: {
+    marginRight: 4,
+  },
+  inlineBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineBtnIcon: {
+    marginRight: 6,
+  },
   joinedText: {
     fontSize: 11,
     color: '#64748B',
     fontWeight: '600',
-    marginTop: 8,
   },
   btnRow: {
     flexDirection: 'row',

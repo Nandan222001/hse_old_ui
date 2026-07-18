@@ -7,6 +7,7 @@ import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { Card } from '../components/cards/Card';
 import { ProgressBar } from '../components/display/ProgressBar';
+import { Icon } from '../components/display/Icon';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { Colors } from '../theme/colors';
 import { useTraining } from '../hooks/useTraining';
@@ -53,11 +54,20 @@ function CourseCard({ course, onPress }: { course: TrainingCourse; onPress: () =
         {/* Meta row */}
         <View style={styles.cardMeta}>
           {course.estimated_minutes > 0 && (
-            <Text style={styles.metaChip}>⏱ {course.estimated_minutes} min</Text>
+            <View style={styles.metaChip}>
+              <Icon name="clock" size={12} color={Colors.textMuted} style={styles.metaChipIcon} />
+              <Text style={styles.metaChipText}>{course.estimated_minutes} min</Text>
+            </View>
           )}
-          <Text style={styles.metaChip}>⭐ {course.xp_reward} XP</Text>
+          <View style={styles.metaChip}>
+            <Icon name="star" size={12} color={Colors.textMuted} style={styles.metaChipIcon} />
+            <Text style={styles.metaChipText}>{course.xp_reward} XP</Text>
+          </View>
           {course.video_url ? (
-            <Text style={styles.metaChip}>📹 Video</Text>
+            <View style={styles.metaChip}>
+              <Icon name="video" size={12} color={Colors.textMuted} style={styles.metaChipIcon} />
+              <Text style={styles.metaChipText}>Video</Text>
+            </View>
           ) : null}
           <View style={styles.cardArrow}>
             <Text style={styles.arrowIcon}>›</Text>
@@ -147,7 +157,9 @@ const styles = StyleSheet.create({
   cardDesc:      { fontSize: 13, color: Colors.textMuted, lineHeight: 18, marginBottom: 8 },
   cardProgress:  { marginBottom: 10 },
   cardMeta:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaChip:      { fontSize: 12, color: Colors.textMuted, fontWeight: '500' },
+  metaChip:      { flexDirection: 'row', alignItems: 'center' },
+  metaChipIcon:  { marginRight: 4 },
+  metaChipText:  { fontSize: 12, color: Colors.textMuted, fontWeight: '500' },
   cardArrow:     { marginLeft: 'auto' },
   arrowIcon:     { fontSize: 22, color: Colors.textLight },
 });

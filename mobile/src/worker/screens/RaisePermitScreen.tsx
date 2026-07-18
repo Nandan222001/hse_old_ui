@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Alert, ActivityIndicator,
@@ -117,12 +118,12 @@ export default function RaisePermitScreen({ navigation }: any) {
               onPress={() => setSelectedPermit(pt.id)}
               activeOpacity={0.8}
             >
-              <Text style={styles.permitIcon}>{pt.icon}</Text>
+              <Icon emoji={pt.icon} style={styles.permitIcon} color={Colors.primary} />
               <View style={styles.permitInfo}>
                 <Text style={styles.permitTitle}>{pt.title}</Text>
                 <Text style={styles.permitDesc}>{pt.desc}</Text>
               </View>
-              {selectedPermit === pt.id && <Text style={styles.checkMark}>✅</Text>}
+              {selectedPermit === pt.id && <Icon emoji="✅" style={styles.checkMark} />}
             </TouchableOpacity>
           ))}
 

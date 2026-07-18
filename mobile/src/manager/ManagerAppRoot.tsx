@@ -90,8 +90,9 @@ export function ManagerAppRoot() {
             id: String(item.id),
             title: `${item.incident_type.toUpperCase()} - ${item.severity.toUpperCase()}`,
             desc: item.description || "No description provided",
-            severity: item.severity === 'critical' ? 'Critical' : item.severity === 'high' ? 'High' : 'Medium',
+            severity: (item.severity === 'critical' ? 'Critical' : item.severity === 'high' ? 'High' : 'Medium') as "Critical" | "High" | "Medium" | "Low",
             status: item.workflow_status.toUpperCase(),
+            time: item.reported_at ? new Date(item.reported_at).toLocaleTimeString() : "09:00 AM",
             raw: item
           }));
           setIncidents(mapped);

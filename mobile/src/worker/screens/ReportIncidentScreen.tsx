@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, TextInput, ActivityIndicator, Modal,
@@ -89,11 +90,11 @@ export default function ReportIncidentScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.headerIcon}>☰</Text>
+          <Icon emoji="☰" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -211,16 +212,18 @@ export default function ReportIncidentScreen({ navigation }: any) {
         {/* Photos Upload Section */}
         <Text style={styles.inputLabel}>Photos / Evidence</Text>
         <View style={styles.photoContainer}>
-          <TouchableOpacity style={styles.photoAddBtn} onPress={handleAddPhoto}>
-            <Text style={styles.photoAddText}>📸 Add Evidence Photo</Text>
+          <TouchableOpacity style={[styles.photoAddBtn, styles.photoAddRow]} onPress={handleAddPhoto}>
+            <Icon name="camera" size={15} color="#2563EB" style={styles.photoAddIcon} />
+            <Text style={styles.photoAddText}>Add Evidence Photo</Text>
           </TouchableOpacity>
           
           <View style={styles.photoWrapper}>
             {photos.map((item, idx) => (
               <View key={idx} style={styles.photoTag}>
-                <Text style={styles.photoLabel}>🖼️ {item}</Text>
+                <Icon name="image" size={12} color="#334155" style={{ marginRight: 4 }} />
+                <Text style={styles.photoLabel}>{item}</Text>
                 <TouchableOpacity onPress={() => handleRemovePhoto(idx)}>
-                  <Text style={styles.photoRemoveBtn}>✕</Text>
+                  <Icon emoji="✕" style={styles.photoRemoveBtn} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -232,14 +235,18 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
       {/* Footer Actions */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.draftBtn}>
-          <Text style={styles.draftBtnText}>💾 Draft</Text>
+        <TouchableOpacity style={[styles.draftBtn, styles.footerBtnRow]}>
+          <Icon name="save" size={15} color="#475569" style={styles.footerBtnIcon} />
+          <Text style={styles.draftBtnText}>Draft</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.nextBtn} onPress={handleNext} disabled={isSubmitting}>
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.nextBtnText}>Next  ➔</Text>
+            <View style={styles.footerBtnRow}>
+              <Text style={styles.nextBtnText}>Next</Text>
+              <Icon name="arrow-right" size={15} color="#FFFFFF" style={styles.footerBtnIconRight} />
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -260,7 +267,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Select Incident Type</Text>
               <TouchableOpacity onPress={() => setPickerVisible(false)}>
-                <Text style={styles.pickerCloseBtn}>✕</Text>
+                <Icon emoji="✕" style={styles.pickerCloseBtn} />
               </TouchableOpacity>
             </View>
             
@@ -277,7 +284,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
                   {type}
                 </Text>
                 {incidentType === type && (
-                  <Text style={styles.checkmarkIcon}>✓</Text>
+                  <Icon emoji="✓" style={styles.checkmarkIcon} />
                 )}
               </TouchableOpacity>
             ))}
@@ -301,7 +308,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Select Location</Text>
               <TouchableOpacity onPress={() => setLocationPickerVisible(false)}>
-                <Text style={styles.pickerCloseBtn}>✕</Text>
+                <Icon emoji="✕" style={styles.pickerCloseBtn} />
               </TouchableOpacity>
             </View>
             
@@ -318,7 +325,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
                   {loc}
                 </Text>
                 {location === loc && (
-                  <Text style={styles.checkmarkIcon}>✓</Text>
+                  <Icon emoji="✓" style={styles.checkmarkIcon} />
                 )}
               </TouchableOpacity>
             ))}
@@ -508,6 +515,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#475569',
+  },
+  footerBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerBtnIcon: {
+    marginRight: 6,
+  },
+  footerBtnIconRight: {
+    marginLeft: 6,
+  },
+  photoAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoAddIcon: {
+    marginRight: 6,
   },
   nextBtn: {
     flex: 1.5,

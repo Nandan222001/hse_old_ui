@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform,
@@ -75,11 +76,11 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Icon emoji="←" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>AI Safety Assistant</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -107,7 +108,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
               {/* Icon */}
               {msg.sender === 'ai' && (
                 <View style={styles.aiIconBox}>
-                  <Text style={styles.aiIcon}>🤖</Text>
+                  <Icon emoji="🤖" style={styles.aiIcon} />
                 </View>
               )}
 
@@ -127,7 +128,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
                     <View style={styles.checklist}>
                       {msg.checklist.map((item, idx) => (
                         <View key={idx} style={styles.checkItem}>
-                          <Text style={styles.checkIcon}>✓</Text>
+                          <Icon emoji="✓" style={styles.checkIcon} />
                           <Text style={styles.checkText}>{item}</Text>
                         </View>
                       ))}
@@ -144,7 +145,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
                         <Text style={styles.docTitle}>{msg.doc.title}</Text>
                         <Text style={styles.docDesc}>{msg.doc.desc}</Text>
                       </View>
-                      <Text style={styles.docOpenIcon}>⎋</Text>
+                      <Icon emoji="⎋" style={styles.docOpenIcon} />
                     </View>
                   )}
                 </View>
@@ -160,7 +161,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
 
               {msg.sender === 'user' && (
                 <View style={styles.userIconBox}>
-                  <Text style={styles.userIcon}>👤</Text>
+                  <Icon emoji="👤" style={styles.userIcon} />
                 </View>
               )}
             </View>
@@ -183,7 +184,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
         {/* Input area */}
         <View style={styles.inputArea}>
           <TouchableOpacity style={styles.attachmentBtn}>
-            <Text style={styles.attachmentIcon}>📎</Text>
+            <Icon emoji="📎" style={styles.attachmentIcon} />
           </TouchableOpacity>
           <TextInput
             style={styles.textInput}
@@ -193,7 +194,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
             onChangeText={setInputText}
           />
           <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-            <Text style={styles.sendIcon}>➤</Text>
+            <Icon emoji="➤" style={styles.sendIcon} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

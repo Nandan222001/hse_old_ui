@@ -14,10 +14,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     
     "paths": {
       "@expo/vector-icons": ["./src/shims/expoVectorIcons"]
     }
   },
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "**/__tests__/*", "**/__mocks__/*"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "**/__tests__/*", "**/__mocks__/*", "supervisorMobileApp", "workerMobileApp", "managermobileapp"]
 }

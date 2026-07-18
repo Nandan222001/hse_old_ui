@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { Icon } from './Icon';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -50,7 +51,7 @@ export function VideoPlayer({ uri }: VideoPlayerProps) {
   if (!uri) {
     return (
       <View style={styles.placeholder}>
-        <Text style={styles.phIcon}>🎬</Text>
+        <Icon emoji="🎬" style={styles.phIcon} />
         <Text style={styles.phTitle}>Video Coming Soon</Text>
         <Text style={styles.phSub}>Video content will appear here once it has been uploaded to the course.</Text>
       </View>
@@ -85,7 +86,7 @@ export function VideoPlayer({ uri }: VideoPlayerProps) {
         {/* Centre play/pause icon — visible when paused */}
         {(paused || ended) && !buffering && (
           <View style={styles.bigPlayBtn}>
-            <Text style={styles.bigPlayIcon}>{ended ? '↺' : '▶'}</Text>
+            <Icon name={ended ? 'rotate-ccw' : 'play'} style={styles.bigPlayIcon} />
           </View>
         )}
       </TouchableOpacity>
@@ -93,7 +94,7 @@ export function VideoPlayer({ uri }: VideoPlayerProps) {
       {/* Bottom controls */}
       <View style={styles.controls}>
         <TouchableOpacity onPress={togglePlay} style={styles.ctrlBtn}>
-          <Text style={styles.ctrlIcon}>{paused ? '▶' : '⏸'}</Text>
+          <Icon name={paused ? 'play' : 'pause'} style={styles.ctrlIcon} />
         </TouchableOpacity>
 
         <Text style={styles.timeLabel}>{fmt(current)}</Text>
@@ -116,7 +117,7 @@ export function VideoPlayer({ uri }: VideoPlayerProps) {
           style={styles.ctrlBtn}
           onPress={() => videoRef.current?.presentFullscreenPlayer()}
         >
-          <Text style={styles.ctrlIcon}>⛶</Text>
+          <Icon emoji="⛶" style={styles.ctrlIcon} />
         </TouchableOpacity>
       </View>
     </View>
@@ -139,7 +140,7 @@ const styles = StyleSheet.create({
   surface: { height: 210, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
 
   spinnerOverlay: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', minWidth: 32, textAlign: 'center' },
 
   seekTrack: { flex: 1, height: 20, justifyContent: 'center' },
-  seekBg:    { ...StyleSheet.absoluteFill, top: 8, bottom: 8, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
+  seekBg:    { ...StyleSheet.absoluteFillObject, top: 8, bottom: 8, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   seekFill:  { position: 'absolute', left: 0, top: 8, bottom: 8, borderRadius: 3, backgroundColor: Colors.primary },
   seekKnob:  {
     position: 'absolute', top: '50%', marginTop: -7, marginLeft: -7,

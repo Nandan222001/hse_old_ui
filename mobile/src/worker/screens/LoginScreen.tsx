@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, KeyboardAvoidingView, Platform, ScrollView, Alert,
@@ -42,7 +43,7 @@ export default function LoginScreen({ navigation }: any) {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoBox}>
-            <Text style={styles.logoIcon}>🛡️</Text>
+            <Icon emoji="🛡️" style={styles.logoIcon} />
           </View>
           <Text style={styles.appName}>SafetyCore HSE</Text>
           <Text style={styles.tagline}>Enterprise Site Management</Text>
@@ -91,7 +92,10 @@ export default function LoginScreen({ navigation }: any) {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerTop}>🔒 SECURE GROUND ACCESS PROTOCOL</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="lock" size={12} color="rgba(255,255,255,0.55)" style={{ marginRight: 6 }} />
+            <Text style={styles.footerTop}>SECURE GROUND ACCESS PROTOCOL</Text>
+          </View>
           <Text style={styles.footerBottom}>Site: Houston Refinery • Terminal 4</Text>
         </View>
       </ScrollView>

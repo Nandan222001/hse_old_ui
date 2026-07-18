@@ -5,6 +5,7 @@ import { AppHeader } from '../components/layout/AppHeader';
 import { Card } from '../components/cards/Card';
 import { ProgressBar } from '../components/display/ProgressBar';
 import { StepDots } from '../components/display/StepDots';
+import { Icon } from '../components/display/Icon';
 import { Colors } from '../theme/colors';
 
 const STEPS = [
@@ -74,7 +75,10 @@ export default function PerformTaskScreen({ route, navigation }: any) {
           <HighlightText text={step.desc} terms={step.highlight} />
           {step.safetyNote && (
             <View style={styles.safetyNote}>
-              <Text style={styles.safetyLabel}>⚠ SAFETY NOTE</Text>
+              <View style={styles.safetyLabelRow}>
+                <Icon name="alert-triangle" size={12} color={Colors.critical} style={{ marginRight: 4 }} />
+                <Text style={styles.safetyLabel}>SAFETY NOTE</Text>
+              </View>
               <Text style={styles.safetyText}>{step.safetyNote}</Text>
             </View>
           )}
@@ -118,7 +122,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4, borderLeftColor: Colors.critical,
     padding: 12, borderRadius: 8,
   },
-  safetyLabel: { fontSize: 11, fontWeight: '700', color: Colors.critical, marginBottom: 4, letterSpacing: 0.5 },
+  safetyLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  safetyLabel: { fontSize: 11, fontWeight: '700', color: Colors.critical, letterSpacing: 0.5 },
   safetyText: { fontSize: 14, color: '#B71C1C', fontWeight: '500' },
 
   dots: { marginBottom: 24 },

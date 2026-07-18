@@ -4,6 +4,7 @@ import {
   StyleSheet, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { Icon } from '../components/display/Icon';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { Colors } from '../theme/colors';
 import { notificationService, Notification } from '../services/notificationService';
@@ -20,6 +21,7 @@ const PRIORITY_ICON: Record<string, string> = {
   high:     '⚠️',
   medium:   'ℹ️',
   low:      '🔔',
+  // → alert-octagon / alert-triangle / info / bell (see EMOJI_ICON_MAP)
 };
 
 function formatAge(iso: string): string {
@@ -113,7 +115,11 @@ export default function NotificationsScreen({ navigation }: any) {
               {/* Priority stripe */}
               <View style={[styles.stripe, { backgroundColor: PRIORITY_COLOR[n.priority] ?? Colors.textLight }]} />
 
-              <Text style={styles.rowIcon}>{PRIORITY_ICON[n.priority] ?? '🔔'}</Text>
+              <Icon
+                emoji={PRIORITY_ICON[n.priority] ?? '🔔'}
+                style={styles.rowIcon}
+                color={PRIORITY_COLOR[n.priority] ?? Colors.textLight}
+              />
 
               <View style={styles.rowBody}>
                 <View style={styles.rowTop}>

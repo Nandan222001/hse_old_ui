@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
   ActivityIndicator, TextInput, TouchableOpacity,
@@ -51,11 +52,11 @@ export default function TasksScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn}>
-          <Text style={styles.headerIcon}>☰</Text>
+          <Icon emoji="☰" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -69,7 +70,7 @@ export default function TasksScreen({ navigation }: any) {
         {/* Search Bar */}
         <View style={styles.searchRow}>
           <View style={styles.searchContainer}>
-            <Text style={styles.searchIcon}>🔍</Text>
+            <Icon emoji="🔍" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search tasks, equipment, or sites..."
@@ -87,13 +88,16 @@ export default function TasksScreen({ navigation }: any) {
         <View style={styles.filtersRow}>
           <Text style={styles.filterLabel}>Filters:</Text>
           <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterPillText}>Priority ∨</Text>
+            <Text style={styles.filterPillText}>Priority</Text>
+            <Icon name="chevron-down" size={13} color={Colors.textMuted} style={styles.filterPillIcon} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterPillText}>Due Date 📅</Text>
+            <Text style={styles.filterPillText}>Due Date</Text>
+            <Icon name="calendar" size={13} color={Colors.textMuted} style={styles.filterPillIcon} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterPill}>
-            <Text style={styles.filterPillText}>Status ✓</Text>
+            <Text style={styles.filterPillText}>Status</Text>
+            <Icon name="check" size={13} color={Colors.textMuted} style={styles.filterPillIcon} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setSearch('')}>
             <Text style={styles.clearAllText}>Clear all</Text>
@@ -126,15 +130,21 @@ export default function TasksScreen({ navigation }: any) {
                   </View>
 
                   <View style={styles.metaRow}>
-                    <Text style={styles.metaText}>📅 Today, 4:00 PM</Text>
-                    <Text style={styles.metaText}>📍 {t.location}</Text>
+                    <View style={styles.metaItem}>
+                      <Icon name="calendar" size={13} color={Colors.textMuted} style={styles.metaItemIcon} />
+                      <Text style={styles.metaText}>Today, 4:00 PM</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                      <Icon name="map-pin" size={13} color={Colors.textMuted} style={styles.metaItemIcon} />
+                      <Text style={styles.metaText}>{t.location}</Text>
+                    </View>
                   </View>
 
                   {/* Sub Instruction Nested Card */}
                   <View style={styles.instructionCard}>
-                    <Text style={styles.instructionIcon}>{subInfo.icon}</Text>
+                    <Icon emoji={subInfo.icon} style={styles.instructionIcon} />
                     <Text style={styles.instructionText}>{subInfo.text}</Text>
-                    <Text style={styles.arrowIcon}>❯</Text>
+                    <Icon emoji="❯" style={styles.arrowIcon} />
                   </View>
                 </TouchableOpacity>
               );
@@ -243,6 +253,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#E2E8F0',
     borderRadius: 10,
     paddingHorizontal: 10,
@@ -252,6 +264,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0F172A',
     fontWeight: '600',
+  },
+  filterPillIcon: {
+    marginLeft: 4,
   },
   clearAllText: {
     fontSize: 13,
@@ -311,6 +326,13 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 12,
     paddingLeft: 32,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaItemIcon: {
+    marginRight: 4,
   },
   metaText: {
     fontSize: 12,

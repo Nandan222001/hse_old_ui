@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Platform,
@@ -47,11 +48,11 @@ export default function PermitsScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.headerIcon}>☰</Text>
+          <Icon emoji="☰" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Permits</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -69,7 +70,10 @@ export default function PermitsScreen({ navigation }: any) {
             <Text style={styles.statLabel}>Active Permits</Text>
             <View style={styles.statValueRow}>
               <Text style={styles.statValue}>{activeList.length > 0 ? String(activeList.length).padStart(2, '0') : '03'}</Text>
-              <Text style={styles.statTrend}>📈+2</Text>
+              <View style={styles.statTrendRow}>
+                <Icon name="trending-up" size={14} color="#22C55E" style={{ marginRight: 2 }} />
+                <Text style={styles.statTrend}>+2</Text>
+              </View>
             </View>
           </View>
 
@@ -113,16 +117,22 @@ export default function PermitsScreen({ navigation }: any) {
                       {permit.permit_type.toUpperCase().replace('_', ' ')}
                     </Text>
                   </View>
-                  <Text style={styles.timerText}>🕒 {permit.permit_ref}</Text>
+                  <View style={styles.timerRow}>
+                    <Icon name="clock" size={12} color="#EF4444" style={styles.timerIcon} />
+                    <Text style={styles.timerText}>{permit.permit_ref}</Text>
+                  </View>
                 </View>
                 <Text style={styles.permitTitle}>{permit.work_description || 'Safety Permit'}</Text>
-                <Text style={styles.permitLoc}>📍 {permit.work_location}</Text>
+                <View style={styles.permitLocRow}>
+                  <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
+                  <Text style={styles.permitLoc}>{permit.work_location}</Text>
+                </View>
                 <View style={styles.permitActionRow}>
                   <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge(permit.id)}>
                     <Text style={styles.ackBtnText}>Acknowledge</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.eyeBtn}>
-                    <Text style={styles.eyeIcon}>👁️</Text>
+                    <Icon emoji="👁️" style={styles.eyeIcon} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -135,16 +145,22 @@ export default function PermitsScreen({ navigation }: any) {
                   <View style={[styles.badge, { backgroundColor: '#FEE2E2' }]}>
                     <Text style={[styles.badgeText, { color: '#EF4444' }]}>Hot Work</Text>
                   </View>
-                  <Text style={styles.timerText}>🕒 01:24:05</Text>
+                  <View style={styles.timerRow}>
+                    <Icon name="clock" size={12} color="#EF4444" style={styles.timerIcon} />
+                    <Text style={styles.timerText}>01:24:05</Text>
+                  </View>
                 </View>
                 <Text style={styles.permitTitle}>Welding - Zone B</Text>
-                <Text style={styles.permitLoc}>📍 Maintenance Bay 4, Site Alpha</Text>
+                <View style={styles.permitLocRow}>
+                  <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
+                  <Text style={styles.permitLoc}>Maintenance Bay 4, Site Alpha</Text>
+                </View>
                 <View style={styles.permitActionRow}>
                   <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('1')}>
                     <Text style={styles.ackBtnText}>Acknowledge</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.eyeBtn}>
-                    <Text style={styles.eyeIcon}>👁️</Text>
+                    <Icon emoji="👁️" style={styles.eyeIcon} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -155,16 +171,22 @@ export default function PermitsScreen({ navigation }: any) {
                   <View style={[styles.badge, { backgroundColor: '#F3E5F5' }]}>
                     <Text style={[styles.badgeText, { color: '#8B5CF6' }]}>Confined Space</Text>
                   </View>
-                  <Text style={[styles.timerText, { color: '#475569' }]}>🕒 04:12:18</Text>
+                  <View style={styles.timerRow}>
+                    <Icon name="clock" size={12} color="#475569" style={styles.timerIcon} />
+                    <Text style={[styles.timerText, { color: '#475569' }]}>04:12:18</Text>
+                  </View>
                 </View>
                 <Text style={styles.permitTitle}>Tank Inspection - T02</Text>
-                <Text style={styles.permitLoc}>📍 Storage Yard West</Text>
+                <View style={styles.permitLocRow}>
+                  <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
+                  <Text style={styles.permitLoc}>Storage Yard West</Text>
+                </View>
                 <View style={styles.permitActionRow}>
                   <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('2')}>
                     <Text style={styles.ackBtnText}>Acknowledge</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.eyeBtn}>
-                    <Text style={styles.eyeIcon}>👁️</Text>
+                    <Icon emoji="👁️" style={styles.eyeIcon} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -189,7 +211,7 @@ export default function PermitsScreen({ navigation }: any) {
                   <Text style={styles.courseCode}>#{permit.permit_ref}</Text>
                 </View>
                 <Text style={styles.tableCellText}>{permit.requested_by}</Text>
-                <Text style={styles.arrowText}>❯</Text>
+                <Icon emoji="❯" style={styles.arrowText} />
               </TouchableOpacity>
             ))
           ) : (
@@ -201,7 +223,7 @@ export default function PermitsScreen({ navigation }: any) {
                   <Text style={styles.courseCode}>#PTW-8821</Text>
                 </View>
                 <Text style={styles.tableCellText}>John Doe</Text>
-                <Text style={styles.arrowText}>❯</Text>
+                <Icon emoji="❯" style={styles.arrowText} />
               </TouchableOpacity>
 
               {/* Row 2 */}
@@ -211,7 +233,7 @@ export default function PermitsScreen({ navigation }: any) {
                   <Text style={styles.courseCode}>#PTW-8824</Text>
                 </View>
                 <Text style={styles.tableCellText}>Sarah Miller</Text>
-                <Text style={styles.arrowText}>❯</Text>
+                <Icon emoji="❯" style={styles.arrowText} />
               </TouchableOpacity>
             </>
           )}
@@ -225,7 +247,7 @@ export default function PermitsScreen({ navigation }: any) {
 
         <View style={styles.detailCard}>
           <View style={styles.detailCardHeader}>
-            <View style={styles.iconBox}><Text style={styles.iconFire}>🔥</Text></View>
+            <View style={styles.iconBox}><Icon emoji="🔥" style={styles.iconFire} /></View>
             <View>
               <Text style={styles.detailCardTitle}>Permit ID: PTW-0042-24</Text>
               <Text style={styles.detailCardSub}>Hot Work Operations</Text>
@@ -235,15 +257,15 @@ export default function PermitsScreen({ navigation }: any) {
           <Text style={styles.mandatoryTitle}>MANDATORY CONDITIONS</Text>
           <View style={styles.conditionsList}>
             <View style={styles.conditionItem}>
-              <Text style={styles.checkIcon}>✓</Text>
+              <Icon emoji="✓" style={styles.checkIcon} />
               <Text style={styles.conditionText}>Fire watch established and extinguisher available at work area.</Text>
             </View>
             <View style={styles.conditionItem}>
-              <Text style={styles.checkIcon}>✓</Text>
+              <Icon emoji="✓" style={styles.checkIcon} />
               <Text style={styles.conditionText}>Gas monitoring performed; LEL level is 0%.</Text>
             </View>
             <View style={styles.conditionItem}>
-              <Text style={styles.warningIcon}>⚠️</Text>
+              <Icon emoji="⚠️" style={styles.warningIcon} />
               <Text style={styles.conditionText}>Shielding must be in place to prevent sparks reaching floor levels below.</Text>
             </View>
           </View>
@@ -257,7 +279,7 @@ export default function PermitsScreen({ navigation }: any) {
               </View>
             ) : (
               <View style={styles.signaturePlaceholder}>
-                <Text style={styles.signaturePenIcon}>🖊️</Text>
+                <Icon emoji="🖊️" style={styles.signaturePenIcon} />
                 <Text style={styles.signaturePlaceholderText}>Click or draw to sign</Text>
               </View>
             )}
@@ -419,6 +441,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timerIcon: {
+    marginRight: 4,
+  },
+  statTrendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   timerText: {
     fontSize: 13,
     fontWeight: '700',
@@ -430,10 +463,14 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginTop: 10,
   },
+  permitLocRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   permitLoc: {
     fontSize: 12,
     color: '#64748B',
-    marginTop: 4,
     fontWeight: '600',
   },
   permitActionRow: {

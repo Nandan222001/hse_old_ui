@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View,
   Text,
@@ -27,7 +28,7 @@ interface ChecklistTemplate {
   submitter_roles: string[];
   validator_roles: string[];
   items: ChecklistItem[];
-  sla: number;
+  sla: any;
 }
 
 interface DraftSubmission {
@@ -117,6 +118,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
 
       setTemplates(filtered.length > 0 ? filtered : all);
     } catch (err: any) {
+      console.error('CHKLIST_ERR', err?.message, '| status:', err?.response?.status, '| url:', err?.config?.baseURL, err?.config?.url, '| data:', JSON.stringify(err?.response?.data)?.slice(0, 200));
       Alert.alert('Error', 'Failed to load checklist templates. Please try again.');
     } finally {
       setLoadingTemplates(false);
@@ -229,9 +231,10 @@ export default function SafetyChecklistScreen({ navigation }: any) {
             activeOpacity={0.7}
           >
             <View style={styles.templateIconContainer}>
-              <Text style={styles.templateIcon}>
-                {TEMPLATE_ICONS[template.checklist_type] || '📝'}
-              </Text>
+              <Icon
+                emoji={TEMPLATE_ICONS[template.checklist_type] || '📝'}
+                style={styles.templateIcon}
+              />
             </View>
             <View style={styles.templateInfo}>
               <Text style={styles.templateName}>{template.display_name}</Text>
@@ -268,7 +271,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Back button + Title */}
         <TouchableOpacity style={styles.backRow} onPress={goBackToList}>
-          <Text style={styles.backArrow}>←</Text>
+          <Icon emoji="←" style={styles.backArrow} />
           <Text style={styles.backText}>Back to Checklists</Text>
         </TouchableOpacity>
 
@@ -375,7 +378,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
             }
           }}
         >
-          <Text style={styles.headerIcon}>←</Text>
+          <Icon emoji="←" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Safety Checklists</Text>
         <View style={styles.headerBtn} />
@@ -610,7 +613,7 @@ const styles = StyleSheet.create({
   // ─── Overlay ─────────────────────────────────────────────────────────────
 
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',

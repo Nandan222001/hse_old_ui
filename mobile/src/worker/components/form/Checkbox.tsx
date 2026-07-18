@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from '../display/Icon';
 import { TouchableOpacity, View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Colors } from '../../theme/colors';
 
@@ -17,7 +18,7 @@ export function Checkbox({ label, checked, onChange, style }: CheckboxProps) {
       activeOpacity={0.8}
     >
       <View style={[styles.box, checked && styles.boxChecked]}>
-        {checked && <Text style={styles.tick}>✓</Text>}
+        {checked && <Icon emoji="✓" style={styles.tick} />}
       </View>
       <Text style={styles.label}>{label}</Text>
     </TouchableOpacity>

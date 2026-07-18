@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from '../display/Icon';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle, ScrollView } from 'react-native';
 import { Colors } from '../../theme/colors';
 
@@ -64,7 +65,7 @@ export function Dropdown({
                 onPress={() => { onChange(opt.value); setOpen(false); }}
               >
                 <Text style={[styles.itemText, opt.value === value && styles.itemTextActive]}>{opt.label}</Text>
-                {opt.value === value && <Text style={styles.tick}>✓</Text>}
+                {opt.value === value && <Icon emoji="✓" style={styles.tick} />}
               </TouchableOpacity>
             ))}
           </ScrollView>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from '../display/Icon';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { Colors } from '../../theme/colors';
 
@@ -14,7 +15,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon = '📭', title, subtitle, actionLabel, onAction, style }: EmptyStateProps) {
   return (
     <View style={[styles.wrapper, style]}>
-      <Text style={styles.icon}>{icon}</Text>
+      <Icon emoji={icon} style={styles.icon} />
       <Text style={styles.title}>{title}</Text>
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       {actionLabel && onAction && (
@@ -35,7 +36,7 @@ interface ErrorStateProps {
 export function ErrorState({ message = 'Something went wrong', onRetry, style }: ErrorStateProps) {
   return (
     <View style={[styles.wrapper, style]}>
-      <Text style={styles.icon}>⚠️</Text>
+      <Icon emoji="⚠️" style={styles.icon} />
       <Text style={styles.title}>Oops!</Text>
       <Text style={styles.subtitle}>{message}</Text>
       {onRetry && (

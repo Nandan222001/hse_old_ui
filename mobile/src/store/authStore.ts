@@ -4,7 +4,7 @@ import { TokenStorage } from '../utils/storage';
 import type { AuthState, LoginRequest, ChangePasswordRequest } from '../types/auth.types';
 
 interface AuthStore extends AuthState {
-  setSelectedRole: (role: 'manager' | 'supervisor' | 'worker' | null) => void;
+  setSelectedRole: (role: 'manager' | 'supervisor' | 'worker' | 'auditor' | null) => void;
   login: (data: LoginRequest) => Promise<void>;
   changePassword: (payload: ChangePasswordRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -79,7 +79,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const session = await authService.restoreSession();
       if (session) {
-        const storedRole = await TokenStorage.getSelectedRole() as 'manager' | 'supervisor' | 'worker' | null;
+        const storedRole = await TokenStorage.getSelectedRole() as 'manager' | 'supervisor' | 'worker' | 'auditor' | null;
         const role = storedRole || (session.user.role?.toLowerCase() as any) || 'supervisor';
         set({ user: session.user, accessToken: session.token, isAuthenticated: true, selectedRole: role });
       }

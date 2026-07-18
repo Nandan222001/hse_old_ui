@@ -1,6 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { Colors } from '../../theme/colors';
+import { Icon, EMOJI_ICON_MAP } from '../display/Icon';
+
+/** Accepts either a legacy emoji or a Feather icon name and returns a Feather name. */
+const toIconName = (s?: string): string | undefined =>
+  s ? EMOJI_ICON_MAP[s] ?? s : undefined;
 
 interface AppHeaderProps {
   title: string;
@@ -37,14 +42,15 @@ export function AppHeader({
   const iconColor = light ? Colors.textDark : Colors.white;
 
   const handleLeft = onLeftPress ?? onBack;
-  const resolvedLeftIcon = leftIcon ?? (onBack ? '←' : '☰');
+  const resolvedLeftIcon = toIconName(leftIcon) ?? (onBack ? 'arrow-left' : 'menu');
+  const resolvedRightIcon = toIconName(rightIcon);
 
   return (
     <View style={[styles.header, { backgroundColor: bg, borderBottomColor: light ? Colors.border : 'transparent' }, style]}>
       {/* Left */}
       {handleLeft ? (
         <TouchableOpacity onPress={handleLeft} style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={[styles.iconText, { color: iconColor }]}>{resolvedLeftIcon}</Text>
+          <Icon name={resolvedLeftIcon} size={22} color={iconColor} />
         </TouchableOpacity>
       ) : (
         <View style={styles.iconBtn} />
@@ -59,9 +65,9 @@ export function AppHeader({
       {/* Right */}
       {rightNode ? (
         <View style={styles.iconBtn}>{rightNode}</View>
-      ) : rightIcon ? (
+      ) : resolvedRightIcon ? (
         <TouchableOpacity onPress={onRightPress} style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={[styles.iconText, { color: iconColor }]}>{rightIcon}</Text>
+          <Icon name={resolvedRightIcon} size={22} color={iconColor} />
         </TouchableOpacity>
       ) : (
         <View style={styles.iconBtn} />

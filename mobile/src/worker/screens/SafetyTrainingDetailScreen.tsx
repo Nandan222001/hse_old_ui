@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Image, Alert, Platform,
@@ -21,11 +22,11 @@ export default function SafetyTrainingDetailScreen({ route, navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Icon emoji="←" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>
 
@@ -64,11 +65,11 @@ export default function SafetyTrainingDetailScreen({ route, navigation }: any) {
           {/* Action Bar */}
           <View style={styles.videoActionBar}>
             <TouchableOpacity style={styles.actionBtn}>
-              <Text style={styles.actionBtnIcon}>📥</Text>
+              <Icon emoji="📥" style={styles.actionBtnIcon} />
               <Text style={styles.actionBtnText}>Download PDF</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn}>
-              <Text style={styles.actionBtnIcon}>💬</Text>
+              <Icon emoji="💬" style={styles.actionBtnIcon} />
               <Text style={styles.actionBtnText}>Subtitles</Text>
             </TouchableOpacity>
           </View>
@@ -77,7 +78,7 @@ export default function SafetyTrainingDetailScreen({ route, navigation }: any) {
         {/* Key Topics Section */}
         <View style={styles.card}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.keyTopicsTitleIcon}>📖</Text>
+            <Icon emoji="📖" style={styles.keyTopicsTitleIcon} />
             <Text style={styles.cardSectionTitle}>Key Topics</Text>
           </View>
 

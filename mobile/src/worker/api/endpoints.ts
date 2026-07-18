@@ -33,6 +33,12 @@ export const ENDPOINTS = {
     DETAIL: (id: string) => `/driver/incidents/${id}`,
   },
 
+  // Hazards / Risk observations
+  HAZARDS: {
+    CREATE: '/hazards',
+    CATEGORIES: '/hazard-categorys',
+  },
+
   // Checklists
   CHECKLISTS: {
     LIST: '/driver/checklists',

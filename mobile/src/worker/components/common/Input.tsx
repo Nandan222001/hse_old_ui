@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, TextInputProps } from 'react-native';
+import { Icon } from '../display/Icon';
 import { Colors } from '../../theme/colors';
 
 interface InputProps extends TextInputProps {
@@ -25,7 +26,7 @@ export function Input({ label, error, rightIcon, onRightIconPress, style, ...pro
         />
         {rightIcon && (
           <TouchableOpacity onPress={onRightIconPress} style={styles.rightBtn}>
-            <Text style={styles.rightIcon}>{rightIcon}</Text>
+            <Icon emoji={rightIcon} style={styles.rightIcon} />
           </TouchableOpacity>
         )}
       </View>

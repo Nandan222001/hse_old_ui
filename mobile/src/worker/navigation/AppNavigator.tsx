@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Icon } from '../components/display/Icon';
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -17,6 +18,7 @@ import RaisePermitScreen from '../screens/RaisePermitScreen';
 import ReportNearMissScreen from '../screens/ReportNearMissScreen';
 import ReportUnsafeActScreen from '../screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../screens/ReportIncidentScreen';
+import ReportRiskScreen from '../screens/ReportRiskScreen';
 import SafetyChecklistScreen from '../screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
@@ -29,10 +31,10 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS: Record<string, string> = {
-  Home: '🏠',
-  Tasks: '📋',
-  Alerts: '⚠️',
-  Profile: '👤',
+  Home: 'home',
+  Tasks: 'clipboard',
+  Alerts: 'alert-triangle',
+  Profile: 'user',
 };
 
 function MyTabBar({ state, descriptors, navigation }: any) {
@@ -68,7 +70,7 @@ function MyTabBar({ state, descriptors, navigation }: any) {
           });
         };
 
-        const icon = TAB_ICONS[route.name] ?? '•';
+        const icon = TAB_ICONS[route.name] ?? 'circle';
 
         return (
           <TouchableOpacity
@@ -81,7 +83,7 @@ function MyTabBar({ state, descriptors, navigation }: any) {
             activeOpacity={0.8}
           >
             <View style={[styles.tabContent, isFocused && styles.activePill]}>
-              <Text style={[styles.tabIcon, isFocused && styles.activeText]}>{icon}</Text>
+              <Icon name={icon} style={[styles.tabIcon, isFocused && styles.activeText]} />
               <Text style={[styles.tabLabelText, isFocused && styles.activeText]}>{label}</Text>
             </View>
           </TouchableOpacity>
@@ -108,7 +110,7 @@ function TabNavigator() {
 function SplashScreen() {
   return (
     <View style={styles.splash}>
-      <Text style={styles.splashIcon}>🛡️</Text>
+      <Icon emoji="🛡️" style={styles.splashIcon} />
       <ActivityIndicator color={Colors.blue} size="large" style={{ marginTop: 20 }} />
     </View>
   );
@@ -134,6 +136,7 @@ export default function AppNavigator() {
         <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="ReportRisk" component={ReportRiskScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="Permits" component={PermitsScreen} options={{ presentation: 'card' }} />

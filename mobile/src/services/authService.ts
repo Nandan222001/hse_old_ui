@@ -4,7 +4,7 @@ import { TokenStorage } from '../utils/storage';
 import type { LoginRequest, LoginResponse, User, ChangePasswordRequest } from '../types/auth.types';
 
 export const authService = {
-  async login(data: LoginRequest, role: 'manager' | 'supervisor' | 'worker'): Promise<LoginResponse> {
+  async login(data: LoginRequest, role: 'manager' | 'supervisor' | 'worker' | 'auditor'): Promise<LoginResponse> {
     // 1. Manager Role: Local mock login
     if (role === 'manager') {
       const mockRes: LoginResponse = {
@@ -38,7 +38,7 @@ export const authService = {
       // Ensure role property exists in user model
       if (resData.user) {
         if (!resData.user.role) {
-          resData.user.role = role === 'supervisor' ? 'Supervisor' : 'Worker';
+          resData.user.role = role === 'supervisor' ? 'Supervisor' : role === 'auditor' ? 'Auditor' : 'Worker';
         }
       }
 
@@ -64,6 +64,19 @@ export const authService = {
               role: 'Supervisor',
               site: 'Houston Refinery • Terminal 4',
               department: 'Production Floor'
+            }
+          };
+        } else if (role === 'auditor') {
+          mockRes = {
+            access_token: 'mock-auditor-token',
+            refresh_token: 'mock-auditor-refresh',
+            user: {
+              id: '4',
+              employee_id: data.employee_id || 'auditor01',
+              name: 'Auditor One',
+              role: 'Auditor',
+              site: 'Houston Refinery • Terminal 4',
+              department: 'HSE Audit'
             }
           };
         } else {

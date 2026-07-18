@@ -59,6 +59,7 @@ import RaisePermitScreen from '../worker/screens/RaisePermitScreen';
 import ReportNearMissScreen from '../worker/screens/ReportNearMissScreen';
 import ReportUnsafeActScreen from '../worker/screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../worker/screens/ReportIncidentScreen';
+import ReportRiskScreen from '../worker/screens/ReportRiskScreen';
 import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
@@ -66,6 +67,7 @@ import WorkerNotificationsScreen from '../worker/screens/NotificationsScreen';
 import SafetyTrainingDetailScreen from '../worker/screens/SafetyTrainingDetailScreen';
 import AISafetyAssistantScreen from '../worker/screens/AISafetyAssistantScreen';
 import WorkerReportsScreen from '../worker/screens/ReportsScreen';
+import { Icon } from '../worker/components/display/Icon';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -119,11 +121,11 @@ function SupervisorProfileStack() {
 }
 
 const SUPERVISOR_TAB_ICONS: Record<string, string> = {
-  Home: '🏠',
-  Operations: '⚡',
-  Permits: '📋',
-  Incidents: '🚨',
-  Profile: '👤',
+  Home: 'home',
+  Operations: 'activity',
+  Permits: 'file-text',
+  Incidents: 'alert-octagon',
+  Profile: 'user',
 };
 
 function SupervisorMainTabs() {
@@ -141,10 +143,8 @@ function SupervisorMainTabs() {
           paddingTop: 4,
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarIcon: ({ focused }) => (
-          <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>
-            {SUPERVISOR_TAB_ICONS[route.name] ?? '⚪'}
-          </Text>
+        tabBarIcon: ({ color, size }) => (
+          <Icon name={SUPERVISOR_TAB_ICONS[route.name] ?? 'circle'} size={size ?? 22} color={color} />
         ),
       })}
     >
@@ -161,11 +161,11 @@ function SupervisorMainTabs() {
 // WORKER NAVIGATORS
 // ==========================================
 const WORKER_TAB_ICONS: Record<string, string> = {
-  Home: '🏠',
-  Tasks: '📋',
-  Report: '🚨',
-  Checklist: '✅',
-  Profile: '👤',
+  Home: 'home',
+  Tasks: 'clipboard',
+  Report: 'alert-octagon',
+  Checklist: 'check-circle',
+  Profile: 'user',
 };
 
 function WorkerTabBar({ state, descriptors, navigation }: any) {
@@ -201,7 +201,7 @@ function WorkerTabBar({ state, descriptors, navigation }: any) {
           });
         };
 
-        const icon = WORKER_TAB_ICONS[route.name] ?? '•';
+        const icon = WORKER_TAB_ICONS[route.name] ?? 'circle';
 
         return (
           <TouchableOpacity
@@ -214,7 +214,7 @@ function WorkerTabBar({ state, descriptors, navigation }: any) {
             activeOpacity={0.8}
           >
             <View style={[styles.tabContent, isFocused && styles.activePill]}>
-              <Text style={[styles.tabIcon, isFocused && styles.activeText]}>{icon}</Text>
+              <Icon name={icon} style={[styles.tabIcon, isFocused && styles.activeText]} />
               <Text style={[styles.tabLabelText, isFocused && styles.activeText]}>{label}</Text>
             </View>
           </TouchableOpacity>
@@ -307,6 +307,7 @@ export function AppNavigator() {
               <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="ReportRisk" component={ReportRiskScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />

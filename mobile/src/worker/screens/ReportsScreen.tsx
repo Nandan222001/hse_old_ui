@@ -4,6 +4,7 @@ import {
   StyleSheet, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { Icon } from '../components/display/Icon';
 import { Card } from '../components/cards/Card';
 import { StatusBadge } from '../components/display/Badge';
 import { EmptyState } from '../components/feedback/EmptyState';
@@ -16,7 +17,7 @@ const REPORT_TYPES = [
   { id: 'near_miss',  icon: '⚠️', title: 'Near Miss',       desc: 'Report a near miss event',      color: Colors.warning,  bg: Colors.warningBg,  screen: 'ReportNearMiss'  },
   { id: 'incident',   icon: '🚨', title: 'Incident',         desc: 'Report a safety incident',      color: Colors.critical, bg: Colors.criticalBg, screen: 'ReportIncident'  },
   { id: 'unsafe_act', icon: '👁️', title: 'Unsafe Act',       desc: 'Report an unsafe behaviour',   color: Colors.blue,     bg: '#E3F2FD',         screen: 'ReportUnsafeAct' },
-  { id: 'checklist',  icon: '✅', title: 'Safety Checklist', desc: 'Complete a safety inspection', color: Colors.success,  bg: Colors.successBg,  screen: 'SafetyChecklist' },
+  { id: 'risk',       icon: '🛡️', title: 'Risk',             desc: 'Report a hazard or unsafe condition', color: '#7C3AED',    bg: '#F3E8FF',         screen: 'ReportRisk'      },
 ];
 
 const INCIDENT_TYPE_LABEL: Record<IncidentType, string> = {
@@ -98,7 +99,7 @@ export default function ReportsScreen({ navigation }: any) {
               onPress={() => navigation.navigate(rt.screen)}
               activeOpacity={0.8}
             >
-              <Text style={styles.reportIcon}>{rt.icon}</Text>
+              <Icon emoji={rt.icon} style={styles.reportIcon} color={rt.color} />
               <Text style={[styles.reportTitle, { color: rt.color }]}>{rt.title}</Text>
               <Text style={styles.reportDesc}>{rt.desc}</Text>
             </TouchableOpacity>

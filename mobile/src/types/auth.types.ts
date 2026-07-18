@@ -33,6 +33,6 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  selectedRole: 'manager' | 'supervisor' | 'worker' | null;
+  selectedRole: 'manager' | 'supervisor' | 'worker' | 'auditor' | null;
   mustChangePassword: boolean;
 }

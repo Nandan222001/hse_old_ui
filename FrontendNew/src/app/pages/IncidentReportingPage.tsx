@@ -244,7 +244,10 @@ export function IncidentReportingPage() {
   const [closingId, setClosingId] = useState<number | null>(null);
 
   const fetchData = async () => {
-    setLoading(true); setError(null);
+    if (incidents.length === 0) {
+      setLoading(true);
+    }
+    setError(null);
     try {
       const [s, i] = await Promise.all([
         getWorkflowStats(),
@@ -299,7 +302,7 @@ export function IncidentReportingPage() {
         <CardHeader><CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-yellow-600" />{roleTier === "worker" ? "My Reports" : roleTier === "supervisor" ? "Pending Review" : "Manager Queue"} ({incidents.length})</CardTitle></CardHeader>
         <CardContent className="p-0">
           {error ? <div className="p-6 text-center text-sm text-red-500">{error}</div>
-            : loading ? <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
+            : (loading && incidents.length === 0) ? <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
             : <IncidentTable incidents={incidents} roleTier={roleTier} onAcknowledge={handleAcknowledge} onInvestigate={id => setInvestigatingId(id)} onEscalate={handleEscalate} onApprove={handleApprove} onClose={id => setClosingId(id)} />}
         </CardContent>
       </Card>

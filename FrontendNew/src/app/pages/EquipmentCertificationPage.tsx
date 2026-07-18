@@ -44,7 +44,9 @@ export function EquipmentCertificationPage() {
   const [formError, setFormError] = useState("");
 
   const fetchData = async () => {
-    setLoading(true);
+    if (records.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await getEquipmentCertifications(filters);
@@ -181,7 +183,7 @@ export function EquipmentCertificationPage() {
         <CardContent className="p-0">
           {error ? (
             <div className="p-6 text-center text-sm text-red-500">{error}</div>
-          ) : loading ? (
+          ) : (loading && records.length === 0) ? (
             <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
           ) : records.length === 0 ? (
             <div className="p-10 text-center">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import { Icon } from '../display/Icon';
 import { Colors } from '../../theme/colors';
 
 interface LocationCardProps {
@@ -15,7 +16,7 @@ export function LocationCard({ title, subtitle, icon = '📍', onEdit, onPress, 
   return (
     <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={onPress ? 0.8 : 1}>
       <View style={styles.iconBox}>
-        <Text style={styles.iconText}>{icon}</Text>
+        <Icon emoji={icon} style={styles.iconText} color={Colors.white} />
       </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>

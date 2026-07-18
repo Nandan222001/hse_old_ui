@@ -4,6 +4,7 @@ import {
   StyleSheet, RefreshControl, ActivityIndicator, Image,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { Icon } from '../components/display/Icon';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
 import { useAuthStore } from '../store/authStore';
@@ -31,11 +32,11 @@ export default function DashboardScreen({ navigation }: any) {
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn}>
-          <Text style={styles.headerIcon}>☰</Text>
+          <Icon name="menu" style={styles.headerIcon} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
-          <Text style={styles.headerIcon}>🔔</Text>
+          <Icon name="bell" style={styles.headerIcon} />
           <View style={styles.badge} />
         </TouchableOpacity>
       </View>
@@ -56,13 +57,42 @@ export default function DashboardScreen({ navigation }: any) {
           </Text>
         </View>
 
+        {/* Quick Actions */}
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickActionsGrid}>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('SafetyChecklist')}>
+            <Icon name="clipboard" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Checklist</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportIncident')}>
+            <Icon name="alert-octagon" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Report Incident</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportNearMiss')}>
+            <Icon name="alert-triangle" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Near Miss</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('RaisePermit')}>
+            <Icon name="edit-3" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Raise Permit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportUnsafeAct')}>
+            <Icon name="octagon" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Unsafe Act</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('SafetyTraining')}>
+            <Icon name="award" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Training</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Stats Section */}
         <View style={styles.statsRow}>
           {/* Card 1: Safety Score */}
           <View style={styles.statCard}>
             <View style={styles.statCardHeader}>
               <Text style={styles.statCardLabel}>Safety Score</Text>
-              <Text style={styles.trendIcon}>📈</Text>
+              <Icon name="trending-up" style={styles.trendIcon} color="#22C55E" />
             </View>
             <View style={styles.statCardValueRow}>
               <Text style={styles.statCardValue}>88</Text>
@@ -78,7 +108,7 @@ export default function DashboardScreen({ navigation }: any) {
           <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Tasks')}>
             <View style={styles.statCardHeader}>
               <Text style={styles.statCardLabel}>Pending Tasks</Text>
-              <Text style={styles.cardHeaderIcon}>📋</Text>
+              <Icon name="clipboard" style={styles.cardHeaderIcon} />
             </View>
             <Text style={styles.statCardValue}>{pending}</Text>
             <Text style={styles.statCardSubText}>2 overdue, 3 for today</Text>
@@ -88,7 +118,7 @@ export default function DashboardScreen({ navigation }: any) {
           <TouchableOpacity style={styles.statCard} onPress={() => navigation.navigate('Alerts')}>
             <View style={styles.statCardHeader}>
               <Text style={styles.statCardLabel}>Active Permits</Text>
-              <Text style={styles.cardHeaderIcon}>📍</Text>
+              <Icon name="map-pin" style={styles.cardHeaderIcon} />
             </View>
             <Text style={styles.statCardValue}>{shiftSummary?.active_permits ?? 2}</Text>
             <Text style={styles.statCardSubText}>Track active & pending safety permits</Text>
@@ -156,7 +186,10 @@ export default function DashboardScreen({ navigation }: any) {
               style={styles.featuredBtn}
               onPress={() => navigation.navigate('SafetyTraining', { screen: 'Detail' })}
             >
-              <Text style={styles.featuredBtnText}>Acknowledge Participation  🛡️</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.featuredBtnText}>Acknowledge Participation</Text>
+                <Icon name="shield" size={16} color="#FFFFFF" style={{ marginLeft: 8 }} />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -173,7 +206,7 @@ export default function DashboardScreen({ navigation }: any) {
           {/* Item 1 */}
           <View style={styles.activityItem}>
             <View style={[styles.activityIconBox, { backgroundColor: '#E8F5E9' }]}>
-              <Text style={styles.activityIcon}>✅</Text>
+              <Icon name="check-circle" style={styles.activityIcon} color="#2E7D32" />
             </View>
             <View style={styles.activityBody}>
               <Text style={styles.activityTitle}>Personal Protective Equipment Check</Text>
@@ -187,7 +220,7 @@ export default function DashboardScreen({ navigation }: any) {
           {/* Item 2 */}
           <View style={styles.activityItem}>
             <View style={[styles.activityIconBox, { backgroundColor: '#FFEBEE' }]}>
-              <Text style={styles.activityIcon}>⚠️</Text>
+              <Icon name="alert-triangle" style={styles.activityIcon} color="#C62828" />
             </View>
             <View style={styles.activityBody}>
               <Text style={styles.activityTitle}>Minor Spill Reported</Text>
@@ -201,7 +234,7 @@ export default function DashboardScreen({ navigation }: any) {
           {/* Item 3 */}
           <View style={styles.activityItem}>
             <View style={[styles.activityIconBox, { backgroundColor: '#E3F2FD' }]}>
-              <Text style={styles.activityIcon}>📄</Text>
+              <Icon name="file-text" style={styles.activityIcon} color="#1565C0" />
             </View>
             <View style={styles.activityBody}>
               <Text style={styles.activityTitle}>Hot Work Permit #882 Approved</Text>
@@ -221,7 +254,7 @@ export default function DashboardScreen({ navigation }: any) {
         style={styles.fab}
         onPress={() => navigation.navigate('RaisePermit')}
       >
-        <Text style={styles.fabIcon}>+</Text>
+        <Icon name="plus" size={28} color="#FFFFFF" />
       </TouchableOpacity>
     </ScreenLayout>
   );
@@ -566,6 +599,37 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  quickActionBtn: {
+    width: '31%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  quickActionIcon: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+    textAlign: 'center',
   },
   fab: {
     position: 'absolute',
