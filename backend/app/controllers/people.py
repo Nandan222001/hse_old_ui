@@ -187,7 +187,14 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         .order_by("yr", "mo")
         .all()
     )
-    toolbox_trend = [{"month": MONTH_NAMES[int(r.mo) - 1], "meetings": r.cnt} for r in toolbox_rows]
+    toolbox_counts = {(int(r.yr), int(r.mo)): r.cnt for r in toolbox_rows}
+    toolbox_trend = []
+    for i in range(8):
+        bucket_date = _add_months(eight_months_ago, i)
+        toolbox_trend.append({
+            "month": MONTH_NAMES[bucket_date.month - 1],
+            "meetings": toolbox_counts.get((bucket_date.year, bucket_date.month), 0),
+        })
 
     role_headcount = dict(
         db.query(Role.role_name, func.count(Employee.id))
