@@ -8,7 +8,14 @@ const config = {
   watchFolders: [projectRoot],
   resolver: {
     nodeModulesPaths: [path.resolve(projectRoot, 'node_modules')],
+    blockList: [
+      // Exclude Android CMake build dirs to prevent Metro watcher crashes
+      /android\/app\/.cxx\/.*/,
+      /android\/app\/build\/.*/,
+      /android\/build\/.*/,
+    ],
   },
 };
 
 module.exports = mergeConfig(getDefaultConfig(projectRoot), config);
+

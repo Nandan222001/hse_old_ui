@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, ActivityIndicator, Image, TextInput,
+} from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { Card } from '../components/cards/Card';
-import { Avatar } from '../components/display/Avatar';
 import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { sosService } from '../services/sosService';
@@ -10,6 +11,13 @@ import { sosService } from '../services/sosService';
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const [sosLoading, setSosLoading] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const name       = user?.name       || 'Alex Safety';
+  const empId      = user?.employee_id || '99402';
+  const role       = user?.role        || 'Senior Site Supervisor';
+  const site       = user?.site        || 'Site Alpha, Chicago';
+  const department = user?.department  || 'Infrastructure & Logistics';
 
   const handleSOS = () => {
     Alert.alert(
@@ -38,11 +46,6 @@ export default function ProfileScreen({ navigation }: any) {
       ],
     );
   };
-  const name       = user?.name       || 'Worker';
-  const empId      = user?.employee_id || '—';
-  const role       = user?.role        || 'Worker';
-  const site       = user?.site        || '';
-  const department = user?.department  || '';
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -58,102 +61,221 @@ export default function ProfileScreen({ navigation }: any) {
     ]);
   };
 
-  const MENU = [
-    {
-      icon: '🎓',
-      label: 'Safety Training',
-      sublabel: 'View assigned courses',
-      onPress: () => navigation.navigate('SafetyTraining'),
-    },
-    {
-      icon: '📋',
-      label: 'My Permits',
-      sublabel: 'Active & past work permits',
-      onPress: () => navigation.navigate('Permits'),
-    },
-    {
-      icon: '🔔',
-      label: 'Notifications',
-      sublabel: 'Safety alerts & updates',
-      onPress: () => navigation.navigate('Notifications'),
-    },
-    {
-      icon: '🔑',
-      label: 'Change Password',
-      sublabel: 'Update your login PIN',
-      onPress: () => navigation.navigate('ChangePassword'),
-    },
-    {
-      icon: '⚙️',
-      label: 'Settings',
-      sublabel: 'App preferences',
-      onPress: () => Alert.alert('Coming Soon', 'App settings will be available in a future update.'),
-    },
-  ];
-
   return (
-    <ScreenLayout>
+    <ScreenLayout bg="#F8FAFC">
+      {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <TouchableOpacity style={styles.headerBtn}>
+          <Text style={styles.headerIcon}>☰</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{name}'s Profile</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
+          <Text style={styles.headerIcon}>🔔</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <Avatar name={name} size={80} />
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300' }}
+              style={styles.avatar}
+            />
+            <TouchableOpacity style={styles.editBtn}>
+              <Text style={styles.editIcon}>🖊️</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.verifiedBadge}>
+            <Text style={styles.verifiedBadgeText}>Verified Professional</Text>
+          </View>
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.empId}>Employee ID: {empId}</Text>
-          <Text style={styles.role}>{role}</Text>
-          {(site || department) ? (
-            <View style={styles.siteTag}>
-              <Text style={styles.siteTagText}>📍 {[site, department].filter(Boolean).join(' • ')}</Text>
-            </View>
-          ) : null}
+          <Text style={styles.roleSub}>{role} • {department}</Text>
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailText}>📍 {site}</Text>
+            <Text style={styles.detailText}>🆔 Emp ID: #{empId}</Text>
+          </View>
+          <Text style={styles.joinedText}>📅 Joined Sept 2021</Text>
+
+          <View style={styles.btnRow}>
+            <TouchableOpacity style={styles.btnPrimary}>
+              <Text style={styles.btnPrimaryText}>View Full Bio</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.btnSecondary}>
+              <Text style={styles.btnSecondaryText}>Download CV</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Menu */}
-        <Card style={styles.menuCard} elevation={1}>
-          {MENU.map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.menuRow, i < MENU.length - 1 && styles.menuDivider]}
-              onPress={item.onPress}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
-              <View style={styles.menuTextGroup}>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                <Text style={styles.menuSublabel}>{item.sublabel}</Text>
-              </View>
-              <Text style={styles.menuArrow}>›</Text>
-            </TouchableOpacity>
-          ))}
-        </Card>
-
-        {/* Emergency SOS */}
-        <TouchableOpacity
-          style={[styles.sosCard, sosLoading && { opacity: 0.7 }]}
-          onPress={handleSOS}
-          activeOpacity={0.85}
-          disabled={sosLoading}
-        >
-          <View style={styles.sosLeft}>
-            <Text style={styles.sosIcon}>🆘</Text>
-            <View>
-              <Text style={styles.sosTitle}>Emergency SOS</Text>
-              <Text style={styles.sosSub}>Alert supervisors immediately</Text>
+        {/* Safety Performance */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardSectionTitle}>Safety Performance</Text>
+            <View style={styles.performanceBadge}>
+              <Text style={styles.performanceBadgeText}>+4% Monthly</Text>
             </View>
           </View>
-          {sosLoading
-            ? <ActivityIndicator color={Colors.white} />
-            : <Text style={styles.sosArrow}>›</Text>
-          }
+          <Text style={styles.scoreText}>98.2</Text>
+          <Text style={styles.scoreLabel}>Compliance Score Rating</Text>
+
+          {/* Simple Chart Representation */}
+          <View style={styles.chartContainer}>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 60 }]} />
+              <Text style={styles.chartLabel}>JAN</Text>
+            </View>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 68 }]} />
+              <Text style={styles.chartLabel}>FEB</Text>
+            </View>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 75 }]} />
+              <Text style={styles.chartLabel}>MAR</Text>
+            </View>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 82 }]} />
+              <Text style={styles.chartLabel}>APR</Text>
+            </View>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 88 }]} />
+              <Text style={styles.chartLabel}>MAY</Text>
+            </View>
+            <View style={styles.barGroup}>
+              <View style={[styles.chartBar, { height: 95, backgroundColor: '#2563EB' }]} />
+              <Text style={styles.chartLabel}>JUN</Text>
+              <Text style={styles.chartValueLabel}>98</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* My Achievements */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardSectionTitle}>My Achievements</Text>
+            <TouchableOpacity>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.achieveRow}>
+            <View style={styles.achieveItem}>
+              <View style={[styles.achieveIconBox, { backgroundColor: '#E8F5E9' }]}>
+                <Text style={styles.achieveIcon}>🏆</Text>
+              </View>
+              <Text style={styles.achieveTitle}>Safety Lead</Text>
+              <Text style={styles.achieveDesc}>500 Days Clean</Text>
+            </View>
+
+            <View style={styles.achieveItem}>
+              <View style={[styles.achieveIconBox, { backgroundColor: '#F3E5F5' }]}>
+                <Text style={styles.achieveIcon}>⚡</Text>
+              </View>
+              <Text style={styles.achieveTitle}>First Responder</Text>
+              <Text style={styles.achieveDesc}>L3 Certified</Text>
+            </View>
+
+            <View style={styles.achieveItem}>
+              <View style={[styles.achieveIconBox, { backgroundColor: '#E3F2FD' }]}>
+                <Text style={styles.achieveIcon}>⚙️</Text>
+              </View>
+              <Text style={styles.achieveTitle}>Risk Guru</Text>
+              <Text style={styles.achieveDesc}>100 Inspections</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Emergency Contact */}
+        <View style={styles.emergencyCard}>
+          <View style={styles.emergencyHeader}>
+            <Text style={styles.emergencyIcon}>📞</Text>
+            <Text style={styles.emergencyTitle}>Emergency Contact</Text>
+          </View>
+          <Text style={styles.emergencyName}>Sarah Safety (Spouse)</Text>
+          <Text style={styles.emergencyPhone}>+1 (555) 012-3456</Text>
+
+          <TouchableOpacity style={styles.sosBtn} onPress={handleSOS}>
+            {sosLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.sosBtnText}>📞 SOS Call</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Completed Training & Certifications */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardSectionTitle}>Completed Training & Certifications</Text>
+          </View>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search certifications..."
+              placeholderTextColor="#94A3B8"
+              value={search}
+              onChangeText={setSearch}
+            />
+          </View>
+
+          <View style={styles.table}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableCol, { flex: 2 }]}>Course Name</Text>
+              <Text style={styles.tableCol}>Completion Date</Text>
+              <Text style={styles.tableCol}>Expiry Date</Text>
+            </View>
+
+            {/* Row 1 */}
+            <View style={styles.tableRow}>
+              <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🧯</Text></View>
+                <View>
+                  <Text style={styles.courseName}>Advanced Fire Safety</Text>
+                  <Text style={styles.courseCode}>HSE-7021</Text>
+                </View>
+              </View>
+              <Text style={styles.tableCol}>May 12, 2023</Text>
+              <Text style={styles.tableCol}>May 12, 2025</Text>
+            </View>
+
+            {/* Row 2 */}
+            <View style={styles.tableRow}>
+              <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🩹</Text></View>
+                <View>
+                  <Text style={styles.courseName}>Emergency First Aid</Text>
+                  <Text style={styles.courseCode}>HSE-1105</Text>
+                </View>
+              </View>
+              <Text style={styles.tableCol}>Jan 05, 2024</Text>
+              <Text style={styles.tableCol}>Jan 05, 2026</Text>
+            </View>
+
+            {/* Row 3 */}
+            <View style={styles.tableRow}>
+              <View style={[styles.tableCol, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                <View style={styles.tableIconBox}><Text style={styles.tableIcon}>🔧</Text></View>
+                <View>
+                  <Text style={styles.courseName}>Work at Height</Text>
+                  <Text style={styles.courseCode}>HSE-4482</Text>
+                </View>
+              </View>
+              <Text style={styles.tableCol}>Nov 20, 2022</Text>
+              <Text style={[styles.tableCol, { color: '#EF4444' }]}>Nov 20, 2024</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Settings / Logs */}
+        <TouchableOpacity style={styles.changePasswordBtn} onPress={() => navigation.navigate('ChangePassword')}>
+          <Text style={styles.changePasswordText}>🔑 Change Access PIN</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-        <View style={{ height: 32 }} />
+
+        <View style={{ height: 60 }} />
       </ScrollView>
     </ScreenLayout>
   );
@@ -161,51 +283,390 @@ export default function ProfileScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 52, paddingBottom: 16, paddingHorizontal: 20,
-    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.textDark },
-  scroll: { flex: 1, padding: 16 },
-
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  headerIcon: {
+    fontSize: 22,
+    color: '#0F172A',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    letterSpacing: -0.5,
+  },
+  scroll: {
+    flex: 1,
+    padding: 16,
+  },
   profileCard: {
-    backgroundColor: Colors.primary, borderRadius: 20, padding: 24,
-    alignItems: 'center', marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
   },
-  name: { fontSize: 20, fontWeight: '800', color: Colors.white, marginTop: 14, marginBottom: 4 },
-  empId: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 4 },
-  role: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginBottom: 12 },
-  siteTag: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
-  siteTagText: { color: Colors.white, fontSize: 12 },
-
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  statCard: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 24, fontWeight: '800' },
-  statLabel: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
-
-  menuCard: { padding: 0, overflow: 'hidden', marginBottom: 16 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
-  menuDivider: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  menuIcon: { fontSize: 22, width: 32 },
-  menuTextGroup: { flex: 1 },
-  menuLabel: { fontSize: 15, color: Colors.textDark, fontWeight: '600' },
-  menuSublabel: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
-  menuArrow: { fontSize: 22, color: Colors.textLight },
-
-  sosCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.critical, borderRadius: 14,
-    paddingVertical: 16, paddingHorizontal: 18, marginBottom: 12,
-    elevation: 3, shadowColor: Colors.critical, shadowOpacity: 0.35, shadowRadius: 6,
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
   },
-  sosLeft:  { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  sosIcon:  { fontSize: 28 },
-  sosTitle: { color: Colors.white, fontWeight: '800', fontSize: 15 },
-  sosSub:   { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
-  sosArrow: { color: Colors.white, fontSize: 26, fontWeight: '300' },
-
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#EFF6FF',
+  },
+  editBtn: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  editIcon: {
+    fontSize: 12,
+  },
+  verifiedBadge: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  name: {
+    fontSize: 24,
+    fontWeight: '850',
+    color: '#0F172A',
+  },
+  roleSub: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 12,
+  },
+  detailText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  joinedText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+    width: '100%',
+  },
+  btnPrimary: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  btnSecondary: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSecondaryText: {
+    color: '#2563EB',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  performanceBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  performanceBadgeText: {
+    color: '#15803D',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  scoreText: {
+    fontSize: 36,
+    fontWeight: '850',
+    color: '#1E3A8A',
+  },
+  scoreLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  chartContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 120,
+    marginTop: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  barGroup: {
+    alignItems: 'center',
+    width: '14%',
+  },
+  chartBar: {
+    width: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  chartLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '700',
+  },
+  chartValueLabel: {
+    position: 'absolute',
+    top: -20,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  viewAllText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  achieveRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  achieveItem: {
+    width: '30%',
+    alignItems: 'center',
+  },
+  achieveIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  achieveIcon: {
+    fontSize: 22,
+  },
+  achieveTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  achieveDesc: {
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  emergencyCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  emergencyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  emergencyIcon: {
+    fontSize: 18,
+  },
+  emergencyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  emergencyName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7F1D1D',
+  },
+  emergencyPhone: {
+    fontSize: 24,
+    fontWeight: '850',
+    color: '#991B1B',
+    marginVertical: 6,
+  },
+  sosBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: 12,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  sosBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  searchContainer: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 38,
+    marginBottom: 14,
+    justifyContent: 'center',
+  },
+  searchInput: {
+    fontSize: 13,
+    color: '#0F172A',
+    padding: 0,
+  },
+  table: {
+    marginTop: 6,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#E2E8F0',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  tableCol: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tableIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableIcon: {
+    fontSize: 12,
+  },
+  courseName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  courseCode: {
+    fontSize: 9,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  changePasswordBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  changePasswordText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '700',
+  },
   logoutBtn: {
-    borderWidth: 2, borderColor: Colors.critical, borderRadius: 12,
-    paddingVertical: 14, alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoutText: { color: Colors.critical, fontWeight: '700', fontSize: 15 },
+  logoutText: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '700',
+  },
 });

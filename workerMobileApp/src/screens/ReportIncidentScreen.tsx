@@ -1,181 +1,340 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, TextInput, ActivityIndicator,
+} from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { AppHeader } from '../components/layout/AppHeader';
-import { FormSection } from '../components/layout/FormSection';
-import { Input } from '../components/form/Input';
-import { TextArea } from '../components/form/TextArea';
-import { ChipSelector } from '../components/form/ChipSelector';
-import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
-import { SeveritySelector } from '../components/display/SeveritySelector';
-import { Avatar } from '../components/display/Avatar';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
-import { usePhotoCapture } from '../hooks/usePhotoCapture';
-import { IncidentType, SeverityLevel } from '../types';
-
-const INCIDENT_TYPES = ['Injury', 'Spill', 'Fire', 'Equipment Damage', 'Near Miss'];
-
-const CHIP_TO_INCIDENT_TYPE: Record<string, IncidentType> = {
-  'Injury':           'injury',
-  'Spill':            'spill',
-  'Fire':             'fire',
-  'Equipment Damage': 'equipment_damage',
-  'Near Miss':        'near_miss',
-};
 
 export default function ReportIncidentScreen({ navigation }: any) {
-  const { reportIncident, isLoading } = useIncidents();
-  const { photoUris, attachments: photoAttachments, launch: launchPhoto, removePhoto } = usePhotoCapture();
-
+  const { reportIncident, isLoading: isSubmitting } = useIncidents();
   const [incidentType, setIncidentType] = useState('Injury');
-  const [date,         setDate]         = useState(new Date().toLocaleDateString('en-GB'));
-  const [time,         setTime]         = useState(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
-  const [location,     setLocation]     = useState('');
-  const [description,  setDescription]  = useState('');
-  const [actions,      setActions]      = useState('');
-  const [severity,     setSeverity]     = useState<SeverityLevel>('medium');
-  const [errors,       setErrors]       = useState<Record<string, string>>({});
+  const [description, setDescription] = useState('');
+  const [severity, setSeverity] = useState<number>(3);
 
-  const validate = (): boolean => {
-    const e: Record<string, string> = {};
-    if (!location.trim())    e.location    = 'Location is required';
-    if (!description.trim()) e.description = 'Description is required';
-    if (!actions.trim())     e.actions     = 'Immediate actions are required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) return;
+  const handleNext = async () => {
+    if (!description.trim()) {
+      Alert.alert('Required', 'Please enter a description of the incident.');
+      return;
+    }
+    
+    const severityMap: Record<number, string> = {
+      1: 'low',
+      2: 'medium',
+      3: 'medium',
+      4: 'high',
+      5: 'critical',
+    };
 
     const ok = await reportIncident({
-      incident_type:     CHIP_TO_INCIDENT_TYPE[incidentType] ?? 'injury',
-      date,
-      time,
-      location:          location.trim(),
-      description:       description.trim(),
-      immediate_actions: actions.trim(),
-      severity,
-      photos: photoAttachments.length > 0 ? photoAttachments : undefined,
+      incident_type: incidentType.toLowerCase(),
+      severity: severityMap[severity] || 'medium',
+      description: description.trim(),
+      incident_datetime: new Date().toISOString(),
+      location: 'Zone B - Sector 4',
+      immediate_actions: 'Area cordoned off, first aid applied.',
     });
 
     if (ok) {
-      Alert.alert('Report Submitted', 'Your incident report has been submitted confidentially.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      Alert.alert(
+        'Success',
+        'Incident report submitted successfully to the safety team.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
     } else {
-      Alert.alert('Submission Failed', 'Could not submit report. Please try again.');
+      Alert.alert('Submission Failed', 'Failed to report the incident. Please try again.');
     }
   };
 
   return (
-    <ScreenLayout>
-      <AppHeader
-        title="Safety Suite"
-        onBack={() => navigation.goBack()}
-        rightNode={<Avatar emoji="👷" size={36} bg={Colors.background} />}
-      />
+    <ScreenLayout bg="#F8FAFC">
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.headerIcon}>☰</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>SafeGuard HSE</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
+          <Text style={styles.headerIcon}>🔔</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Step Indicator */}
+      <View style={styles.stepIndicatorRow}>
+        <View style={styles.segmentsContainer}>
+          <View style={[styles.segment, styles.segmentActive]} />
+          <View style={styles.segment} />
+          <View style={styles.segment} />
+        </View>
+        <Text style={styles.stepText}>Step 1/3</Text>
+      </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Report Incident</Text>
-        <Text style={styles.pageSub}>Provide detailed information for the safety audit trail.</Text>
+        <Text style={styles.sectionTitle}>Incident Details</Text>
+        <Text style={styles.sectionSub}>Provide the initial classification and description.</Text>
 
-        <FormSection label="Incident Type">
-          <ChipSelector
-            options={INCIDENT_TYPES}
-            value={incidentType}
-            onChange={v => { setIncidentType(v); setErrors(e => ({ ...e, incidentType: '' })); }}
+        {/* Incident Type Dropdown */}
+        <Text style={styles.inputLabel}>Incident Type</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => {
+          Alert.alert('Select Incident Type', '', [
+            { text: 'Injury', onPress: () => setIncidentType('Injury') },
+            { text: 'Spill', onPress: () => setIncidentType('Spill') },
+            { text: 'Fire', onPress: () => setIncidentType('Fire') },
+            { text: 'Equipment Damage', onPress: () => setIncidentType('Equipment Damage') },
+            { text: 'Near Miss', onPress: () => setIncidentType('Near Miss') },
+          ]);
+        }}>
+          <Text style={styles.dropdownValue}>{incidentType}</Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
+
+        {/* Description Input */}
+        <Text style={styles.inputLabel}>Description</Text>
+        <View style={styles.textAreaContainer}>
+          <TextInput
+            style={styles.textArea}
+            placeholder="Describe what happened in detail..."
+            placeholderTextColor="#94A3B8"
+            multiline
+            numberOfLines={5}
+            textAlignVertical="top"
+            value={description}
+            onChangeText={setDescription}
           />
-        </FormSection>
-
-        <View style={styles.twoCol}>
-          <Input label="Date" value={date} onChangeText={setDate} containerStyle={styles.half} />
-          <Input label="Time" value={time} onChangeText={setTime} containerStyle={styles.half} />
         </View>
 
-        <FormSection label="Location">
-          <Input
-            placeholder="Specify location..."
-            value={location}
-            onChangeText={v => { setLocation(v); setErrors(e => ({ ...e, location: '' })); }}
-            rightIcon="🎯"
-            error={errors.location}
-          />
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapText}>📍 Pin on Map</Text>
-          </View>
-        </FormSection>
+        {/* Severity Level */}
+        <Text style={styles.inputLabel}>Severity Level</Text>
+        <View style={styles.severityRow}>
+          {[1, 2, 3, 4, 5].map((level) => (
+            <TouchableOpacity
+              key={level}
+              style={[styles.severityBtn, severity === level && styles.severityBtnActive]}
+              onPress={() => setSeverity(level)}
+            >
+              <Text style={[styles.severityBtnText, severity === level && styles.severityBtnTextActive]}>
+                {level}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.severityLimitsRow}>
+          <Text style={styles.limitText}>LOW</Text>
+          <Text style={styles.limitText}>CRITICAL</Text>
+        </View>
 
-        <FormSection label="Description of Incident">
-          <TextArea
-            placeholder="Describe what happened in detail..."
-            value={description}
-            onChangeText={v => { setDescription(v); setErrors(e => ({ ...e, description: '' })); }}
-            minHeight={90}
-            error={errors.description}
-          />
-        </FormSection>
-
-        <FormSection label="Immediate Actions Taken">
-          <Input
-            placeholder="e.g. Area cordoned off, first aid..."
-            value={actions}
-            onChangeText={v => { setActions(v); setErrors(e => ({ ...e, actions: '' })); }}
-            error={errors.actions}
-          />
-        </FormSection>
-
-        <FormSection label="Severity Level">
-          <SeveritySelector value={severity} onChange={v => setSeverity(v as SeverityLevel)} />
-        </FormSection>
-
-        <FormSection label="Upload Evidence">
-          <PhotoUploadBox
-            photos={photoUris}
-            onTakePhoto={launchPhoto}
-            onRemove={removePhoto}
-            subtitle="Tap to add photos — camera or gallery (JPG, PNG)"
-          />
-        </FormSection>
-
-        <TouchableOpacity
-          style={[styles.submitBtn, isLoading && styles.submitDisabled]}
-          onPress={handleSubmit}
-          activeOpacity={0.85}
-          disabled={isLoading}
-        >
-          {isLoading
-            ? <ActivityIndicator color={Colors.white} />
-            : <Text style={styles.submitText}>▶ Submit Report</Text>
-          }
-        </TouchableOpacity>
-        <Text style={styles.confidential}>CONFIDENTIAL & SECURE SUBMISSION</Text>
-        <View style={{ height: 32 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Footer Actions */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.draftBtn}>
+          <Text style={styles.draftBtnText}>💾 Draft</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.nextBtn} onPress={handleNext} disabled={isSubmitting}>
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.nextBtnText}>Next  ➔</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, padding: 16 },
-  pageTitle: { fontSize: 22, fontWeight: '800', color: Colors.textDark, marginBottom: 4, marginTop: 8 },
-  pageSub: { fontSize: 13, color: Colors.textMuted, marginBottom: 18 },
-
-  twoCol: { flexDirection: 'row', gap: 10 },
-  half: { flex: 1 },
-
-  mapPlaceholder: {
-    height: 110, backgroundColor: '#CFD8DC', borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center', marginTop: 8,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  mapText: { fontSize: 15, fontWeight: '700', color: Colors.white },
-
-  submitBtn: {
-    backgroundColor: Colors.primary, borderRadius: 12,
-    paddingVertical: 16, alignItems: 'center', marginBottom: 8,
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
   },
-  submitDisabled: { opacity: 0.6 },
-  submitText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  confidential: { textAlign: 'center', fontSize: 11, color: Colors.textLight, letterSpacing: 0.5 },
+  headerIcon: {
+    fontSize: 22,
+    color: '#0F172A',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    letterSpacing: -0.5,
+  },
+  stepIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#EFF6FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  segmentsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginRight: 16,
+  },
+  segment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+  },
+  segmentActive: {
+    backgroundColor: '#2563EB',
+  },
+  stepText: {
+    fontSize: 12,
+    fontWeight: '750',
+    color: '#2563EB',
+  },
+  scroll: {
+    flex: 1,
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  sectionSub: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 20,
+  },
+  dropdownValue: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  chevronIcon: {
+    fontSize: 10,
+    color: '#64748B',
+  },
+  textAreaContainer: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 20,
+  },
+  textArea: {
+    height: 120,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  severityRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  severityBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  severityBtnActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  severityBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  severityBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  severityLimitsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  limitText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    padding: 16,
+    paddingBottom: 24,
+  },
+  draftBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  draftBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  nextBtn: {
+    flex: 1.5,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 });

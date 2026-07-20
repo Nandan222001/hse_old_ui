@@ -20,3 +20,4 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: TokenData
+    refresh_token: Optional[str] = None

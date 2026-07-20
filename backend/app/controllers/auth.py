@@ -59,9 +59,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     }
 
     access_token = create_access_token(token_payload)
+    from datetime import timedelta
+    refresh_token = create_access_token(token_payload, expires_delta=timedelta(days=7))
 
     return TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=TokenData(
             user_id=user.id,
@@ -98,4 +101,62 @@ def get_me(request: Request):
         "email": payload.get("email"),
         "role": payload.get("role"),
         "role_level": payload.get("role_level"),
+    }
+
+
+@router.post("/employee/refresh")
+def employee_refresh(payload: dict, db: Session = Depends(get_db)):
+    """Refresh the access token using a refresh token."""
+    refresh_token = payload.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token is required",
+        )
+    # Decode the refresh token
+    token_data = decode_access_token(refresh_token)
+    if not token_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    
+    # Retrieve user
+    user_id = token_data.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token payload",
+        )
+        
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+
+    # Fetch role
+    app_role = db.query(AppRole).filter(AppRole.id == user.app_role_id).first()
+    if not app_role:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User role not found",
+        )
+
+    token_payload = {
+        "sub": str(user.id),
+        "username": user.username,
+        "full_name": user.full_name,
+        "email": user.email,
+        "role": app_role.name,
+        "role_level": app_role.level,
+        "org_id": user.organisation_id,
+    }
+    
+    new_access_token = create_access_token(token_payload)
+    return {
+        "access_token": new_access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
     }

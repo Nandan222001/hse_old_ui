@@ -1,74 +1,367 @@
-import React, { useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, RefreshControl,
+  ActivityIndicator, TextInput, TouchableOpacity,
+} from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { TaskCard } from '../components/cards/TaskCard';
-import { EmptyState } from '../components/feedback/EmptyState';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
-import { formatDueDate } from '../utils/formatters';
 
 export default function TasksScreen({ navigation }: any) {
   const { tasks, isLoading, refetch } = useTasks();
+  const [search, setSearch] = useState('');
 
   const onRefresh = useCallback(() => { refetch(); }, [refetch]);
 
+  // Mock checklist details for custom UI presentation
+  const getSubText = (title: string) => {
+    if (title.includes('Excavator') || title.includes('Braking')) {
+      return { text: 'Requires specialized pressure gauge kit.', icon: '🔧' };
+    }
+    if (title.includes('Perimeter') || title.includes('Tyres')) {
+      return { text: 'Verify structural integrity of the temporary flood barriers.', icon: '🛡️' };
+    }
+    if (title.includes('First Aid') || title.includes('Lights')) {
+      return { text: 'Restock antiseptic wipes and burn gel as needed.', icon: '🩹' };
+    }
+    return { text: 'Check for secondary containment leaks in drum zone.', icon: '🔬' };
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority?.toLowerCase()) {
+      case 'high':
+      case 'critical':
+        return { bg: '#FFEBEE', text: '#C62828', label: 'High' };
+      case 'med':
+      case 'medium':
+        return { bg: '#F3E5F5', text: '#7B1FA2', label: 'Med' };
+      default:
+        return { bg: '#E8F5E9', text: '#2E7D32', label: 'Low' };
+    }
+  };
+
+  // Filter tasks based on search
+  const filteredTasks = tasks.filter(t =>
+    t.title.toLowerCase().includes(search.toLowerCase()) ||
+    t.location.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <ScreenLayout>
+    <ScreenLayout bg="#F8FAFC">
+      {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Tasks</Text>
-        {tasks.length > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{tasks.length}</Text>
-          </View>
-        )}
+        <TouchableOpacity style={styles.headerBtn}>
+          <Text style={styles.headerIcon}>☰</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>SafeGuard HSE</Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
+          <Text style={styles.headerIcon}>🔔</Text>
+        </TouchableOpacity>
       </View>
 
-      {isLoading && tasks.length === 0 ? (
-        <ActivityIndicator
-          color={Colors.primary}
-          size="large"
-          style={{ marginTop: 60 }}
-        />
-      ) : tasks.length === 0 ? (
-        <EmptyState
-          icon="📋"
-          title="No Tasks"
-          subtitle="You have no tasks assigned for this shift. Pull down to refresh."
-        />
-      ) : (
-        <ScrollView
-          style={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
-          }
-        >
-          {tasks.map(t => (
-            <TaskCard
-              key={t.id}
-              title={t.title}
-              location={t.location}
-              priority={t.priority}
-              type={t.type}
-              due={t.due_at ? formatDueDate(t.due_at) : 'Scheduled'}
-              onPress={() => navigation.navigate('PerformTask', { task: t })}
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
+      >
+        {/* Search Bar */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search tasks, equipment, or sites..."
+              placeholderTextColor="#94A3B8"
+              value={search}
+              onChangeText={setSearch}
             />
-          ))}
-          <View style={{ height: 24 }} />
-        </ScrollView>
-      )}
+          </View>
+          <TouchableOpacity style={styles.newBtn} onPress={() => navigation.navigate('SafetyChecklist')}>
+            <Text style={styles.newBtnText}>+ New Task</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Filters */}
+        <View style={styles.filtersRow}>
+          <Text style={styles.filterLabel}>Filters:</Text>
+          <TouchableOpacity style={styles.filterPill}>
+            <Text style={styles.filterPillText}>Priority ∨</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterPill}>
+            <Text style={styles.filterPillText}>Due Date 📅</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterPill}>
+            <Text style={styles.filterPillText}>Status ✓</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Text style={styles.clearAllText}>Clear all</Text>
+          </TouchableOpacity>
+        </View>
+
+        {isLoading && filteredTasks.length === 0 ? (
+          <ActivityIndicator color={Colors.primary} size="large" style={{ marginTop: 40 }} />
+        ) : (
+          <View style={styles.tasksList}>
+            {filteredTasks.map((t) => {
+              const subInfo = getSubText(t.title);
+              const pColors = getPriorityColor(t.priority);
+
+              return (
+                <TouchableOpacity
+                  key={t.id}
+                  style={styles.taskCard}
+                  onPress={() => navigation.navigate('PerformTask', { task: t })}
+                >
+                  <View style={styles.cardHeader}>
+                    {/* Checkbox */}
+                    <View style={styles.checkbox} />
+                    <View style={styles.headerMiddle}>
+                      <Text style={styles.taskTitle}>{t.title}</Text>
+                    </View>
+                    <View style={[styles.priorityBadge, { backgroundColor: pColors.bg }]}>
+                      <Text style={[styles.priorityText, { color: pColors.text }]}>{pColors.label}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText}>📅 Today, 4:00 PM</Text>
+                    <Text style={styles.metaText}>📍 {t.location}</Text>
+                  </View>
+
+                  {/* Sub Instruction Nested Card */}
+                  <View style={styles.instructionCard}>
+                    <Text style={styles.instructionIcon}>{subInfo.icon}</Text>
+                    <Text style={styles.instructionText}>{subInfo.text}</Text>
+                    <Text style={styles.arrowIcon}>❯</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={{ height: 80 }} />
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('SafetyChecklist')}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
     </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingTop: 52, paddingBottom: 16, paddingHorizontal: 20,
-    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.textDark },
-  badge: { backgroundColor: Colors.blue, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
-  scroll: { flex: 1, padding: 16 },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  headerIcon: {
+    fontSize: 22,
+    color: '#0F172A',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    letterSpacing: -0.5,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 10,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: '#64748B',
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    padding: 0,
+  },
+  newBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  filterPill: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterPillText: {
+    fontSize: 12,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  clearAllText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  tasksList: {
+    gap: 14,
+  },
+  taskCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  headerMiddle: {
+    flex: 1,
+    marginRight: 8,
+  },
+  taskTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    lineHeight: 20,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  priorityText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+    paddingLeft: 32,
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  instructionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginLeft: 32,
+  },
+  instructionIcon: {
+    fontSize: 16,
+    marginRight: 10,
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  arrowIcon: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginLeft: 6,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#2563EB',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  fabIcon: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    marginTop: -2,
+  },
 });
