@@ -81,6 +81,11 @@ android {
     externalNativeBuild {
         cmake {
             // No staging override needed on Linux
+            if (System.properties['os.name'].toLowerCase().contains('windows')) {
+                // Windows MAX_PATH (260 chars) breaks ninja on deeply nested project paths;
+                // stage .cxx build output under a short root instead.
+                buildStagingDirectory = file("${System.getenv('LOCALAPPDATA')}/rncxx/workerMobileApp")
+            }
         }
     }
 
