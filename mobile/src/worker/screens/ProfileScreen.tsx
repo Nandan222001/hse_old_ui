@@ -218,7 +218,7 @@ export default function ProfileScreen({ navigation }: any) {
               <View style={[styles.achieveIconBox, { backgroundColor: '#E3F2FD' }]}>
                 <Icon emoji="⚙️" style={styles.achieveIcon} />
               </View>
-              <Text style={styles.achieveTitle}>Risk Guru</Text>
+              <Text style={styles.achieveTitle}>Hazard Guru</Text>
               <Text style={styles.achieveDesc}>100 Inspections</Text>
             </View>
           </View>

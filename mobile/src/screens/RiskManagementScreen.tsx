@@ -12,8 +12,8 @@ export function RiskManagementScreen({ navigation }: any) {
     <ReportWorkflowList
       navigation={navigation}
       reportType="risk"
-      title="Risk Management"
-      emptyTitle="No risk reports to review"
+      title="Hazard Management"
+      emptyTitle="No hazard reports to review"
       emptyIcon="alert-circle-outline"
     />
   );
