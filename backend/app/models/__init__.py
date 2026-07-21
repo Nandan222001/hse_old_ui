@@ -15,6 +15,8 @@ from app.models.employee import Employee
 from app.models.permit_to_work import PermitToWork
 from app.models.incident import Incident
 from app.models.near_miss import NearMiss
+from app.models.unsafe_act import UnsafeAct
+from app.models.risk_report import RiskReport
 from app.models.safety_walk import SafetyWalk
 from app.models.capa_action import CapaAction
 from app.models.shift_schedule import ShiftSchedule
@@ -34,6 +36,7 @@ __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
+    "UnsafeAct", "RiskReport",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",

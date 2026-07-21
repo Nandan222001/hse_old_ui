@@ -1,34 +1,30 @@
 import { apiClient } from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import { TokenStorage } from '../utils/storage';
+import { TokenStorage as WorkerTokenStorage } from '../worker/utils/storage';
 import type { LoginRequest, LoginResponse, User, ChangePasswordRequest } from '../types/auth.types';
+
+/**
+ * The worker app keeps its own AsyncStorage keys (worker_*) so a worker session
+ * can't collide with a supervisor one. Login writes the shared keys, so mirror
+ * the tokens across or the worker apiClient sends no Authorization header.
+ */
+async function syncWorkerSession(res: LoginResponse): Promise<void> {
+  await WorkerTokenStorage.setTokens(res.access_token, res.refresh_token);
+  if (res.user) {
+    await WorkerTokenStorage.setUser(res.user as any);
+  }
+}
 
 export const authService = {
   async login(data: LoginRequest, role: 'manager' | 'supervisor' | 'worker' | 'auditor'): Promise<LoginResponse> {
-    // 1. Manager Role: Local mock login
-    if (role === 'manager') {
-      const mockRes: LoginResponse = {
-        access_token: 'mock-manager-token',
-        refresh_token: 'mock-manager-refresh',
-        user: {
-          id: '1',
-          employee_id: data.employee_id || '8842-TX',
-          name: 'Sarah Mitchell',
-          role: 'Manager',
-          site: 'Houston Refinery • Terminal 4',
-          department: 'HSE & Compliance'
-        }
-      };
-      await TokenStorage.setTokens(mockRes.access_token, mockRes.refresh_token);
-      await TokenStorage.setUser(mockRes.user);
-      await TokenStorage.setSelectedRole(role);
-      return mockRes;
-    }
-
-    // 2. Supervisor / Worker Roles: Try backend API, fall back to mock if network/server is offline
+    // All roles authenticate against the backend so their tokens carry a real
+    // role/org — the manager's approve/close and permit steps hit protected
+    // endpoints that reject the old 'mock-manager-token'. A mock is only used as an
+    // offline fallback below, mirroring the other roles.
     const apiPayload = {
       username: data.employee_id,
-      password: role === 'worker' ? (data.pin || data.password || 'password') : (data.password || 'password')
+      password: data.password || data.pin || 'password'
     };
 
     try {
@@ -38,13 +34,20 @@ export const authService = {
       // Ensure role property exists in user model
       if (resData.user) {
         if (!resData.user.role) {
-          resData.user.role = role === 'supervisor' ? 'Supervisor' : role === 'auditor' ? 'Auditor' : 'Worker';
+          resData.user.role =
+            role === 'supervisor' ? 'Supervisor'
+            : role === 'auditor' ? 'Auditor'
+            : role === 'manager' ? 'Manager'
+            : 'Worker';
         }
       }
 
       await TokenStorage.setTokens(resData.access_token, resData.refresh_token);
       await TokenStorage.setUser(resData.user);
       await TokenStorage.setSelectedRole(role);
+      if (role === 'worker') {
+        await syncWorkerSession(resData);
+      }
       return resData;
     } catch (err: any) {
       console.log('Login API failed, checking network/offline fallback:', err?.message || err);
@@ -77,6 +80,19 @@ export const authService = {
               role: 'Auditor',
               site: 'Houston Refinery • Terminal 4',
               department: 'HSE Audit'
+            }
+          };
+        } else if (role === 'manager') {
+          mockRes = {
+            access_token: 'mock-manager-token',
+            refresh_token: 'mock-manager-refresh',
+            user: {
+              id: '1',
+              employee_id: data.employee_id || '8842-TX',
+              name: 'Sarah Mitchell',
+              role: 'Manager',
+              site: 'Houston Refinery • Terminal 4',
+              department: 'HSE & Compliance'
             }
           };
         } else {
@@ -136,6 +152,8 @@ export const authService = {
   async logout(): Promise<void> {
     try { await apiClient.post(ENDPOINTS.AUTH.LOGOUT); } catch {}
     await TokenStorage.clearAll();
+    // Mirrored in syncWorkerSession on login — clear it or a stale worker token survives logout.
+    await WorkerTokenStorage.clearAll();
   },
 
   async getProfile(): Promise<User> {

@@ -41,10 +41,10 @@ export const incidentService = {
     const hasPhotos = payload.photos && payload.photos.length > 0;
     if (hasPhotos) {
       const form = buildFormData({ ...payload, photos: undefined }, payload.photos);
-      const { data } = await uploadClient.post<Incident>(ENDPOINTS.INCIDENTS.NEAR_MISS, form);
+      const { data } = await uploadClient.post<Incident>(ENDPOINTS.NEAR_MISS.REPORT, form);
       return data;
     }
-    const { data } = await apiClient.post<Incident>(ENDPOINTS.INCIDENTS.NEAR_MISS, payload);
+    const { data } = await apiClient.post<Incident>(ENDPOINTS.NEAR_MISS.REPORT, payload);
     return data;
   },
 
@@ -52,10 +52,10 @@ export const incidentService = {
     const hasPhotos = payload.photos && payload.photos.length > 0;
     if (hasPhotos) {
       const form = buildFormData({ ...payload, photos: undefined }, payload.photos);
-      const { data } = await uploadClient.post<Incident>(ENDPOINTS.INCIDENTS.UNSAFE_ACT, form);
+      const { data } = await uploadClient.post<Incident>(ENDPOINTS.UNSAFE_ACT.REPORT, form);
       return data;
     }
-    const { data } = await apiClient.post<Incident>(ENDPOINTS.INCIDENTS.UNSAFE_ACT, payload);
+    const { data } = await apiClient.post<Incident>(ENDPOINTS.UNSAFE_ACT.REPORT, payload);
     return data;
   },
 };

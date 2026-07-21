@@ -1,0 +1,52 @@
+"""Role checks and lookups shared by the permit and hazard-register workflows.
+
+The report-workflow factory keeps its own private copies of these; this module exists
+so the newer permit/hazard controllers do not have to reach into another controller's
+internals. Kept intentionally tiny.
+"""
+from typing import Optional
+
+from fastapi import HTTPException, status
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+# ── Role constants (same sets the report workflows use, plus Auditor) ─────────
+WORKER_ROLES = {"Worker", "Employee", "Operator", "Technician"}
+SUPERVISOR_ROLES = {"Supervisor", "Site Inspector", "Safety Manager", "Safety_Manager", "Site Engineer"}
+MANAGER_ROLES = {"Manager", "HSE Manager", "Admin", "Superadmin", "Safety Manager", "Safety_Manager", "Director"}
+AUDITOR_ROLES = {"Auditor"}
+ALL_ELEVATED_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES | AUDITOR_ROLES
+
+
+def role_matches(user_role: str, allowed: set) -> bool:
+    """Case-insensitive role check — DB stores 'operator', constants say 'Operator'."""
+    return (user_role or "").strip().lower() in {r.lower() for r in allowed}
+
+
+def require_role(user_role: str, allowed: set, action: str) -> None:
+    if not role_matches(user_role, allowed):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role '{user_role}' is not authorized to {action}",
+        )
+
+
+def employee_id_for(db: Session, user_id: int) -> Optional[int]:
+    row = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": user_id}
+    ).mappings().first()
+    return row["employee_id"] if row else None
+
+
+def station_id_for(db: Session, name: Optional[str], org_id: Optional[int]) -> Optional[int]:
+    """Workers pick a station by name in the app; map it to an id, else leave unset."""
+    if not name:
+        return None
+    row = db.execute(
+        text(
+            "SELECT id FROM working_stations "
+            "WHERE station_name = :name AND organisation_id = :org_id"
+        ),
+        {"name": name, "org_id": org_id},
+    ).mappings().first()
+    return row["id"] if row else None

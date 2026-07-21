@@ -268,17 +268,26 @@ def create_permit(
         {"name": f"%{loc_name}%"}
     ).scalar() or 1
 
+    # The worker raising the permit — stamped so it enters the permit workflow
+    # (supervisor queue) as a proper `requested` entry, not an orphaned row.
+    requester_emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id},
+    ).scalar()
+
     # Insert into permits_to_work
     db.execute(
         text("""
             INSERT INTO permits_to_work (
                 organisation_id, permit_type_id, date_issued, time_issued,
                 location_station_id, work_description, duration_requested_hours,
-                validity_start, validity_end, status
+                validity_start, validity_end, status,
+                workflow_status, requested_by, requested_at, issued_by
             ) VALUES (
                 :org_id, :permit_type_id, :date_issued, :time_issued,
                 :location_station_id, :work_description, :duration,
-                :validity_start, :validity_end, :status
+                :validity_start, :validity_end, :status,
+                'requested', :requested_by, :requested_at, :requested_by
             )
         """),
         {
@@ -291,7 +300,9 @@ def create_permit(
             "duration": data.get("duration_hours", 8),
             "validity_start": datetime.fromisoformat(data.get("start_datetime").replace("Z", "")) if data.get("start_datetime") else datetime.now(),
             "validity_end": datetime.fromisoformat(data.get("end_datetime").replace("Z", "")) if data.get("end_datetime") else datetime.now(),
-            "status": "pending_approval"
+            "status": "pending_approval",
+            "requested_by": requester_emp_id,
+            "requested_at": datetime.now(),
         }
     )
     db.commit()

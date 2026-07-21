@@ -83,3 +83,17 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
         role=role,
         org_id=org_id,
     )
+
+
+def get_current_user_optional(
+    request: Request, db: Session = Depends(get_db)
+) -> Optional[CurrentUser]:
+    """Same as get_current_user but returns None instead of raising.
+
+    Lets an endpoint attribute actions to the JWT user when one is present while
+    still serving callers that identify themselves via X-User-* headers.
+    """
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None

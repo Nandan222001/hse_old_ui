@@ -31,9 +31,7 @@ export default function DashboardScreen({ navigation }: any) {
     <ScreenLayout bg="#F8FAFC">
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Icon name="menu" style={styles.headerIcon} />
-        </TouchableOpacity>
+        <View style={styles.headerBtn} />
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
           <Icon name="bell" style={styles.headerIcon} />

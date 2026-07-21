@@ -22,3 +22,21 @@ class PermitToWork(Base):
     status = Column(String(50))
     deviation_reported = Column(String(10))
     incident_occurred = Column(String(10))
+
+    # ── Worker → Supervisor → Manager → Auditor workflow (migration 031) ──────
+    # `status` above stays the website's field (it counts status='Active'); the app
+    # state machine rides on workflow_status and only flips status to 'Active' on
+    # manager approval.
+    workflow_status = Column(String(50), default="requested")
+    requested_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    requested_at = Column(DateTime, nullable=True)
+    acknowledged_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    supervisor_notes = Column(Text, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    auditor_verified_at = Column(DateTime, nullable=True)
+    verification_result = Column(String(50), nullable=True)  # valid | invalid | not_displayed
+    verification_notes = Column(Text, nullable=True)
