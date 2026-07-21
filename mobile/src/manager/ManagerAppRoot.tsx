@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, Animated } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuth } from "../hooks/useAuth";
 import { incidentWorkflowService } from "../services/incidentWorkflowService";
+import { permitWorkflowService } from "../services/permitWorkflowService";
 
 // Mock Data
 import {
@@ -102,10 +103,36 @@ export function ManagerAppRoot() {
       }
     };
     
+    // Load real permits (pending manager queue + active) for the manager's Permit views.
+    const fetchRealPermits = async () => {
+      try {
+        const [queue, active] = await Promise.all([
+          permitWorkflowService.managerQueue(),
+          permitWorkflowService.active(),
+        ]);
+        const toStatus = (ws: string | null): "APPROVED" | "PENDING" | "REJECTED" =>
+          ws === "approved" ? "APPROVED" : ws === "rejected" ? "REJECTED" : "PENDING";
+        const mapPermit = (p: any) => ({
+          id: p.permit_ref || `#${p.id}`,
+          type: p.work_description || "Permit to Work",
+          area: p.location_station_id ? `Station ${p.location_station_id}` : "Site",
+          applicant: p.requested_by ? `Emp ${p.requested_by}` : "—",
+          status: toStatus(p.workflow_status),
+          raw: p,
+        });
+        const merged = [...(queue || []), ...(active || [])].map(mapPermit);
+        if (merged.length > 0) setPermits(merged as any);
+      } catch (e) {
+        console.log("Failed to load permits:", e);
+      }
+    };
+
     fetchRealIncidents();
+    fetchRealPermits();
 
     const interval = setInterval(() => {
       fetchRealIncidents();
+      fetchRealPermits();
     }, 5000);
 
     return () => {
