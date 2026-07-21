@@ -175,7 +175,7 @@ def create_submission(
     sub_uuid = str(_uuid.uuid4())
     now  = datetime.utcnow()
     cdate = payload.get("checklist_date") or now.date().isoformat()
-    actor_email, actor_role = _actor(request, current_user)
+    actor_email, actor_role = _actor(request, None)
 
     submit_sla_h = sla.get("draft_submission_sla_hours", 24) if sla else 24
     submit_due = now + timedelta(hours=submit_sla_h)
@@ -281,7 +281,7 @@ def save_items(
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be edited")
 
-    actor_email, actor_role = _actor(request, current_user)
+    actor_email, actor_role = _actor(request, None)
     items = payload.get("items", [])
     now = datetime.utcnow()
 
@@ -311,7 +311,7 @@ def submit_submission(
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be submitted")
 
-    actor_email, actor_role = _actor(request, current_user)
+    actor_email, actor_role = _actor(request, None)
     tmpl = _tmpl(db, sub["checklist_type"])
     sla = json.loads(tmpl["sla_json"]) if tmpl.get("sla_json") else {}
     validate_sla_h = sla.get("validation_sla_hours", 48) if sla else 48

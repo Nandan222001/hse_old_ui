@@ -32,7 +32,7 @@ const navGroups: NavGroup[] = [
       { name: "Incidents", icon: AlertTriangle, path: "/violations" },
       { name: "Reporting", icon: Shield, path: "/incident-reporting" },
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
-      { name: "Guide", icon: BookOpenText, path: "/checklists" },
+      { name: "Checklists", icon: BookOpenText, path: "/checklists" },
       { name: "Reports", icon: BarChart3, path: "/analytics" },
       { name: "Data", icon: Database, path: "/data-management" },
       { name: "Settings", icon: Settings, path: "/settings" },

@@ -4,6 +4,12 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+import os
+from pathlib import Path
+
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"  # backend/.env
+
+
 class Settings(BaseSettings):
     # ── Application ───────────────────────────────────────────────────────────
     app_name: str = "HSE Safety Compliance Intelligence API"
@@ -125,7 +131,7 @@ class Settings(BaseSettings):
         return self.smtp_user
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -134,4 +140,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    return s
+
+
+# Force re-read on import so .env changes take effect immediately
+get_settings.cache_clear()

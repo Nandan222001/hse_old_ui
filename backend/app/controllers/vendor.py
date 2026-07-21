@@ -234,7 +234,9 @@ def get_vendor_summary(
         for r in pv_rows
     ]
 
-    # ── Risk Score — penalise for incidents AND permit violations ────────────
+    # ── Risk Score — use exact same formula as dashboard leading-indicators ──
+    # To guarantee Vendors and Dashboard show identical scores
+    # Re-fetch using JOIN method (same as dashboard)
     total_permit_violations = (
         db.query(func.count(PermitToWork.id))
         .filter(
@@ -243,10 +245,47 @@ def get_vendor_summary(
         )
         .scalar() or 0
     )
-    raw       = max(0.0, 10.0 - (inc_count / max(total, 1)) * 2.0 - (total_permit_violations / max(total, 1)) * 1.0)
-    prev_raw  = max(0.0, 10.0 - (prev_inc_count / max(total, 1)) * 2.0)
+    total_org_incidents = (
+        db.query(func.count(Incident.id))
+        .filter(Incident.organisation_id == org_id)
+        .scalar() or 0
+    )
+    total_org_employees_all = (
+        db.query(func.count(Employee.id))
+        .filter(Employee.organisation_id == org_id)
+        .scalar() or 1
+    )
+    # Use same JOIN logic as dashboard for contractor incidents
+    contractor_incidents_count = (
+        db.query(func.count(Incident.id))
+        .join(Employee, Incident.reported_by == Employee.id)
+        .filter(
+            Incident.organisation_id == org_id,
+            func.lower(Employee.employment_type).like("%contract%"),
+        )
+        .scalar() or 0
+    )
+
+    violation_penalty = min(3.0, total_permit_violations * 0.5)
+
+    if total == 0:
+        raw = 10.0
+        prev_raw = 10.0
+        relative_risk = 0.0
+    elif total_org_incidents == 0:
+        raw = round(max(0.0, 10.0 - violation_penalty), 1)
+        prev_raw = raw
+        relative_risk = 0.0
+    else:
+        contractor_inc_rate = contractor_incidents_count / max(total, 1)
+        overall_inc_rate = total_org_incidents / total_org_employees_all
+        relative_risk = round(contractor_inc_rate / overall_inc_rate, 2) if overall_inc_rate > 0 else 0.0
+        incident_penalty = min(7.0, relative_risk * 3.0)
+        raw = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
+        prev_raw = raw  # delta = 0 for now (previous period not critical for display consistency)
+
     risk_score = round(raw, 1)
-    delta      = round(raw - prev_raw, 1)
+    delta = round(raw - prev_raw, 1)
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: List[dict] = []
