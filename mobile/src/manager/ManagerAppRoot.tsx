@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuth } from "../hooks/useAuth";
 import { incidentWorkflowService } from "../services/incidentWorkflowService";
 import { permitWorkflowService } from "../services/permitWorkflowService";
+import { apiClient } from "../api/client";
 
 // Mock Data
 import {
@@ -80,6 +81,35 @@ export function ManagerAppRoot() {
       logout();
     }
   }, [currentScreen, logout]);
+
+  // Load real CAPA actions once on mount (poll would clobber locally-queued ones).
+  useEffect(() => {
+    const fetchRealCapa = async () => {
+      try {
+        const { data } = await apiClient.get("capa-actions/");
+        const list = Array.isArray(data) ? data : [];
+        if (list.length === 0) return;
+        const toStatus = (s: string): "Open" | "In Progress" | "Completed" => {
+          const v = (s || "").toLowerCase();
+          return v === "completed" ? "Completed" : v.includes("progress") ? "In Progress" : "Open";
+        };
+        const mapped = list.map((c: any) => ({
+          id: `CAPA-${c.id}`,
+          desc: c.description || c.action_type || "Corrective action",
+          priority: (String(c.status).toLowerCase() === "overdue" ? "High" : "Medium") as
+            "Critical" | "High" | "Medium" | "Low",
+          status: toStatus(c.status),
+          dueDate: c.due_date ? String(c.due_date).slice(0, 10) : "—",
+          assignee: c.responsible_person_id ? `Emp ${c.responsible_person_id}` : "Unassigned",
+          complianceChecked: toStatus(c.status) === "Completed",
+        }));
+        setCapaItems(mapped as any);
+      } catch (e) {
+        console.log("Failed to load CAPA actions:", e);
+      }
+    };
+    fetchRealCapa();
+  }, []);
 
   // Load real incidents for manager queue
   useEffect(() => {
