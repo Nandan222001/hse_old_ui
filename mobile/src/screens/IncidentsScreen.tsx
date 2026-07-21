@@ -11,6 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { useDashboard } from '../hooks/useDashboard';
+import { apiClient } from '../api/client';
+import { reportWorkflowService } from '../services/reportWorkflowService';
 
 interface Props {
   navigation: any;
@@ -18,51 +20,46 @@ interface Props {
 
 export function IncidentsScreen({ navigation }: Props) {
   const { alerts, refresh, isLoading } = useDashboard();
+  const [nearMissCount, setNearMissCount] = useState(0);
+  const [openCapaCount, setOpenCapaCount] = useState(0);
+
+  const loadCounts = React.useCallback(async () => {
+    try {
+      const stats = await reportWorkflowService('near_miss').getStats();
+      setNearMissCount(stats?.pending_supervisor ?? 0);
+    } catch {}
+    try {
+      const { data } = await apiClient.get('capa-actions/');
+      const list = Array.isArray(data) ? data : [];
+      setOpenCapaCount(
+        list.filter((c: any) => !['completed', 'closed'].includes(String(c.status ?? '').toLowerCase())).length,
+      );
+    } catch {}
+  }, []);
 
   useEffect(() => {
     refresh();
+    loadCounts();
 
     const unsubscribe = navigation.addListener('focus', () => {
       refresh();
+      loadCounts();
     });
 
     const interval = setInterval(() => {
       refresh();
+      loadCounts();
     }, 5000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, [navigation, refresh]);
+  }, [navigation, refresh, loadCounts]);
 
-  // Fallback high-fidelity incident alert list matching Figma
-  const incidentsList = alerts.length > 0 ? alerts : [
-    {
-      id: '1',
-      type: 'critical',
-      message: 'Unsecured Scaffolding on Platform 3',
-      zone: 'Sector 3 - High Risk Area',
-      time_ago: '10m ago',
-      worker_name: 'John Doe',
-    },
-    {
-      id: '2',
-      type: 'warning',
-      message: 'Missing Safety harness on Sector 4 welding operation',
-      zone: 'Sector 4 - Tank Farm',
-      time_ago: '35m ago',
-      worker_name: 'Alex Curry',
-    },
-    {
-      id: '3',
-      type: 'resolved',
-      message: 'Spill Cleanup completed in Storage Hall 2',
-      zone: 'Area B - Warehouse',
-      time_ago: '1h ago',
-      worker_name: 'David Miller',
-    }
-  ];
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  // Real supervisor safety feed (from useDashboard); empty state shown when none.
+  const incidentsList = alerts;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -82,7 +79,7 @@ export function IncidentsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('NearMissManagement')}
             activeOpacity={0.85}
           >
-            <Text style={styles.statVal}>01</Text>
+            <Text style={styles.statVal}>{pad2(nearMissCount)}</Text>
             <Text style={styles.statLbl}>Near Misses</Text>
           </TouchableOpacity>
 
@@ -91,7 +88,7 @@ export function IncidentsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('CAPAManagement')}
             activeOpacity={0.85}
           >
-            <Text style={styles.statVal}>04</Text>
+            <Text style={styles.statVal}>{pad2(openCapaCount)}</Text>
             <Text style={styles.statLbl}>Open CAPA</Text>
           </TouchableOpacity>
         </View>
@@ -177,6 +174,9 @@ export function IncidentsScreen({ navigation }: Props) {
         <Text style={styles.sectionTitle}>Safety Feed & Alerts</Text>
 
         <View style={styles.feedList}>
+          {!isLoading && incidentsList.length === 0 && (
+            <Text style={styles.feedReporter}>No active safety alerts right now.</Text>
+          )}
           {incidentsList.map((item) => {
             const isCritical = item.type === 'critical';
             const isWarning = item.type === 'warning';

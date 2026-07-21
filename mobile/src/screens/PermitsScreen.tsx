@@ -11,11 +11,28 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { permitService } from '../services/permitService';
+import { permitWorkflowService, type PermitListItem } from '../services/permitWorkflowService';
 import type { Permit } from '../types/permit.types';
 
 interface Props {
   navigation: any;
+}
+
+// Map a permit-workflow record to the local display shape used by this screen.
+function toDisplayPermit(p: PermitListItem): Permit {
+  const ws = p.workflow_status || 'requested';
+  const status = ws === 'approved' ? 'approved' : ws === 'rejected' ? 'rejected' : 'pending';
+  return {
+    id: String(p.id),
+    permit_ref: p.permit_ref || `PTW-${p.id}`,
+    permit_type: p.work_description ? 'Permit to Work' : 'Permit to Work',
+    title: p.work_description || 'Permit to Work',
+    location: p.location_station_id ? `Station ${p.location_station_id}` : 'Site',
+    requestor: p.requested_by ? `Emp ${p.requested_by}` : '—',
+    status: status as Permit['status'],
+    risk_level: 'medium',
+    validity_end: p.validity_end ? new Date(p.validity_end).toLocaleString() : 'Awaiting Authorization',
+  };
 }
 
 export function PermitsScreen({ navigation }: Props) {
@@ -27,10 +44,14 @@ export function PermitsScreen({ navigation }: Props) {
     async function loadData() {
       setLoading(true);
       try {
-        const response = await permitService.getPermits();
-        setPermits(response.items);
+        // Supervisor sees permits awaiting review + the active ones on site.
+        const [pending, active] = await Promise.all([
+          permitWorkflowService.pendingReview(),
+          permitWorkflowService.active(),
+        ]);
+        setPermits([...pending, ...active].map(toDisplayPermit));
       } catch {
-        // Fallback static permits if API is empty
+        setPermits([]);
       } finally {
         setLoading(false);
       }
@@ -38,61 +59,13 @@ export function PermitsScreen({ navigation }: Props) {
     loadData();
   }, []);
 
-  const filtered = permits.filter((p) =>
+  const permitsList = permits.filter((p) =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
     p.permit_type.toLowerCase().includes(search.toLowerCase())
   );
 
-  // If no permits returned by API, use high-fidelity fallback list matching Figma
-  const permitsList: Permit[] = filtered.length > 0 ? filtered : [
-    {
-      id: '1',
-      permit_ref: 'PER-2026-001',
-      permit_type: 'Welding & Cutting',
-      title: 'Hot Work Permit',
-      location: 'Sector 4 - Tank Farm',
-      requestor: 'David Miller',
-      status: 'approved',
-      risk_level: 'high',
-      validity_end: '17:00 (In 5h)',
-    },
-    {
-      id: '2',
-      permit_ref: 'PER-2026-002',
-      permit_type: 'Vessel Cleaning',
-      title: 'Confined Space Entry',
-      location: 'Tank 12 - Area B',
-      requestor: 'John Doe',
-      status: 'approved',
-      risk_level: 'high',
-      validity_end: '18:30 (In 6h)',
-    },
-    {
-      id: '3',
-      permit_ref: 'PER-2026-003',
-      permit_type: 'Scaffolding Maintenance',
-      title: 'Working at Height',
-      location: 'Structure C - Roof',
-      requestor: 'Sarah Jenkins',
-      status: 'pending',
-      risk_level: 'medium',
-      validity_end: 'Awaiting Authorization',
-    },
-    {
-      id: '4',
-      permit_ref: 'PER-2026-004',
-      permit_type: 'Substation LOTO',
-      title: 'Electrical Isolation',
-      location: 'Control Room 2',
-      requestor: 'Alex Curry',
-      status: 'rejected',
-      risk_level: 'low',
-      validity_end: 'Expired 2h ago',
-    }
-  ];
-
-  const activeCount = permitsList.filter(p => p.status === 'approved' || p.status === 'active').length;
-  const pendingCount = permitsList.filter(p => p.status === 'pending' || p.status === 'ready_for_review').length;
+  const activeCount = permits.filter(p => p.status === 'approved' || p.status === 'active').length;
+  const pendingCount = permits.filter(p => p.status === 'pending' || p.status === 'ready_for_review').length;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -158,6 +131,9 @@ export function PermitsScreen({ navigation }: Props) {
 
         {/* List */}
         <View style={styles.list}>
+          {!loading && permitsList.length === 0 && (
+            <Text style={styles.metaText}>No permits to review right now.</Text>
+          )}
           {permitsList.map((p) => {
             const isApproved = p.status === 'approved' || p.status === 'active';
             const isPending = p.status === 'pending' || p.status === 'ready_for_review' || p.status === 'awaiting_signature';
