@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView, View, Text, TouchableOpacity,
   StyleSheet, RefreshControl, ActivityIndicator, Image,
@@ -8,16 +8,40 @@ import { Icon } from '../components/display/Icon';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
 import { useAuthStore } from '../store/authStore';
+import apiClient from '../api/client';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks, shiftSummary, isLoading, refetch } = useTasks();
   const user = useAuthStore(s => s.user);
+
+  // Live safety score derived from the site's compliance rating (out of 5).
+  const [safetyScore, setSafetyScore] = useState<number | null>(null);
+  useEffect(() => {
+    apiClient
+      .get('dashboard/stats')
+      .then((res: any) => {
+        const rating = res?.data?.avg_compliance_rating;
+        if (typeof rating === 'number') setSafetyScore(Math.round((rating / 5) * 100));
+      })
+      .catch(() => {});
+  }, []);
 
   const onRefresh = useCallback(() => { refetch(); }, [refetch]);
 
   const total     = shiftSummary?.total_tasks     ?? 5;
   const completed = shiftSummary?.completed_tasks ?? 0;
   const pending   = total - completed;
+
+  // Real breakdown of the worker's own tasks.
+  const now = Date.now();
+  const isSameDay = (d: string) => {
+    const t = new Date(d); const n = new Date();
+    return t.getFullYear() === n.getFullYear() && t.getMonth() === n.getMonth() && t.getDate() === n.getDate();
+  };
+  const overdueCount = (tasks ?? []).filter(
+    (t: any) => t?.due_at && new Date(t.due_at).getTime() < now && t?.status !== 'completed',
+  ).length;
+  const todayCount = (tasks ?? []).filter((t: any) => t?.due_at && isSameDay(t.due_at)).length;
 
   const displayName = user?.name ?? 'Alex';
   const greeting = (() => {
@@ -93,13 +117,13 @@ export default function DashboardScreen({ navigation }: any) {
               <Icon name="trending-up" style={styles.trendIcon} color="#22C55E" />
             </View>
             <View style={styles.statCardValueRow}>
-              <Text style={styles.statCardValue}>88</Text>
+              <Text style={styles.statCardValue}>{safetyScore ?? '—'}</Text>
               <Text style={styles.statCardSubValue}>/ 100</Text>
             </View>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: '88%', backgroundColor: '#22C55E' }]} />
+              <View style={[styles.progressBarFill, { width: `${safetyScore ?? 0}%`, backgroundColor: '#22C55E' }]} />
             </View>
-            <Text style={styles.statCardTrendText}>+2.4% from last week</Text>
+            <Text style={styles.statCardTrendText}>Site compliance rating</Text>
           </View>
 
           {/* Card 2: Pending Tasks */}
@@ -109,7 +133,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Icon name="clipboard" style={styles.cardHeaderIcon} />
             </View>
             <Text style={styles.statCardValue}>{pending}</Text>
-            <Text style={styles.statCardSubText}>2 overdue, 3 for today</Text>
+            <Text style={styles.statCardSubText}>{overdueCount} overdue, {todayCount} for today</Text>
           </TouchableOpacity>
 
           {/* Card 3: Active Permits */}
