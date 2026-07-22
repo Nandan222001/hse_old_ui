@@ -17,7 +17,7 @@ export interface SOSResponse {
 
 export const sosService = {
   async triggerSOS(payload: SOSPayload = {}): Promise<SOSResponse> {
-    const { data } = await apiClient.post<SOSResponse>('/driver/sos', payload);
+    const { data } = await apiClient.post<SOSResponse>('/worker/sos', payload);
     return data;
   },
 };

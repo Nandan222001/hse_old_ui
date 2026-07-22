@@ -12,6 +12,7 @@ import { CheckboxGroup } from '../components/form/Checkbox';
 import { TextArea } from '../components/form/TextArea';
 import { AttachBox } from '../components/form/PhotoUploadBox';
 import { StepProgressBar } from '../components/display/StepDots';
+import { DateTimePickerModal } from '../components/inputs/DateTimePickerModal';
 import { Colors } from '../theme/colors';
 import { usePermits } from '../hooks/usePermits';
 import { PermitType, SafetyGear } from '../types';
@@ -26,6 +27,15 @@ const PERMIT_TYPES: { id: PermitType; icon: string; title: string; desc: string 
 
 const SAFETY_GEAR_OPTIONS = ['Hard Hat', 'Gloves', 'Eye Pro', 'Respirator', 'Safety Harness', 'Hearing Protection'];
 const STEPS = ['Classification', 'Site & Schedule', 'Safety Gear', 'Risk Assessment'];
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2026-06-11 08:00" → "11 Jun 2026, 08:00" for display. */
+function fmtDisplay(value: string): string {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return value;
+  const [, y, mo, d, hh, mm] = m;
+  return `${Number(d)} ${MONTHS_SHORT[Number(mo) - 1]} ${y}, ${hh}:${mm}`;
+}
 
 function gearArrayToObject(selected: string[]): SafetyGear {
   return {
@@ -49,6 +59,18 @@ export default function RaisePermitScreen({ navigation }: any) {
   const [gear, setGear]             = useState<string[]>(['Hard Hat', 'Gloves']);
   const [riskText, setRiskText]     = useState('');
   const [errors, setErrors]         = useState<Record<string, string>>({});
+  // Which date-time picker is open, if any.
+  const [picker, setPicker]         = useState<null | 'start' | 'end'>(null);
+
+  // Live progress: how many of the 4 sections are filled in. Drives the bar so it
+  // advances as the worker completes the form (single-page form, not a wizard).
+  const stepDone = [
+    !!selectedPermit && workDescription.trim().length > 0, // 1. Classification
+    location.trim().length > 0 && startDate.trim().length > 0 && endDate.trim().length > 0, // 2. Site & Schedule
+    gear.length > 0,                                       // 3. Safety Gear
+    riskText.trim().length > 0,                            // 4. Risk Assessment
+  ];
+  const completedSteps = stepDone.filter(Boolean).length;
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -101,13 +123,14 @@ export default function RaisePermitScreen({ navigation }: any) {
 
   return (
     <ScreenLayout>
-      <AppHeader title="Raise Permit Request" leftIcon="☰" onLeftPress={() => navigation.goBack()} />
+      <AppHeader title="Request Permit" onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Raise Permit Request</Text>
+        <Text style={styles.pageTitle}>Request Permit</Text>
         <Text style={styles.pageSub}>Submit a new digital work permit for approval.</Text>
 
-        <StepProgressBar total={STEPS.length} current={0} style={styles.stepBar} />
+        <StepProgressBar total={STEPS.length} current={completedSteps - 1} style={styles.stepBar} />
+        <Text style={styles.progressLabel}>{completedSteps} of {STEPS.length} sections completed</Text>
 
         {/* Step 1 — Classification */}
         <SectionCard label="Permit Classification" stepNum={1} style={styles.card}>
@@ -150,23 +173,31 @@ export default function RaisePermitScreen({ navigation }: any) {
 
           <View style={styles.dateRow}>
             <View style={{ flex: 1 }}>
-              <Input
-                label="Start Date & Time *"
-                placeholder="e.g. 2026-06-11 08:00"
-                value={startDate}
-                onChangeText={t => { setStartDate(t); setErrors(e => ({ ...e, startDate: '' })); }}
-                containerStyle={{ flex: 1 }}
-              />
+              <Text style={styles.fieldLabel}>Start Date & Time *</Text>
+              <TouchableOpacity
+                style={[styles.pickerField, errors.startDate ? styles.pickerFieldError : null]}
+                onPress={() => setPicker('start')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.pickerValue, !startDate && styles.pickerPlaceholder]} numberOfLines={1}>
+                  {startDate ? fmtDisplay(startDate) : 'Select start'}
+                </Text>
+                <Icon emoji="📅" style={styles.pickerIcon} />
+              </TouchableOpacity>
               {errors.startDate ? <Text style={styles.errorText}>{errors.startDate}</Text> : null}
             </View>
             <View style={{ flex: 1 }}>
-              <Input
-                label="End Date & Time *"
-                placeholder="e.g. 2026-06-11 18:00"
-                value={endDate}
-                onChangeText={t => { setEndDate(t); setErrors(e => ({ ...e, endDate: '' })); }}
-                containerStyle={{ flex: 1 }}
-              />
+              <Text style={styles.fieldLabel}>End Date & Time *</Text>
+              <TouchableOpacity
+                style={[styles.pickerField, errors.endDate ? styles.pickerFieldError : null]}
+                onPress={() => setPicker('end')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.pickerValue, !endDate && styles.pickerPlaceholder]} numberOfLines={1}>
+                  {endDate ? fmtDisplay(endDate) : 'Select end'}
+                </Text>
+                <Icon emoji="📅" style={styles.pickerIcon} />
+              </TouchableOpacity>
               {errors.endDate ? <Text style={styles.errorText}>{errors.endDate}</Text> : null}
             </View>
           </View>
@@ -222,6 +253,23 @@ export default function RaisePermitScreen({ navigation }: any) {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <DateTimePickerModal
+        visible={picker !== null}
+        value={picker === 'start' ? startDate : picker === 'end' ? endDate : ''}
+        title={picker === 'start' ? 'Start date & time' : 'End date & time'}
+        onCancel={() => setPicker(null)}
+        onConfirm={(val) => {
+          if (picker === 'start') {
+            setStartDate(val);
+            setErrors(e => ({ ...e, startDate: '' }));
+          } else if (picker === 'end') {
+            setEndDate(val);
+            setErrors(e => ({ ...e, endDate: '' }));
+          }
+          setPicker(null);
+        }}
+      />
     </ScreenLayout>
   );
 }
@@ -230,7 +278,8 @@ const styles = StyleSheet.create({
   scroll:    { flex: 1, padding: 16 },
   pageTitle: { fontSize: 22, fontWeight: '800', color: Colors.textDark, marginBottom: 4, marginTop: 8 },
   pageSub:   { fontSize: 13, color: Colors.textMuted, marginBottom: 16 },
-  stepBar:   { marginBottom: 20 },
+  stepBar:   { marginBottom: 8 },
+  progressLabel: { fontSize: 12, color: Colors.textMuted, fontWeight: '600', marginBottom: 20 },
   card:      { marginBottom: 14 },
 
   permitRow: {
@@ -246,6 +295,17 @@ const styles = StyleSheet.create({
 
   dateRow:   { flexDirection: 'row', gap: 10 },
   errorText: { fontSize: 12, color: Colors.critical, marginTop: -6, marginBottom: 8, marginLeft: 2 },
+
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.textDark, marginBottom: 6 },
+  pickerField: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 13, marginBottom: 12, minHeight: 48,
+  },
+  pickerFieldError: { borderColor: Colors.critical },
+  pickerValue: { flex: 1, fontSize: 14, color: Colors.textDark, fontWeight: '600' },
+  pickerPlaceholder: { color: Colors.textMuted, fontWeight: '400' },
+  pickerIcon: { fontSize: 16, marginLeft: 8 },
 
   submitBtn:         { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
   submitBtnDisabled: { backgroundColor: Colors.textMuted },
