@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, ClipboardList, Loader2, RefreshCcw, ShieldAlert, XCircle, Clock } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Loader2, Plus, RefreshCcw, ShieldAlert, Trash2, X, XCircle, Clock } from 'lucide-react';
 import {
   bootstrapChecklistTemplates,
+  createChecklistTemplate,
+  deactivateChecklistTemplate,
   getChecklistSubmissionDetail,
   getChecklistSubmissions,
   getChecklistTemplates,
@@ -11,6 +13,196 @@ import {
   type ChecklistTemplate,
 } from '../../services/checklists.service';
 import { useAuth } from '../context/AuthContext';
+
+const ROLE_OPTIONS = ['Admin', 'HSE Manager', 'Safety Manager', 'Supervisor', 'Site Inspector', 'Site Engineer', 'Auditor'];
+
+interface BuilderItem {
+  section_name: string;
+  item_text: string;
+  is_required: boolean;
+}
+
+// ── Checklist Builder modal ───────────────────────────────────────────────────
+function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void; onCreated: () => void }>) {
+  const [displayName, setDisplayName] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitterRoles, setSubmitterRoles] = useState<string[]>(['Supervisor']);
+  const [validatorRoles, setValidatorRoles] = useState<string[]>(['Admin', 'HSE Manager']);
+  const [items, setItems] = useState<BuilderItem[]>([{ section_name: 'General', item_text: '', is_required: true }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggleRole = (list: string[], setList: (v: string[]) => void, role: string) => {
+    setList(list.includes(role) ? list.filter((r) => r !== role) : [...list, role]);
+  };
+
+  const updateItem = (i: number, patch: Partial<BuilderItem>) =>
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+
+  const handleCreate = async () => {
+    setError(null);
+    if (!displayName.trim()) { setError('Checklist name is required.'); return; }
+    const cleanItems = items.filter((it) => it.item_text.trim());
+    if (cleanItems.length === 0) { setError('Add at least one checklist item.'); return; }
+    setSaving(true);
+    try {
+      await createChecklistTemplate({
+        display_name: displayName.trim(),
+        description: description.trim() || undefined,
+        submitter_roles: submitterRoles,
+        validator_roles: validatorRoles,
+        items: cleanItems,
+      });
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create checklist template.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.45)' }}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-auto p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[18px]" style={{ color: '#0A0A0A', fontWeight: 700 }}>New Checklist Template</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <X className="w-5 h-5" style={{ color: '#6B7280' }} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-xl px-4 py-3 text-[13px]" style={{ background: '#FFF1F2', color: '#BE123C', fontWeight: 500 }}>
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Checklist Name *</label>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="e.g. Weekly Fire Extinguisher Check"
+            className="w-full h-10 px-3 rounded-lg border text-[13px]"
+            style={{ borderColor: '#D6E4FF' }}
+          />
+        </div>
+
+        <div>
+          <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Description</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What is this checklist for?"
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg border text-[13px]"
+            style={{ borderColor: '#D6E4FF' }}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who submits this?</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLE_OPTIONS.map((role) => (
+                <button
+                  key={role}
+                  onClick={() => toggleRole(submitterRoles, setSubmitterRoles, role)}
+                  className="px-2.5 py-1 rounded-full text-[11px] border"
+                  style={submitterRoles.includes(role)
+                    ? { background: '#EFF6FF', borderColor: '#93C5FD', color: '#1D4ED8', fontWeight: 700 }
+                    : { background: '#fff', borderColor: '#E5E7EB', color: '#6B7280' }}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who validates this?</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLE_OPTIONS.map((role) => (
+                <button
+                  key={role}
+                  onClick={() => toggleRole(validatorRoles, setValidatorRoles, role)}
+                  className="px-2.5 py-1 rounded-full text-[11px] border"
+                  style={validatorRoles.includes(role)
+                    ? { background: '#ECFDF3', borderColor: '#86EFAC', color: '#15803D', fontWeight: 700 }
+                    : { background: '#fff', borderColor: '#E5E7EB', color: '#6B7280' }}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Checklist Items *</label>
+            <button
+              onClick={() => setItems((prev) => [...prev, { section_name: prev.at(-1)?.section_name ?? 'General', item_text: '', is_required: true }])}
+              className="flex items-center gap-1 text-[12px]" style={{ color: '#1D4ED8', fontWeight: 600 }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Add item
+            </button>
+          </div>
+          <div className="space-y-2 max-h-[280px] overflow-auto pr-1">
+            {items.map((item, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-lg border p-2.5" style={{ borderColor: '#E6EEFF' }}>
+                <div className="flex-1 space-y-1.5">
+                  <input
+                    value={item.section_name}
+                    onChange={(e) => updateItem(i, { section_name: e.target.value })}
+                    placeholder="Section (e.g. PPE & Clothing)"
+                    className="w-full h-8 px-2 rounded-md border text-[12px]" style={{ borderColor: '#E5E7EB' }}
+                  />
+                  <input
+                    value={item.item_text}
+                    onChange={(e) => updateItem(i, { item_text: e.target.value })}
+                    placeholder="Checklist question / item text"
+                    className="w-full h-8 px-2 rounded-md border text-[12px]" style={{ borderColor: '#E5E7EB' }}
+                  />
+                  <label className="flex items-center gap-1.5 text-[11px]" style={{ color: '#6B7280' }}>
+                    <input
+                      type="checkbox"
+                      checked={item.is_required}
+                      onChange={(e) => updateItem(i, { is_required: e.target.checked })}
+                    />
+                    Required
+                  </label>
+                </div>
+                <button
+                  onClick={() => setItems((prev) => prev.filter((_, idx) => idx !== i))}
+                  disabled={items.length === 1}
+                  className="p-1.5 rounded-lg flex-shrink-0"
+                  style={{ color: items.length === 1 ? '#D1D5DB' : '#DC2626' }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border text-[13px]" style={{ borderColor: '#E5E7EB', color: '#6B7280' }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-white text-[13px] disabled:opacity-60"
+            style={{ background: 'linear-gradient(135deg, #0B3D91, #1D4ED8)', fontWeight: 600 }}
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving ? 'Creating…' : 'Create Checklist'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Status pill ───────────────────────────────────────────────────────────────
 function StatusPill({ status }: { status: string }) {
@@ -59,6 +251,8 @@ export function ChecklistPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [deletingType, setDeletingType] = useState<string | null>(null);
 
   const refreshData = async () => {
     if (templates.length === 0 && submissions.length === 0) {
@@ -144,6 +338,18 @@ export function ChecklistPage() {
 
   const isHSEManager = ['Admin', 'HSE Manager', 'Safety Manager'].includes(user?.role ?? '');
 
+  const handleDeactivate = async (checklistType: string) => {
+    setDeletingType(checklistType);
+    try {
+      await deactivateChecklistTemplate(checklistType);
+      await refreshData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to remove checklist template.');
+    } finally {
+      setDeletingType(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
 
@@ -159,6 +365,15 @@ export function ChecklistPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isHSEManager && (
+            <button
+              onClick={() => setShowBuilder(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px]"
+              style={{ background: 'linear-gradient(135deg, #16A34A, #22C55E)', fontWeight: 600 }}
+            >
+              <Plus className="w-4 h-4" /> New Checklist
+            </button>
+          )}
           {user?.role === 'Admin' && templates.length === 0 && (
             <button
               onClick={bootstrapIfNeeded}
@@ -407,11 +622,30 @@ export function ChecklistPage() {
               {templates.length === 0 ? (
                 <p className="text-[12px]" style={{ color: '#9CA3AF' }}>No templates loaded.</p>
               ) : templates.map((t) => (
-                <div key={t.checklist_type} className="flex items-center justify-between py-1.5 border-b last:border-0" style={{ borderColor: '#F1F5F9' }}>
-                  <span className="text-[12px] truncate mr-2" style={{ color: '#374151', fontWeight: 500 }}>{t.display_name}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#F0FFF4', color: '#15803D', fontWeight: 700 }}>
-                    Active
-                  </span>
+                <div key={t.checklist_type} className="flex items-start justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: '#F1F5F9' }}>
+                  <div className="min-w-0">
+                    <span className="block text-[12px] truncate" style={{ color: '#374151', fontWeight: 500 }}>{t.display_name}</span>
+                    {t.description && (
+                      <span className="block text-[11px] truncate" style={{ color: '#9CA3AF' }}>{t.description}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: '#F0FFF4', color: '#15803D', fontWeight: 700 }}>
+                      Active
+                    </span>
+                    {isHSEManager && (
+                      <button
+                        onClick={() => handleDeactivate(t.checklist_type)}
+                        disabled={deletingType === t.checklist_type}
+                        className="p-1 rounded hover:bg-red-50"
+                        title="Remove template"
+                      >
+                        {deletingType === t.checklist_type
+                          ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#9CA3AF' }} />
+                          : <Trash2 className="w-3 h-3" style={{ color: '#DC2626' }} />}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -420,11 +654,19 @@ export function ChecklistPage() {
           <div className="rounded-2xl border p-4" style={{ background: '#FFF7ED', borderColor: '#FED7AA' }}>
             <div className="text-[12px]" style={{ color: '#C2410C', fontWeight: 700 }}>Field Execution</div>
             <p className="mt-1 text-[12px]" style={{ color: '#92400E' }}>
-              Creating and filling checklists is done on the Mobile App only. This dashboard is for review and validation only.
+              Filling out checklists happens on the Mobile App. HSE Managers can create and manage checklist
+              templates here — new templates appear on mobile automatically.
             </p>
           </div>
         </div>
       </div>
+
+      {showBuilder && (
+        <ChecklistBuilder
+          onClose={() => setShowBuilder(false)}
+          onCreated={() => { setShowBuilder(false); setMessage('Checklist template created.'); refreshData(); }}
+        />
+      )}
     </div>
   );
 }

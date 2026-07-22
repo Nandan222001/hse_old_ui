@@ -17,6 +17,26 @@ export const bootstrapChecklistTemplates = () =>
 export const getChecklistTemplates = () =>
   axiosInstance.get<ChecklistTemplate[]>('/checklists/templates').then((r) => r.data);
 
+export interface CreateChecklistTemplatePayload {
+  display_name: string;
+  description?: string;
+  submitter_roles: string[];
+  validator_roles: string[];
+  items: { section_name: string; item_text: string; is_required: boolean }[];
+}
+
+export const createChecklistTemplate = (payload: CreateChecklistTemplatePayload) =>
+  axiosInstance.post<ChecklistTemplate>('/checklists/templates', payload).then((r) => r.data);
+
+export const updateChecklistTemplate = (
+  checklistType: string,
+  payload: Partial<CreateChecklistTemplatePayload>,
+) =>
+  axiosInstance.put<ChecklistTemplate>(`/checklists/templates/${checklistType}`, payload).then((r) => r.data);
+
+export const deactivateChecklistTemplate = (checklistType: string) =>
+  axiosInstance.delete(`/checklists/templates/${checklistType}`).then((r) => r.data);
+
 export const createChecklistSubmission = (payload: CreateChecklistSubmissionPayload) =>
   axiosInstance
     .post<{

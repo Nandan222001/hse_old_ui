@@ -54,6 +54,7 @@ def _fmt_tmpl(row: dict) -> dict:
     return {
         "checklist_type": row["checklist_type"],
         "display_name":   row["display_name"],
+        "description":    row.get("description"),
         "submitter_roles": json.loads(row["submitter_roles"]),
         "validator_roles": json.loads(row["validator_roles"]),
         "items":           json.loads(row["items_json"]),
@@ -125,6 +126,155 @@ def bootstrap_templates(db: Session = Depends(get_db), current_user: CurrentUser
         counts[t["checklist_type"]] = len(t["items"])
     db.commit()
     return {"status": "ok", "message": "Templates bootstrapped", "counts": counts}
+
+
+def _slugify(display_name: str) -> str:
+    slug = "".join(c.lower() if c.isalnum() else "_" for c in display_name.strip())
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_") or "checklist"
+
+
+@router.post("/templates", status_code=status.HTTP_201_CREATED)
+def create_template(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Create a new checklist template — lets an HSE Manager/Admin define a checklist
+    from the web app instead of it being fixed in code."""
+    display_name = (payload.get("display_name") or "").strip()
+    items = payload.get("items") or []
+    if not display_name:
+        raise HTTPException(status_code=400, detail="display_name is required")
+    if not items:
+        raise HTTPException(status_code=400, detail="At least one checklist item is required")
+
+    checklist_type = (payload.get("checklist_type") or "").strip() or _slugify(display_name)
+    existing = db.execute(
+        text("SELECT id FROM checklist_templates WHERE checklist_type = :t"),
+        {"t": checklist_type},
+    ).first()
+    if existing:
+        suffix = 2
+        base = checklist_type
+        while existing:
+            checklist_type = f"{base}_{suffix}"
+            existing = db.execute(
+                text("SELECT id FROM checklist_templates WHERE checklist_type = :t"),
+                {"t": checklist_type},
+            ).first()
+            suffix += 1
+
+    submitter_roles = payload.get("submitter_roles") or ["Admin", "HSE Manager", "Supervisor"]
+    validator_roles = payload.get("validator_roles") or ["Admin", "HSE Manager"]
+    normalized_items = [
+        {
+            "section_name": item.get("section_name") or "General",
+            "item_no": i + 1,
+            "item_text": item.get("item_text", ""),
+            "is_required": bool(item.get("is_required", True)),
+        }
+        for i, item in enumerate(items)
+        if (item.get("item_text") or "").strip()
+    ]
+    if not normalized_items:
+        raise HTTPException(status_code=400, detail="At least one checklist item with text is required")
+
+    ui = {"form_title": display_name, "short_label": display_name[:24], "version_tag": "v1.0"}
+    description = (payload.get("description") or "").strip() or None
+
+    db.execute(text("""
+        INSERT INTO checklist_templates
+            (checklist_type, display_name, submitter_roles, validator_roles,
+             items_json, ui_json, description)
+        VALUES (:ct, :dn, :sr, :vr, :ij, :uj, :de)
+    """), {
+        "ct": checklist_type,
+        "dn": display_name,
+        "sr": json.dumps(submitter_roles),
+        "vr": json.dumps(validator_roles),
+        "ij": json.dumps(normalized_items),
+        "uj": json.dumps(ui),
+        "de": description,
+    })
+    db.commit()
+
+    row = db.execute(
+        text("SELECT * FROM checklist_templates WHERE checklist_type = :t"),
+        {"t": checklist_type},
+    ).mappings().first()
+    return _fmt_tmpl(dict(row))
+
+
+@router.put("/templates/{checklist_type}")
+def update_template(
+    checklist_type: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    row = db.execute(
+        text("SELECT * FROM checklist_templates WHERE checklist_type = :t"),
+        {"t": checklist_type},
+    ).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Template '{checklist_type}' not found")
+
+    display_name = (payload.get("display_name") or row["display_name"]).strip()
+    items = payload.get("items")
+    if items is not None:
+        normalized_items = [
+            {
+                "section_name": item.get("section_name") or "General",
+                "item_no": i + 1,
+                "item_text": item.get("item_text", ""),
+                "is_required": bool(item.get("is_required", True)),
+            }
+            for i, item in enumerate(items)
+            if (item.get("item_text") or "").strip()
+        ]
+        if not normalized_items:
+            raise HTTPException(status_code=400, detail="At least one checklist item with text is required")
+        items_json = json.dumps(normalized_items)
+    else:
+        items_json = row["items_json"]
+
+    submitter_roles = payload.get("submitter_roles") or json.loads(row["submitter_roles"])
+    validator_roles = payload.get("validator_roles") or json.loads(row["validator_roles"])
+    description = payload.get("description", row.get("description"))
+
+    db.execute(text("""
+        UPDATE checklist_templates
+        SET display_name = :dn, submitter_roles = :sr, validator_roles = :vr,
+            items_json = :ij, description = :de, updated_at = :ua
+        WHERE checklist_type = :t
+    """), {
+        "dn": display_name, "sr": json.dumps(submitter_roles), "vr": json.dumps(validator_roles),
+        "ij": items_json, "de": description, "ua": datetime.utcnow(), "t": checklist_type,
+    })
+    db.commit()
+
+    updated = db.execute(
+        text("SELECT * FROM checklist_templates WHERE checklist_type = :t"),
+        {"t": checklist_type},
+    ).mappings().first()
+    return _fmt_tmpl(dict(updated))
+
+
+@router.delete("/templates/{checklist_type}")
+def deactivate_template(
+    checklist_type: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Soft-delete — keeps history of past submissions against this template intact."""
+    db.execute(
+        text("UPDATE checklist_templates SET is_active = 0 WHERE checklist_type = :t"),
+        {"t": checklist_type},
+    )
+    db.commit()
+    return {"deactivated": True}
 
 
 # ─── submissions ──────────────────────────────────────────────────────────────

@@ -328,6 +328,7 @@ export interface ChecklistTemplateItem {
 export interface ChecklistTemplate {
   checklist_type: string;
   display_name: string;
+  description?: string | null;
   submitter_roles: string[];
   validator_roles: string[];
   items: ChecklistTemplateItem[];
