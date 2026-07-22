@@ -3,5 +3,5 @@
 -- by SQLAlchemy before migration 024 ran.
 
 ALTER TABLE data_imports
-    ADD COLUMN IF NOT EXISTS organisation_id INT NULL AFTER id,
-    ADD INDEX  IF NOT EXISTS idx_data_imports_org (organisation_id);
+    ADD COLUMN organisation_id INT NULL AFTER id,
+    ADD INDEX  idx_data_imports_org (organisation_id);

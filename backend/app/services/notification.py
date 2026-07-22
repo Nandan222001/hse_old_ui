@@ -1,3 +1,4 @@
+from typing import List, Dict
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.repositories.notification import NotificationRepository
@@ -12,7 +13,7 @@ class NotificationService:
     def __init__(self, db: Session) -> None:
         self._repo = NotificationRepository(db)
 
-    def list_for_user(self, org_id: int, user_id: int, skip: int = 0, limit: int = 50) -> list[NotificationOut]:
+    def list_for_user(self, org_id: int, user_id: int, skip: int = 0, limit: int = 50) -> List[NotificationOut]:
         notifications = self._repo.get_for_org(org_id, skip=skip, limit=limit)
         read_ids = self._repo.get_read_ids_for_user(user_id)
         result = []

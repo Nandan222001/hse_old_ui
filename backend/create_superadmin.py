@@ -3,7 +3,7 @@ import bcrypt
 
 hashed = bcrypt.hashpw("Admin@1234".encode(), bcrypt.gensalt()).decode()
 
-conn = pymysql.connect(host="localhost", port=3306, user="root", password="", database="hse_db")
+conn = pymysql.connect(host="localhost", port=3306, user="root", password="Freight@123", database="hse")
 cur = conn.cursor()
 
 # Ensure superadmin app_role exists

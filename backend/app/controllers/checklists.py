@@ -12,7 +12,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
-from app.core.dependencies import get_current_user, CurrentUser
+from app.core.dependencies import (
+    get_current_user,
+    get_current_user_optional,
+    CurrentUser,
+)
 
 router = APIRouter(prefix="/checklists", tags=["Checklists"])
 
@@ -130,6 +134,7 @@ def list_submissions(
     limit: int = 20,
     checklist_type: Optional[str] = None,
     status: Optional[str] = None,
+    mine: bool = False,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list:
@@ -141,7 +146,11 @@ def list_submissions(
     if status:
         where += " AND status = :st"
         params["st"] = status
-    if current_user.org_id is not None:
+    if mine:
+        # Own history — scoped to the caller, so the org filter below is redundant.
+        where += " AND submitted_by_email = :actor_email"
+        params["actor_email"] = current_user.email
+    elif current_user.org_id is not None:
         where += " AND submitted_by_email IN (SELECT email FROM users WHERE organisation_id = :org_id)"
         params["org_id"] = current_user.org_id
     rows = db.execute(
@@ -152,7 +161,12 @@ def list_submissions(
 
 
 @router.post("/submissions", status_code=status.HTTP_201_CREATED)
-def create_submission(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
+def create_submission(
+    request: Request,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
+) -> dict:
     checklist_type = payload.get("checklist_type", "")
     tmpl = _tmpl(db, checklist_type)
     items = json.loads(tmpl["items_json"])
@@ -256,7 +270,13 @@ def get_submission(submission_uuid: str, db: Session = Depends(get_db), current_
 
 
 @router.put("/submissions/{submission_uuid}/items")
-def save_items(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
+def save_items(
+    submission_uuid: str,
+    request: Request,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
+) -> dict:
     sub = _sub(db, submission_uuid)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be edited")
@@ -281,7 +301,12 @@ def save_items(submission_uuid: str, request: Request, payload: dict, db: Sessio
 
 
 @router.post("/submissions/{submission_uuid}/submit")
-def submit_submission(submission_uuid: str, request: Request, db: Session = Depends(get_db)) -> dict:
+def submit_submission(
+    submission_uuid: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
+) -> dict:
     sub = _sub(db, submission_uuid)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be submitted")

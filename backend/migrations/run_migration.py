@@ -2,10 +2,25 @@
 Safe migration script: adds organisation_id to all entity tables.
 Checks information_schema before altering — safe to run multiple times.
 """
-import pymysql
+import os
 import sys
+import pymysql
+from pathlib import Path
 
-DB = dict(host="localhost", port=3306, user="root", password="", database="hse_db", charset="utf8mb4")
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
+DB = dict(
+    host=os.getenv("DB_HOST", "localhost"),
+    port=int(os.getenv("DB_PORT", 3306)),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", ""),
+    database=os.getenv("DB_NAME", "hse_db"),
+    charset="utf8mb4"
+)
 
 TABLES = [
     ("users",              "idx_users_org",              "fk_users_org"),

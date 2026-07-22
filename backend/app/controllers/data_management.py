@@ -9,7 +9,7 @@ import os
 import datetime
 import logging
 from io import BytesIO
-from typing import Any
+from typing import Any, List, Dict, Tuple, Set
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -318,7 +318,7 @@ def delete_document(
 # ── Full Import (all 17 sheets) ────────────────────────────────────────────────
 
 # Agent assignment for display in FullImportCard
-_SHEET_AGENT: dict[str, str] = {
+_SHEET_AGENT: Dict[str, str] = {
     "Organisation":     "MasterDataAgent",
     "Hazard_Categories":"SafetyOpsAgent",
     "Hazards":          "SafetyOpsAgent",
@@ -372,7 +372,7 @@ async def full_import(
         for sheet_label, table_key, fn in SHEET_STEPS:
             processed = 0
             failed = 0
-            errors: list[str] = []
+            errors: List[str] = []
             agent = _SHEET_AGENT.get(sheet_label, "MasterDataAgent")
             try:
                 # SET inside the transaction so it stays on the same connection as INSERTs
@@ -429,7 +429,7 @@ async def full_import(
 
 # ── Full Template Download ─────────────────────────────────────────────────────
 
-_TEMPLATE_SHEETS: list[tuple[str, list[str], list[list[Any]]]] = [
+_TEMPLATE_SHEETS: List[Tuple[str, List[str], List[List[Any]]]] = [
     ("Organisation", [
         "Org_ID", "Organisation_Name", "Country", "Industry_Sector",
         "Number_of_Employees", "Headquarters_Location", "Parent_Company",
@@ -567,8 +567,8 @@ async def import_single_file(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
 
-    header_errors: list[str] = []
-    row_errors: list[dict] = []
+    header_errors: List[str] = []
+    row_errors: List[dict] = []
     count = 0
     status = "ok"
     if not current_user.org_id or current_user.org_id <= 0:

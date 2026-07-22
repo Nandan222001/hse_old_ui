@@ -1,3 +1,4 @@
+from typing import List
 import json
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,11 +19,25 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"        # internal constant, not in .env
 
     # ── Database ──────────────────────────────────────────────────────────────
-    # Accepts either a full DATABASE_URL or individual components as fallback
     database_url: str = "mysql+pymysql://root:@localhost:3306/hse_db"
     db_pool_size: int = 10
     db_max_overflow: int = 20
     db_pool_timeout: int = 30
+    
+    # Optional components to build URL if DATABASE_URL is not provided
+    db_host: str = "localhost"
+    db_port: int = 3306
+    db_user: str = "root"
+    db_password: str = ""
+    db_name: str = "hse_db"
+
+    @property
+    def effective_database_url(self) -> str:
+        if self.database_url and "hse_db" not in self.database_url:
+            return self.database_url
+        import urllib.parse
+        safe_password = urllib.parse.quote_plus(self.db_password)
+        return f"mysql+pymysql://{self.db_user}:{safe_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     # ── Auth / JWT ────────────────────────────────────────────────────────────
     jwt_issuer: str = "hse-platform"
@@ -102,7 +117,7 @@ class Settings(BaseSettings):
         return self.frontend_base_url
 
     @property
-    def cors_origins(self) -> list[str]:
+    def cors_origins(self) -> List[str]:
         raw = self.allowed_origins.strip()
         if raw.startswith("["):
             try:

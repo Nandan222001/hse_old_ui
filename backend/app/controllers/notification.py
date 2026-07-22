@@ -1,3 +1,4 @@
+from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
@@ -12,7 +13,7 @@ def _svc(db: Session = Depends(get_db)) -> NotificationService:
     return NotificationService(db)
 
 
-@router.get("/", response_model=list[NotificationOut])
+@router.get("/", response_model=List[NotificationOut])
 def list_notifications(
     skip: int = 0,
     limit: int = 50,

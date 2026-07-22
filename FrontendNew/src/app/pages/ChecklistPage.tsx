@@ -61,7 +61,9 @@ export function ChecklistPage() {
   const [bootstrapping, setBootstrapping] = useState(false);
 
   const refreshData = async () => {
-    setLoading(true);
+    if (templates.length === 0 && submissions.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [templateData, submissionData] = await Promise.all([
@@ -173,7 +175,7 @@ export function ChecklistPage() {
             className="flex items-center gap-2 px-4 py-2 rounded-lg border bg-white text-[13px]"
             style={{ borderColor: '#D6E4FF', color: '#1D4ED8', fontWeight: 600 }}
           >
-            <RefreshCcw className="w-4 h-4" /> Refresh
+            <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
       </div>
@@ -228,7 +230,7 @@ export function ChecklistPage() {
           </div>
 
           <div className="space-y-2 max-h-[600px] overflow-auto pr-1">
-            {loading ? (
+            {loading && submissions.length === 0 ? (
               <div className="py-10 flex items-center justify-center">
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1D4ED8' }} />
               </div>

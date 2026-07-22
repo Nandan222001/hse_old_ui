@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, List, Dict
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
@@ -70,7 +70,7 @@ def list_certifications(
     rows = q.order_by(EquipmentCertification.expiry_date.asc()).all()
 
     site_ids = {r.site_id for r in rows if r.site_id}
-    site_map: dict[int, str] = {}
+    site_map: Dict[int, str] = {}
     if site_ids:
         for s in db.query(Site).filter(Site.id.in_(site_ids)).all():
             site_map[s.id] = s.site_name

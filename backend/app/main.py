@@ -32,9 +32,14 @@ from app.controllers import (
     notification as notification_controller,
     vendor as vendor_controller,
     ai as ai_controller,
-    driver as driver_controller,
+    worker as worker_controller,
     incident_workflow as incident_workflow_controller,
     settings as settings_controller,
+    near_miss_workflow as near_miss_workflow_controller,
+    unsafe_act_workflow as unsafe_act_workflow_controller,
+    risk_workflow as risk_workflow_controller,
+    permit_workflow as permit_workflow_controller,
+    hazard_register as hazard_register_controller,
 )
 
 settings = get_settings()
@@ -95,9 +100,16 @@ def create_app() -> FastAPI:
     app.include_router(notification_controller.router, prefix=prefix)
     app.include_router(vendor_controller.router, prefix=prefix)
     app.include_router(ai_controller.router, prefix=prefix)
-    app.include_router(driver_controller.router, prefix=prefix)
+    app.include_router(worker_controller.router, prefix=prefix)
     app.include_router(incident_workflow_controller.router, prefix=prefix)
     app.include_router(settings_controller.router, prefix=prefix)
+    # Near miss / unsafe act / risk each get their own table and their own workflow.
+    app.include_router(near_miss_workflow_controller.router, prefix=prefix)
+    app.include_router(unsafe_act_workflow_controller.router, prefix=prefix)
+    app.include_router(risk_workflow_controller.router, prefix=prefix)
+    # Permit to Work (flow 6) and Hazard register (flow 5) role workflows.
+    app.include_router(permit_workflow_controller.router, prefix=prefix)
+    app.include_router(hazard_register_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

@@ -66,6 +66,7 @@ import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
 import WorkerNotificationsScreen from '../worker/screens/NotificationsScreen';
 import SafetyTrainingDetailScreen from '../worker/screens/SafetyTrainingDetailScreen';
 import AISafetyAssistantScreen from '../worker/screens/AISafetyAssistantScreen';
+import FullBioScreen from '../worker/screens/FullBioScreen';
 import WorkerReportsScreen from '../worker/screens/ReportsScreen';
 import { Icon } from '../worker/components/display/Icon';
 
@@ -314,6 +315,7 @@ export function AppNavigator() {
               <Stack.Screen name="Notifications" component={WorkerNotificationsScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="FullBio" component={FullBioScreen} options={{ presentation: 'card' }} />
             </>
           )
         ) : (

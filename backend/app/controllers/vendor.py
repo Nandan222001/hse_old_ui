@@ -1,3 +1,4 @@
+from typing import List, Dict, Tuple, Set, Optional
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/vendors", tags=["Vendors"])
 MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
 
-def _due_label(d: date | None, today: date) -> str:
+def _due_label(d: Optional[date], today: date) -> str:
     if d is None:
         return "No Due Date"
     delta = (d - today).days
@@ -32,7 +33,7 @@ def _due_label(d: date | None, today: date) -> str:
     return f"Due {d.strftime('%d %b')}"
 
 
-def _capa_status(s: str | None) -> str:
+def _capa_status(s: Optional[str]) -> str:
     if s in ("Closed", "Completed", "Resolved"):
         return "Closed"
     return "In Progress"
@@ -67,7 +68,7 @@ def get_vendor_summary(
         # Non-compliant = contractors with incidents reported (all time, not just last 90 days)
         # since incident data spans 2024-2025 and today is 2026 — using 90-day window would
         # show 0 non-compliant because no recent incidents exist.
-        nc_ids: set[int] = set()
+        nc_ids: Set[int] = set()
         if contractor_ids:
             rows = (
                 db.query(Incident.reported_by)
@@ -189,7 +190,7 @@ def get_vendor_summary(
         certifications = [{"label": l, "pct": 0} for l in fallback_labels]
 
     # ── High Risk Contractors ────────────────────────────────────────────────
-    high_risk: list[dict] = []
+    high_risk: List[dict] = []
     if contractor_ids:
         hr_rows = (
             db.query(
@@ -241,7 +242,7 @@ def get_vendor_summary(
     delta = 0.0  # previous-period trend not tracked yet; kept at 0 rather than fabricated
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
-    repeat_breaches: list[dict] = []
+    repeat_breaches: List[dict] = []
     if contractor_ids:
         rb_rows = (
             db.query(
@@ -265,7 +266,7 @@ def get_vendor_summary(
         ]
 
     # ── Watchlist (contractors with high-severity incidents) ─────────────────
-    watchlist: list[dict] = []
+    watchlist: List[dict] = []
     if contractor_ids:
         wl_rows = (
             db.query(

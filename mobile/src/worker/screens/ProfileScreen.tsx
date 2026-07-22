@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
@@ -7,12 +7,39 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
+import { useProfilePhoto } from '../hooks/useProfilePhoto';
+import { Toast, ToastKind } from '../components/feedback/Toast';
+import { authService } from '../services/authService';
 import { sosService } from '../services/sosService';
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const [sosLoading, setSosLoading] = useState(false);
   const [search, setSearch] = useState('');
+
+  const { change: changePhoto, uploading } = useProfilePhoto();
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    authService
+      .getMyEmployeeProfile()
+      .then(p => { if (alive) setPhoto(p.photo); })
+      .catch(() => { /* falls back to the placeholder avatar */ });
+    return () => { alive = false; };
+  }, []);
+
+  const onEditPhoto = useCallback(() => {
+    changePhoto(res => {
+      if (res.ok) {
+        setPhoto(res.photo);
+        setToast({ msg: res.photo ? 'Photo updated' : 'Photo removed', kind: 'success' });
+      } else {
+        setToast({ msg: res.error, kind: 'error' });
+      }
+    }, !!photo);
+  }, [changePhoto, photo]);
 
   const name       = user?.name       || 'Alex Safety';
   const empId      = user?.employee_id || '99402';
@@ -66,9 +93,7 @@ export default function ProfileScreen({ navigation }: any) {
     <ScreenLayout bg="#F8FAFC">
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Icon emoji="☰" style={styles.headerIcon} />
-        </TouchableOpacity>
+        <View style={styles.headerBtn} />
         <Text style={styles.headerTitle}>{name}'s Profile</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
           <Icon emoji="🔔" style={styles.headerIcon} />
@@ -79,12 +104,19 @@ export default function ProfileScreen({ navigation }: any) {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300' }}
-              style={styles.avatar as any}
-            />
-            <TouchableOpacity style={styles.editBtn}>
-              <Icon emoji="🖊️" style={styles.editIcon} />
+            {photo ? (
+              <Image source={{ uri: photo }} style={styles.avatar as any} />
+            ) : (
+              <View style={[styles.avatar as any, styles.avatarFallback]}>
+                <Text style={styles.avatarInitials}>
+                  {name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.editBtn} onPress={onEditPhoto} disabled={uploading}>
+              {uploading
+                ? <ActivityIndicator color="#FFFFFF" size="small" />
+                : <Icon name="edit-2" size={15} color="#FFFFFF" />}
             </TouchableOpacity>
           </View>
           <View style={styles.verifiedBadge}>
@@ -109,11 +141,8 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
 
           <View style={styles.btnRow}>
-            <TouchableOpacity style={styles.btnPrimary}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={() => navigation.navigate('FullBio')}>
               <Text style={styles.btnPrimaryText}>View Full Bio</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnSecondary}>
-              <Text style={styles.btnSecondaryText}>Download CV</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -189,7 +218,7 @@ export default function ProfileScreen({ navigation }: any) {
               <View style={[styles.achieveIconBox, { backgroundColor: '#E3F2FD' }]}>
                 <Icon emoji="⚙️" style={styles.achieveIcon} />
               </View>
-              <Text style={styles.achieveTitle}>Risk Guru</Text>
+              <Text style={styles.achieveTitle}>Hazard Guru</Text>
               <Text style={styles.achieveDesc}>100 Inspections</Text>
             </View>
           </View>
@@ -293,6 +322,12 @@ export default function ProfileScreen({ navigation }: any) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      <Toast
+        message={toast?.msg ?? null}
+        kind={toast?.kind}
+        onHide={() => setToast(null)}
+      />
     </ScreenLayout>
   );
 }
@@ -349,6 +384,16 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 4,
     borderColor: '#EFF6FF',
+  },
+  avatarFallback: {
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1D4ED8',
   },
   editBtn: {
     position: 'absolute',

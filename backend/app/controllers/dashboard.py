@@ -15,6 +15,8 @@ from app.models.incident import Incident
 from app.models.near_miss import NearMiss
 from app.models.permit_to_work import PermitToWork
 from app.models.permit_type import PermitType
+from app.models.risk_report import RiskReport
+from app.models.unsafe_act import UnsafeAct
 from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
 from app.models.shift_schedule import ShiftSchedule
@@ -86,6 +88,10 @@ def get_dashboard_stats(
     total_sites = _org_filter(db.query(Site), Site, org_id).count()
     near_misses_count = nm_q().count()
     safety_walks_count = sw_q().count()
+    # Worker-submitted risk reports and unsafe acts live in their own tables so they
+    # surface on the web dashboard without being conflated with the incident register.
+    risk_reports_count = _org_filter(db.query(RiskReport), RiskReport, org_id).count()
+    unsafe_acts_count = _org_filter(db.query(UnsafeAct), UnsafeAct, org_id).count()
 
     avg_compliance = sw_q().with_entities(func.avg(SafetyWalk.compliance_rating)).scalar()
     avg_housekeeping = sw_q().with_entities(func.avg(SafetyWalk.housekeeping_rating)).scalar()
@@ -111,6 +117,8 @@ def get_dashboard_stats(
         "total_sites": total_sites,
         "near_misses_count": near_misses_count,
         "safety_walks_count": safety_walks_count,
+        "risk_reports_count": risk_reports_count,
+        "unsafe_acts_count": unsafe_acts_count,
         "avg_compliance_rating": round(float(avg_compliance), 1) if avg_compliance else 0,
         "avg_housekeeping_rating": round(float(avg_housekeeping), 1) if avg_housekeeping else 0,
         "critical_incidents": critical_incidents,
@@ -196,11 +204,13 @@ def get_leading_indicators(
     ltisr = _safe_round((float(lost_days) * 1_000_000) / man_hours) if man_hours else 0.0
     dart_rate = _safe_round((lost_time_incidents * 200_000) / man_hours) if man_hours else 0.0
     far = _safe_round((fatalities * 100_000_000) / man_hours) if man_hours else 0.0
-    near_miss_ratio = f"{_safe_round(near_miss_count / recordable_incidents, 1)} : 1" if recordable_incidents else "0 : 1"
+    near_miss_ratio = _safe_round(near_miss_count / recordable_incidents, 1) if recordable_incidents else 0.0
+
     latest_lti_date = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["injury"]),
         func.lower(func.coalesce(Incident.severity, "")).in_(["lost time"]),
     ).scalar()
+
     safe_days = int((data_window_end - latest_lti_date.date()).days) if latest_lti_date else 0
     dangerous_occurrence_rate = _org_filter(db.query(Incident), Incident, org_id).filter(
         func.lower(func.coalesce(Incident.incident_type, "")).in_(["dangerous occurrence"]),

@@ -1,8 +1,9 @@
 from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
 from app.models.base import Base
+from app.models.report_workflow_mixin import ReportWorkflowMixin
 
 
-class NearMiss(Base):
+class NearMiss(Base, ReportWorkflowMixin):
     __tablename__ = "near_misses"
 
     organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)

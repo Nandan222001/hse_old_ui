@@ -1,4 +1,4 @@
--- Migration: 029_create_settings_tables
+-- Migration: 032_create_settings_tables
 -- Creates tables for: api_keys, webhooks (Settings page — API Keys / Webhooks tabs)
 -- Adds: organisation.branding (logo/color customization, Settings page — Branding tab)
 

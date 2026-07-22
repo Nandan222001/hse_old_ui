@@ -8,16 +8,22 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 
-router = APIRouter(prefix="/driver", tags=["Driver Mobile App"])
+router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
 
 
-# ─── Auth Refresh Stub ────────────────────────────────────────────────────────
-# The mobile app uses '/auth/employee/refresh' which we should handle.
-# But wait, it's under prefix /driver. Wait! The endpoint is '/auth/employee/refresh'
-# which starts with /auth, not /driver. So it should be in the auth router or a separate auth endpoint!
-# Let's register it here under '/auth/employee/refresh' without prefix by putting it in this router,
-# or wait: we can just add a route to auth controller or right here but we need prefix "/driver" in this router.
-# Let's write the driver-specific routes under "/driver" first.
+# All routes here are consumed by the mobile Worker app under the "/worker" prefix.
+# (Auth refresh at '/auth/employee/refresh' lives in the auth router, not here.)
+
+
+def _employee_id(db: Session, user: CurrentUser):
+    """Employee row id linked to the logged-in user, or None if unlinked.
+
+    Used to scope dashboard data to the signed-in worker instead of the whole org.
+    """
+    return db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": user.user_id},
+    ).scalar()
 
 
 # ─── Tasks Endpoints ──────────────────────────────────────────────────────────
@@ -68,37 +74,52 @@ def list_tasks(
           ]
         })
 
-    # Fallback to realistic mock items if DB has no tasks for this employee yet
-    if not items:
-        items = [
-            {
-                "id": "t1",
-                "title": "Equipment Check: Main Excavator Hydraulics",
-                "location": "Zone B - Sector 4",
-                "priority": "high",
-                "type": "checklist",
-                "status": "pending",
-                "due_at": date.today().isoformat() + "T16:00:00",
-                "steps": [
-                    { "id": "1", "title": "Check hydraulic fluid levels", "completed": False },
-                    { "id": "2", "title": "Inspect high-pressure hoses for cracks", "completed": False }
-                ]
-            },
-            {
-                "id": "t2",
-                "title": "Site Walkthrough: North Perimeter Fence",
-                "location": "North Sector",
-                "priority": "medium",
-                "type": "walkthrough",
-                "status": "pending",
-                "due_at": date.today().isoformat() + "T09:00:00",
-                "steps": [
-                    { "id": "1", "title": "Check structural integrity of temporary flood barriers", "completed": False }
-                ]
-            }
-        ]
-
+    # No mock fallback: an empty list is the truthful per-worker result when this
+    # employee has no CAPA tasks assigned. The app renders its own empty state.
     return {"success": True, "data": {"items": items, "total": len(items)}}
+
+
+# NOTE: This static route MUST be declared before "/tasks/{id}", otherwise
+# FastAPI matches "shift-summary" as an {id} and this handler never runs.
+@router.get("/tasks/shift-summary")
+def get_shift_summary(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    emp_id = _employee_id(db, current_user)
+    params = {"org_id": current_user.org_id}
+
+    # Scope CAPA tasks to the ones this worker is responsible for.
+    task_where = "organisation_id = :org_id"
+    if emp_id:
+        task_where += " AND responsible_person_id = :emp_id"
+        params["emp_id"] = emp_id
+
+    total_capas = db.execute(
+        text(f"SELECT COUNT(*) FROM capa_actions WHERE {task_where}"), params
+    ).scalar() or 0
+
+    completed_capas = db.execute(
+        text(f"SELECT COUNT(*) FROM capa_actions WHERE {task_where} AND status = 'Completed'"), params
+    ).scalar() or 0
+
+    # Scope active permits to ones this worker raised or acknowledged.
+    permit_where = "organisation_id = :org_id AND status = 'Active'"
+    if emp_id:
+        permit_where += " AND (requested_by = :emp_id OR acknowledged_by = :emp_id)"
+
+    active_permits = db.execute(
+        text(f"SELECT COUNT(*) FROM permits_to_work WHERE {permit_where}"), params
+    ).scalar() or 0
+
+    return {
+        "success": True,
+        "data": {
+            "total_tasks": total_capas,
+            "completed_tasks": completed_capas,
+            "active_permits": active_permits,
+        }
+    }
 
 
 @router.get("/tasks/{id}")
@@ -163,36 +184,6 @@ def complete_task_step(
     return {"success": True, "data": {"id": id, "status": "completed"}}
 
 
-@router.get("/tasks/shift-summary")
-def get_shift_summary(
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
-) -> dict:
-    total_capas = db.execute(
-        text("SELECT COUNT(*) FROM capa_actions WHERE organisation_id = :org_id"),
-        {"org_id": current_user.org_id}
-    ).scalar() or 0
-
-    completed_capas = db.execute(
-        text("SELECT COUNT(*) FROM capa_actions WHERE organisation_id = :org_id AND status = 'Completed'"),
-        {"org_id": current_user.org_id}
-    ).scalar() or 0
-
-    active_permits = db.execute(
-        text("SELECT COUNT(*) FROM permits_to_work WHERE organisation_id = :org_id AND status = 'Active'"),
-        {"org_id": current_user.org_id}
-    ).scalar() or 0
-
-    return {
-        "success": True,
-        "data": {
-            "total_tasks": total_capas if total_capas > 0 else 5,
-            "completed_tasks": completed_capas,
-            "active_permits": active_permits if active_permits > 0 else 2
-        }
-    }
-
-
 # ─── Permits Endpoints ────────────────────────────────────────────────────────
 
 @router.get("/permits")
@@ -209,6 +200,12 @@ def list_permits(
         WHERE p.organisation_id = :org_id
     """
     params = {"org_id": current_user.org_id}
+
+    # Scope to permits this worker raised or acknowledged (per-worker view).
+    emp_id = _employee_id(db, current_user)
+    if emp_id:
+        query_str += " AND (p.requested_by = :emp_id OR p.acknowledged_by = :emp_id)"
+        params["emp_id"] = emp_id
 
     if status:
         query_str += " AND p.status = :status"
@@ -268,17 +265,26 @@ def create_permit(
         {"name": f"%{loc_name}%"}
     ).scalar() or 1
 
+    # The worker raising the permit — stamped so it enters the permit workflow
+    # (supervisor queue) as a proper `requested` entry, not an orphaned row.
+    requester_emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id},
+    ).scalar()
+
     # Insert into permits_to_work
     db.execute(
         text("""
             INSERT INTO permits_to_work (
                 organisation_id, permit_type_id, date_issued, time_issued,
                 location_station_id, work_description, duration_requested_hours,
-                validity_start, validity_end, status
+                validity_start, validity_end, status,
+                workflow_status, requested_by, requested_at, issued_by
             ) VALUES (
                 :org_id, :permit_type_id, :date_issued, :time_issued,
                 :location_station_id, :work_description, :duration,
-                :validity_start, :validity_end, :status
+                :validity_start, :validity_end, :status,
+                'requested', :requested_by, :requested_at, :requested_by
             )
         """),
         {
@@ -291,7 +297,9 @@ def create_permit(
             "duration": data.get("duration_hours", 8),
             "validity_start": datetime.fromisoformat(data.get("start_datetime").replace("Z", "")) if data.get("start_datetime") else datetime.now(),
             "validity_end": datetime.fromisoformat(data.get("end_datetime").replace("Z", "")) if data.get("end_datetime") else datetime.now(),
-            "status": "pending_approval"
+            "status": "pending_approval",
+            "requested_by": requester_emp_id,
+            "requested_at": datetime.now(),
         }
     )
     db.commit()
@@ -463,7 +471,7 @@ def list_notifications(
             "title": r["title"] or "Safety Notification",
             "message": r["message"] or "",
             "type": r["type"].lower() if r["type"] else "info",
-            "read": r["is_read"] == 1,
+            "read": str(r["status"] or "").lower() in ("read", "seen"),
             "created_at": r["created_at"].isoformat() if r["created_at"] else datetime.now().isoformat()
         })
 
@@ -496,11 +504,17 @@ def list_training(
 
     items = []
     for r in rows:
+        # training_programs has no free-text description column; build a short
+        # subtitle from frequency + certification so the UI has something real.
+        parts = [str(r["frequency"]) if r["frequency"] else None,
+                 f"Certification: {r['certification']}" if r["certification"] else None]
+        description = " • ".join([p for p in parts if p])
+        estimated_minutes = int(float(r["duration_hours"]) * 60) if r["duration_hours"] else 15
         items.append({
             "id": str(r["id"]),
-            "title": r["program_name"] or "Safety Module",
-            "description": r["description"] or "",
-            "estimated_minutes": 15,
+            "title": r["training_name"] or "Safety Module",
+            "description": description,
+            "estimated_minutes": estimated_minutes,
             "xp_reward": 50,
             "is_mandatory": True,
             "status": "pending"

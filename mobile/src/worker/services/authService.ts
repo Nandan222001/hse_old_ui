@@ -3,6 +3,27 @@ import { ENDPOINTS } from '../api/endpoints';
 import { TokenStorage } from '../utils/storage';
 import { ChangePasswordRequest, LoginRequest, LoginResponse, User } from '../types';
 
+/** Employee record as returned by GET /employees/me. Most fields are optional —
+ *  employee rows are frequently incomplete, so the UI must tolerate nulls. */
+export interface EmployeeProfile {
+  employee_id: number;
+  full_name: string | null;
+  /** Base64 data URI, or null when no photo has been set. */
+  photo: string | null;
+  username: string | null;
+  email: string | null;
+  role_name: string | null;
+  department_name: string | null;
+  manager_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  employment_type: string | null;
+  employment_start_date: string | null;
+  shift_pattern: string | null;
+  induction_date: string | null;
+  active_status: string | null;
+}
+
 export const authService = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const apiPayload = {
@@ -87,6 +108,32 @@ export const authService = {
 
   async getProfile(): Promise<User> {
     const { data } = await apiClient.get<User>(ENDPOINTS.AUTH.PROFILE);
+    return data;
+  },
+
+  /** Full employee record backing the "View Full Bio" screen. */
+  async getMyEmployeeProfile(): Promise<EmployeeProfile> {
+    const { data } = await apiClient.get<EmployeeProfile>(
+      ENDPOINTS.AUTH.MY_EMPLOYEE_PROFILE,
+    );
+    return data;
+  },
+
+  /** Set or clear your own profile photo. Pass null to remove it. */
+  async setMyPhoto(photo: string | null): Promise<{ employee_id: number; has_photo: boolean }> {
+    const { data } = await apiClient.put(ENDPOINTS.AUTH.MY_EMPLOYEE_PHOTO, { photo });
+    return data;
+  },
+
+  /** Update the self-editable fields (DOB / gender) on your own record.
+   *  Role, department and manager are org-controlled and cannot be set here. */
+  async updateMyEmployeeProfile(
+    changes: { date_of_birth?: string | null; gender?: string | null },
+  ): Promise<EmployeeProfile> {
+    const { data } = await apiClient.patch<EmployeeProfile>(
+      ENDPOINTS.AUTH.MY_EMPLOYEE_PROFILE,
+      changes,
+    );
     return data;
   },
 

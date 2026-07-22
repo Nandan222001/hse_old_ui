@@ -9,7 +9,7 @@ plain integers before insertion.
 import re
 import logging
 from io import BytesIO
-from typing import Optional
+from typing import Optional, List, Dict
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -79,9 +79,9 @@ TENANT_TABLES = (
 )
 
 
-def capture_tenant_table_max_ids(db: Session) -> dict[str, int]:
+def capture_tenant_table_max_ids(db: Session) -> Dict[str, int]:
     """Snapshot current ids so import linking does not claim old seed/test rows."""
-    max_ids: dict[str, int] = {}
+    max_ids: Dict[str, int] = {}
     for tbl in TENANT_TABLES:
         try:
             max_ids[tbl] = int(db.execute(text(f"SELECT COALESCE(MAX(id), 0) FROM `{tbl}`")).scalar() or 0)
@@ -90,7 +90,7 @@ def capture_tenant_table_max_ids(db: Session) -> dict[str, int]:
     return max_ids
 
 
-def link_new_rows_to_org(db: Session, org_id: int, before_ids: dict[str, int]) -> int:
+def link_new_rows_to_org(db: Session, org_id: int, before_ids: Dict[str, int]) -> int:
     """Stamp organisation_id only on rows inserted after before_ids was captured."""
     affected = 0
     for tbl in TENANT_TABLES:
@@ -110,7 +110,7 @@ def link_new_rows_to_org(db: Session, org_id: int, before_ids: dict[str, int]) -
     return affected
 
 
-def latest_org_id(db: Session) -> int | None:
+def latest_org_id(db: Session) -> Optional[int]:
     org_id = db.execute(text("SELECT MAX(id) FROM organisation")).scalar()
     return int(org_id) if org_id else None
 
@@ -515,8 +515,8 @@ def import_excel_stream(file_bytes: bytes, db: Session):
 
     yield _sse({"type": "start", "total": len(SHEET_STEPS)})
 
-    results: dict[str, int] = {}
-    errors: dict[str, str] = {}
+    results: Dict[str, int] = {}
+    errors: Dict[str, str] = {}
     before_ids = capture_tenant_table_max_ids(db)
 
     try:
@@ -576,8 +576,8 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
     except Exception as exc:
         raise ValueError(f"Cannot open Excel file: {exc}") from exc
 
-    results: dict[str, int] = {}
-    errors: dict[str, str] = {}
+    results: Dict[str, int] = {}
+    errors: Dict[str, str] = {}
     before_ids = capture_tenant_table_max_ids(db)
 
     try:

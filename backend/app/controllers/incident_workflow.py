@@ -340,7 +340,8 @@ def manager_queue(
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
         .filter(Incident.workflow_status.in_(["escalated", "pending_approval"]))
-        .order_by(Incident.escalated_at.desc().nullslast(), Incident.reported_at.desc())
+        # MySQL has no NULLS LAST; a DESC sort already orders NULLs last there.
+        .order_by(Incident.escalated_at.desc(), Incident.reported_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -435,7 +436,7 @@ def list_all_workflow_incidents(
     if incident_type:
         q = q.filter(Incident.incident_type == incident_type)
 
-    rows = q.order_by(Incident.reported_at.desc().nullslast(), Incident.created_at.desc()).offset(skip).limit(limit).all()
+    rows = q.order_by(Incident.reported_at.desc(), Incident.created_at.desc()).offset(skip).limit(limit).all()
     return rows
 
 

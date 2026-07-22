@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Shield,
   MessageSquare,
+  Inbox,
   LogOut,
 } from "lucide-react-native";
 import type { ScreenProps } from "./types";
@@ -22,6 +23,7 @@ import { TabB_Risks } from "./tabs/TabB_Risks";
 import { TabB_CapaOverview } from "./tabs/TabB_CapaOverview";
 import { Tab_PermitMonitoring } from "./tabs/Tab_PermitMonitoring";
 import { TabA_Complaints } from "./tabs/TabA_Complaints";
+import { TabB_ReportApprovals } from "./tabs/TabB_ReportApprovals";
 
 export function AppContainerView(props: ScreenProps) {
   const { activeTab, setActiveTab, setCurrentScreen, showToast } = props;
@@ -43,6 +45,8 @@ export function AppContainerView(props: ScreenProps) {
         return <Tab_PermitMonitoring {...props} />;
       case 4:
         return <TabA_Complaints {...props} />;
+      case 5:
+        return <TabB_ReportApprovals {...props} />;
       default:
         return <TabB_SafetyPerformance {...props} />;
     }
@@ -54,6 +58,8 @@ export function AppContainerView(props: ScreenProps) {
     { label: "CAPA", icon: ClipboardList },
     { label: "Permits", icon: Shield },
     { label: "Feedback", icon: MessageSquare },
+    // Final step of Worker → Supervisor → Manager for near miss / unsafe act / risk.
+    { label: "Approvals", icon: Inbox },
   ];
 
   return (

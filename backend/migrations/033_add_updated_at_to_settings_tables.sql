@@ -1,4 +1,4 @@
--- Migration: 030_add_updated_at_to_settings_tables
+-- Migration: 033_add_updated_at_to_settings_tables
 -- app/models/base.py's Base class declares updated_at on every model — the
 -- api_keys/webhooks tables created in 029 were missing it.
 

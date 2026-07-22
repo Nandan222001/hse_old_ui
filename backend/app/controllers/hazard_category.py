@@ -1,3 +1,4 @@
+from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
@@ -12,7 +13,7 @@ def _svc(db: Session = Depends(get_db)) -> HazardCategoryService:
     return HazardCategoryService(db)
 
 
-@router.get("/", response_model=list[HazardCategoryResponse])
+@router.get("/", response_model=List[HazardCategoryResponse])
 def list_hazard_categorys(skip: int = 0, limit: int = 100, svc: HazardCategoryService = Depends(_svc), current_user: CurrentUser = Depends(get_current_user)):
     return svc.list(skip=skip, limit=limit, org_id=current_user.org_id)
 

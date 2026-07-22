@@ -7,12 +7,35 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
+import { useMySubmissions } from '../hooks/useMySubmissions';
+
+const CHECKLIST_LABELS: Record<string, string> = {
+  worker_pre_shift: 'Pre-Shift Safety Check',
+  worker_post_shift: 'Post-Shift Safety Check',
+  worker_vehicle_pre_start: 'Vehicle Pre-Start Check',
+};
+
+const SUBMISSION_STATUS = {
+  draft:     { bg: '#F1F5F9', text: '#475569', label: 'Draft' },
+  submitted: { bg: '#DBEAFE', text: '#1D4ED8', label: 'Submitted' },
+  validated: { bg: '#E8F5E9', text: '#2E7D32', label: 'Validated' },
+  rejected:  { bg: '#FFEBEE', text: '#C62828', label: 'Rejected' },
+} as const;
 
 export default function TasksScreen({ navigation }: any) {
   const { tasks, isLoading, refetch } = useTasks();
+  const {
+    submissions,
+    isLoading: loadingSubs,
+    error: subsError,
+    refetch: refetchSubs,
+  } = useMySubmissions();
   const [search, setSearch] = useState('');
 
-  const onRefresh = useCallback(() => { refetch(); }, [refetch]);
+  const onRefresh = useCallback(() => {
+    refetch();
+    refetchSubs();
+  }, [refetch, refetchSubs]);
 
   // Mock checklist details for custom UI presentation
   const getSubText = (title: string) => {
@@ -47,13 +70,19 @@ export default function TasksScreen({ navigation }: any) {
     t.location.toLowerCase().includes(search.toLowerCase())
   );
 
+  const checklistLabel = (type: string) =>
+    CHECKLIST_LABELS[type] ??
+    type.replace(/^worker_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const filteredSubmissions = submissions.filter(s =>
+    checklistLabel(s.checklist_type).toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <ScreenLayout bg="#F8FAFC">
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Icon emoji="☰" style={styles.headerIcon} />
-        </TouchableOpacity>
+        <View style={styles.headerBtn} />
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
           <Icon emoji="🔔" style={styles.headerIcon} />
@@ -102,6 +131,64 @@ export default function TasksScreen({ navigation }: any) {
           <TouchableOpacity onPress={() => setSearch('')}>
             <Text style={styles.clearAllText}>Clear all</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* My Submitted Checklists */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Checklists</Text>
+          {filteredSubmissions.length > 0 && (
+            <Text style={styles.sectionCount}>{filteredSubmissions.length}</Text>
+          )}
+        </View>
+
+        {loadingSubs && submissions.length === 0 ? (
+          <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
+        ) : subsError ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>Couldn't load your checklists.</Text>
+            <TouchableOpacity onPress={refetchSubs}>
+              <Text style={styles.retryText}>Tap to retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : filteredSubmissions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              {search ? 'No checklists match your search.' : "You haven't submitted any checklists yet."}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.submissionsList}>
+            {filteredSubmissions.map((s) => {
+              const sColors = SUBMISSION_STATUS[s.status] ?? SUBMISSION_STATUS.draft;
+              return (
+                <View key={s.submission_uuid} style={styles.submissionCard}>
+                  <View style={styles.submissionTop}>
+                    <Text style={styles.submissionTitle} numberOfLines={1}>
+                      {checklistLabel(s.checklist_type)}
+                    </Text>
+                    <View style={[styles.priorityBadge, { backgroundColor: sColors.bg }]}>
+                      <Text style={[styles.priorityText, { color: sColors.text }]}>{sColors.label}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.submissionMeta}>
+                    <Icon name="calendar" size={13} color={Colors.textMuted} style={styles.metaItemIcon} />
+                    <Text style={styles.metaText}>{s.checklist_date}</Text>
+                    {!!s.submit_sla_breached && (
+                      <>
+                        <Icon name="alert-triangle" size={13} color="#C62828" style={styles.slaIcon} />
+                        <Text style={styles.slaText}>SLA breached</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Assigned Tasks */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Assigned Tasks</Text>
         </View>
 
         {isLoading && filteredTasks.length === 0 ? (
@@ -273,6 +360,87 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontWeight: '700',
     marginLeft: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  sectionCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+    overflow: 'hidden',
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  retryText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  submissionsList: {
+    gap: 10,
+    marginBottom: 24,
+  },
+  submissionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  submissionTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  submissionTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginRight: 8,
+  },
+  submissionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  slaIcon: {
+    marginLeft: 12,
+    marginRight: 4,
+  },
+  slaText: {
+    fontSize: 12,
+    color: '#C62828',
+    fontWeight: '700',
   },
   tasksList: {
     gap: 14,

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
@@ -59,6 +60,8 @@ export default function SafetyChecklistScreen({ navigation }: any) {
   const [activeTemplate, setActiveTemplate] = useState<ChecklistTemplate | null>(null);
   const [submission, setSubmission] = useState<DraftSubmission | null>(null);
   const [responses, setResponses] = useState<Record<number, ResponseValue>>({});
+  // Free-text remark per item, shown below the Yes/No toggle (docx flow 7: "Yes/No plus remarks").
+  const [remarks, setRemarks] = useState<Record<number, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
 
@@ -137,6 +140,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
       setSubmission(draft);
       setActiveTemplate(template);
       setResponses({});
+      setRemarks({});
     } catch (err: any) {
       Alert.alert('Error', 'Failed to create checklist submission. Please try again.');
     } finally {
@@ -148,6 +152,10 @@ export default function SafetyChecklistScreen({ navigation }: any) {
 
   const setItemResponse = useCallback((itemNo: number, value: ResponseValue) => {
     setResponses((prev) => ({ ...prev, [itemNo]: value }));
+  }, []);
+
+  const setItemRemark = useCallback((itemNo: number, text: string) => {
+    setRemarks((prev) => ({ ...prev, [itemNo]: text }));
   }, []);
 
   // ─── Submit Checklist ────────────────────────────────────────────────────
@@ -170,13 +178,17 @@ export default function SafetyChecklistScreen({ navigation }: any) {
     try {
       setSubmitting(true);
 
-      // Save all answers
-      const items = Object.entries(responses)
-        .filter(([_, val]) => val !== null)
-        .map(([itemNo, value]) => ({
-          item_no: Number(itemNo),
-          response_value: value,
-        }));
+      // Save all answers together with their remarks. Include any item that has either
+      // a Yes/No answer or a non-empty remark.
+      const itemNos = new Set<number>([
+        ...Object.entries(responses).filter(([_, v]) => v !== null).map(([n]) => Number(n)),
+        ...Object.entries(remarks).filter(([_, r]) => (r ?? '').trim() !== '').map(([n]) => Number(n)),
+      ]);
+      const items = Array.from(itemNos).map((itemNo) => ({
+        item_no: itemNo,
+        response_value: responses[itemNo] ?? null,
+        remark: (remarks[itemNo] ?? '').trim() || null,
+      }));
 
       await apiClient.put(
         `checklists/submissions/${submission.submission_uuid}/items`,
@@ -204,6 +216,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
     setActiveTemplate(null);
     setSubmission(null);
     setResponses({});
+    setRemarks({});
   };
 
   // ─── Render: Template List View ──────────────────────────────────────────
@@ -339,6 +352,16 @@ export default function SafetyChecklistScreen({ navigation }: any) {
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Optional remark / description for this item */}
+                <TextInput
+                  style={styles.remarkInput}
+                  placeholder="Add remarks / description (optional)"
+                  placeholderTextColor={Colors.textLight}
+                  value={remarks[item.item_no] ?? ''}
+                  onChangeText={(text) => setItemRemark(item.item_no, text)}
+                  multiline
+                />
               </View>
             ))}
           </View>
@@ -592,6 +615,20 @@ const styles = StyleSheet.create({
   },
   toggleBtnTextActive: {
     color: Colors.white,
+  },
+  remarkInput: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    fontSize: 13,
+    color: Colors.textDark,
+    backgroundColor: Colors.background,
+    minHeight: 44,
+    textAlignVertical: 'top',
   },
   submitBtn: {
     backgroundColor: Colors.blue,

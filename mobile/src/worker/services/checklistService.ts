@@ -2,10 +2,35 @@ import apiClient, { uploadClient } from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import { Checklist, ChecklistListResponse, SubmitChecklistRequest } from '../types';
 
+/** A checklist submission record as returned by the /checklists API. */
+export interface ChecklistSubmission {
+  submission_uuid: string;
+  checklist_type: string;
+  checklist_date: string;
+  submitted_by_email: string;
+  submitted_by_role: string;
+  status: 'draft' | 'submitted' | 'validated' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  submit_sla_breached: number;
+  validate_sla_breached: number;
+  validation_decision?: string | null;
+  validation_notes?: string | null;
+}
+
 export const checklistService = {
   async getChecklists(params?: { status?: string; type?: string }): Promise<ChecklistListResponse> {
     const { data } = await apiClient.get<ChecklistListResponse>(ENDPOINTS.CHECKLISTS.LIST, { params });
     return data;
+  },
+
+  /** Checklists the signed-in user has started or submitted, newest first. */
+  async getMySubmissions(params?: { status?: string; limit?: number }): Promise<ChecklistSubmission[]> {
+    const { data } = await apiClient.get<ChecklistSubmission[]>(
+      ENDPOINTS.CHECKLISTS.SUBMISSIONS,
+      { params: { mine: true, ...params } },
+    );
+    return Array.isArray(data) ? data : [];
   },
 
   async getChecklist(id: string): Promise<Checklist> {

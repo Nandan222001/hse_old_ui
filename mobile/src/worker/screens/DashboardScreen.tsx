@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView, View, Text, TouchableOpacity,
   StyleSheet, RefreshControl, ActivityIndicator, Image,
@@ -8,16 +8,110 @@ import { Icon } from '../components/display/Icon';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
 import { useAuthStore } from '../store/authStore';
+import apiClient from '../api/client';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks, shiftSummary, isLoading, refetch } = useTasks();
   const user = useAuthStore(s => s.user);
 
-  const onRefresh = useCallback(() => { refetch(); }, [refetch]);
+  // Live safety score derived from the site's compliance rating (out of 5).
+  const [safetyScore, setSafetyScore] = useState<number | null>(null);
+  useEffect(() => {
+    apiClient
+      .get('dashboard/stats')
+      .then((res: any) => {
+        const rating = res?.data?.avg_compliance_rating;
+        if (typeof rating === 'number') setSafetyScore(Math.round((rating / 5) * 100));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Recent Activity feed — real worker notifications (latest 3).
+  const [activity, setActivity] = useState<any[]>([]);
+  const loadActivity = useCallback(() => {
+    apiClient
+      .get('worker/notifications')
+      .then((res: any) => {
+        const items = res?.data?.items ?? [];
+        setActivity(Array.isArray(items) ? items.slice(0, 3) : []);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadActivity(); }, [loadActivity]);
+
+  // Featured Toolbox Talk — first available training program.
+  const [featured, setFeatured] = useState<any | null>(null);
+  useEffect(() => {
+    apiClient
+      .get('worker/training')
+      .then((res: any) => {
+        const items = res?.data?.items ?? [];
+        if (Array.isArray(items) && items.length) setFeatured(items[0]);
+      })
+      .catch(() => {});
+  }, []);
+
+  const relTime = (iso?: string) => {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m} min ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
+    const d = Math.floor(h / 24);
+    return `${d} day${d > 1 ? 's' : ''} ago`;
+  };
+
+  const activityStyle = (type?: string) => {
+    switch ((type || '').toLowerCase()) {
+      case 'success':
+        return { bg: '#E8F5E9', color: '#2E7D32', icon: 'check-circle', label: 'Success' };
+      case 'warning':
+      case 'alert':
+      case 'danger':
+      case 'error':
+        return { bg: '#FFEBEE', color: '#C62828', icon: 'alert-triangle', label: 'Alert' };
+      default:
+        return { bg: '#E3F2FD', color: '#1565C0', icon: 'file-text', label: 'Info' };
+    }
+  };
+
+  const onRefresh = useCallback(() => { refetch(); loadActivity(); }, [refetch, loadActivity]);
 
   const total     = shiftSummary?.total_tasks     ?? 5;
   const completed = shiftSummary?.completed_tasks ?? 0;
   const pending   = total - completed;
+
+  // Real breakdown of the worker's own tasks.
+  const now = Date.now();
+  const isSameDay = (d: string) => {
+    const t = new Date(d); const n = new Date();
+    return t.getFullYear() === n.getFullYear() && t.getMonth() === n.getMonth() && t.getDate() === n.getDate();
+  };
+  const overdueCount = (tasks ?? []).filter(
+    (t: any) => t?.due_at && new Date(t.due_at).getTime() < now && t?.status !== 'completed',
+  ).length;
+  const todayCount = (tasks ?? []).filter((t: any) => t?.due_at && isSameDay(t.due_at)).length;
+
+  // "Your Schedule" — real tasks that have a due time, earliest first.
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    let h = d.getHours();
+    const m = d.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+  const scheduleItems = (tasks ?? [])
+    .filter((t: any) => t?.due_at)
+    .sort((a: any, b: any) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+    .slice(0, 5);
+  // Highlight the next upcoming task (fall back to the first row).
+  const activeIdx = (() => {
+    const idx = scheduleItems.findIndex((t: any) => new Date(t.due_at).getTime() >= now);
+    return idx === -1 ? 0 : idx;
+  })();
 
   const displayName = user?.name ?? 'Alex';
   const greeting = (() => {
@@ -27,13 +121,22 @@ export default function DashboardScreen({ navigation }: any) {
     return 'Good evening';
   })();
 
+  // Banner risk level derived from the live site compliance score (out of 100).
+  // Higher compliance → lower operating risk.
+  const risk =
+    safetyScore == null
+      ? { label: 'Normal', color: '#FBBF24' }
+      : safetyScore >= 80
+      ? { label: 'Low', color: '#4ADE80' }
+      : safetyScore >= 50
+      ? { label: 'Normal', color: '#FBBF24' }
+      : { label: 'High', color: '#F87171' };
+
   return (
     <ScreenLayout bg="#F8FAFC">
       {/* Top Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Icon name="menu" style={styles.headerIcon} />
-        </TouchableOpacity>
+        <View style={styles.headerBtn} />
         <Text style={styles.headerTitle}>SafeGuard HSE</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
           <Icon name="bell" style={styles.headerIcon} />
@@ -53,7 +156,8 @@ export default function DashboardScreen({ navigation }: any) {
           <Text style={styles.bannerGreeting}>{greeting},</Text>
           <Text style={styles.bannerName}>{displayName}</Text>
           <Text style={styles.bannerSubtitle}>
-            Site {user?.site || 'Alpha'} is currently operating at Normal Risk. Stay safe today.
+            Site {user?.site || 'Alpha'} is currently operating at{' '}
+            <Text style={{ color: risk.color, fontWeight: '800' }}>{risk.label} Risk</Text>. Stay safe today.
           </Text>
         </View>
 
@@ -74,7 +178,7 @@ export default function DashboardScreen({ navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('RaisePermit')}>
             <Icon name="edit-3" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Raise Permit</Text>
+            <Text style={styles.quickActionLabel}>Request Permit</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportUnsafeAct')}>
             <Icon name="octagon" style={styles.quickActionIcon} />
@@ -95,13 +199,13 @@ export default function DashboardScreen({ navigation }: any) {
               <Icon name="trending-up" style={styles.trendIcon} color="#22C55E" />
             </View>
             <View style={styles.statCardValueRow}>
-              <Text style={styles.statCardValue}>88</Text>
-              <Text style={styles.statCardSubValue}>/ 100</Text>
+              <Text style={styles.statCardValue}>{safetyScore ?? '—'}</Text>
+              <Text style={styles.statCardSubValue}>%</Text>
             </View>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: '88%', backgroundColor: '#22C55E' }]} />
+              <View style={[styles.progressBarFill, { width: `${safetyScore ?? 0}%`, backgroundColor: '#22C55E' }]} />
             </View>
-            <Text style={styles.statCardTrendText}>+2.4% from last week</Text>
+            <Text style={styles.statCardTrendText}>Site compliance rating</Text>
           </View>
 
           {/* Card 2: Pending Tasks */}
@@ -111,7 +215,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Icon name="clipboard" style={styles.cardHeaderIcon} />
             </View>
             <Text style={styles.statCardValue}>{pending}</Text>
-            <Text style={styles.statCardSubText}>2 overdue, 3 for today</Text>
+            <Text style={styles.statCardSubText}>{overdueCount} overdue, {todayCount} for today</Text>
           </TouchableOpacity>
 
           {/* Card 3: Active Permits */}
@@ -128,43 +232,31 @@ export default function DashboardScreen({ navigation }: any) {
         {/* Your Schedule */}
         <Text style={styles.sectionTitle}>Your Schedule</Text>
         <View style={styles.scheduleCard}>
-          {/* Item 1 */}
-          <View style={styles.timelineItem}>
-            <View style={styles.timelineLeft}>
-              <View style={[styles.timelineDot, styles.timelineDotActive]} />
-              <View style={[styles.timelineLine, styles.timelineLineActive]} />
-            </View>
-            <View style={styles.timelineRight}>
-              <Text style={styles.timelineTime}>08:00 AM</Text>
-              <Text style={styles.timelineTitle}>Daily Toolbox Talk</Text>
-              <Text style={styles.timelineLoc}>Main Assembly Point</Text>
-            </View>
-          </View>
-
-          {/* Item 2 */}
-          <View style={styles.timelineItem}>
-            <View style={styles.timelineLeft}>
-              <View style={styles.timelineDot} />
-              <View style={styles.timelineLine} />
-            </View>
-            <View style={styles.timelineRight}>
-              <Text style={styles.timelineTime}>10:30 AM</Text>
-              <Text style={[styles.timelineTitle, styles.timelineTitlePending]}>Equipment Inspection: Crane A12</Text>
-              <Text style={styles.timelineLoc}>North Sector</Text>
-            </View>
-          </View>
-
-          {/* Item 3 */}
-          <View style={styles.timelineItem}>
-            <View style={styles.timelineLeft}>
-              <View style={styles.timelineDot} />
-            </View>
-            <View style={styles.timelineRight}>
-              <Text style={styles.timelineTime}>02:00 PM</Text>
-              <Text style={[styles.timelineTitle, styles.timelineTitlePending]}>Site Safety Walkthrough</Text>
-              <Text style={styles.timelineLoc}>With Site Manager</Text>
-            </View>
-          </View>
+          {scheduleItems.length === 0 ? (
+            <Text style={styles.timelineLoc}>No scheduled tasks.</Text>
+          ) : (
+            scheduleItems.map((t: any, i: number) => {
+              const isActive = i === activeIdx;
+              const isLast = i === scheduleItems.length - 1;
+              return (
+                <View key={t.id ?? i} style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, isActive && styles.timelineDotActive]} />
+                    {!isLast && (
+                      <View style={[styles.timelineLine, isActive && styles.timelineLineActive]} />
+                    )}
+                  </View>
+                  <View style={styles.timelineRight}>
+                    <Text style={styles.timelineTime}>{fmtTime(t.due_at)}</Text>
+                    <Text style={[styles.timelineTitle, !isActive && styles.timelineTitlePending]} numberOfLines={1}>
+                      {t.title}
+                    </Text>
+                    <Text style={styles.timelineLoc} numberOfLines={1}>{t.location}</Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
 
         {/* Featured Toolbox Talk */}
@@ -178,9 +270,10 @@ export default function DashboardScreen({ navigation }: any) {
           </View>
           <View style={styles.featuredContent}>
             <Text style={styles.featuredTag}>Today's Toolbox Talk</Text>
-            <Text style={styles.featuredTitle}>Safety at Heights</Text>
+            <Text style={styles.featuredTitle}>{featured?.title ?? 'Safety at Heights'}</Text>
             <Text style={styles.featuredDesc}>
-              Critical review of fall arrest systems and ladder safety protocols for the high-rise wing.
+              {featured?.description ??
+                'Critical review of fall arrest systems and ladder safety protocols for the high-rise wing.'}
             </Text>
             <TouchableOpacity
               style={styles.featuredBtn}
@@ -203,47 +296,34 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
 
         <View style={styles.activityList}>
-          {/* Item 1 */}
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIconBox, { backgroundColor: '#E8F5E9' }]}>
-              <Icon name="check-circle" style={styles.activityIcon} color="#2E7D32" />
+          {activity.length === 0 ? (
+            <View style={styles.activityItem}>
+              <Text style={styles.activityMeta}>No recent activity.</Text>
             </View>
-            <View style={styles.activityBody}>
-              <Text style={styles.activityTitle}>Personal Protective Equipment Check</Text>
-              <Text style={styles.activityMeta}>Completed by you • 2 hours ago</Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: '#E8F5E9' }]}>
-              <Text style={[styles.statusBadgeText, { color: '#2E7D32' }]}>Successful</Text>
-            </View>
-          </View>
-
-          {/* Item 2 */}
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIconBox, { backgroundColor: '#FFEBEE' }]}>
-              <Icon name="alert-triangle" style={styles.activityIcon} color="#C62828" />
-            </View>
-            <View style={styles.activityBody}>
-              <Text style={styles.activityTitle}>Minor Spill Reported</Text>
-              <Text style={styles.activityMeta}>North Sector B-12 • 4 hours ago</Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: '#FFEBEE' }]}>
-              <Text style={[styles.statusBadgeText, { color: '#C62828' }]}>High Priority</Text>
-            </View>
-          </View>
-
-          {/* Item 3 */}
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIconBox, { backgroundColor: '#E3F2FD' }]}>
-              <Icon name="file-text" style={styles.activityIcon} color="#1565C0" />
-            </View>
-            <View style={styles.activityBody}>
-              <Text style={styles.activityTitle}>Hot Work Permit #882 Approved</Text>
-              <Text style={styles.activityMeta}>Site Alpha Admin • 6 hours ago</Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: '#E3F2FD' }]}>
-              <Text style={[styles.statusBadgeText, { color: '#1565C0' }]}>Approved</Text>
-            </View>
-          </View>
+          ) : (
+            activity.map((a, i) => {
+              const s = activityStyle(a.type);
+              return (
+                <View
+                  key={a.id ?? i}
+                  style={[styles.activityItem, i === activity.length - 1 && { borderBottomWidth: 0 }]}
+                >
+                  <View style={[styles.activityIconBox, { backgroundColor: s.bg }]}>
+                    <Icon name={s.icon} style={styles.activityIcon} color={s.color} />
+                  </View>
+                  <View style={styles.activityBody}>
+                    <Text style={styles.activityTitle} numberOfLines={1}>{a.title}</Text>
+                    <Text style={styles.activityMeta} numberOfLines={1}>
+                      {a.message ? `${a.message} • ${relTime(a.created_at)}` : relTime(a.created_at)}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: s.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: s.color }]}>{s.label}</Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
         </View>
 
         <View style={{ height: 60 }} />

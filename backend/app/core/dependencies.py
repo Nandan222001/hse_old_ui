@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends, HTTPException, Request, Query, status
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ class PaginationParams:
 class CurrentUser:
     """Decoded JWT payload for the authenticated user."""
 
-    def __init__(self, user_id: int, username: str, email: str, role: str, org_id: int | None):
+    def __init__(self, user_id: int, username: str, email: str, role: str, org_id: Optional[int]):
         self.user_id = user_id
         self.username = username
         self.email = email
@@ -31,8 +32,12 @@ class CurrentUser:
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> CurrentUser:
     """FastAPI dependency — validates JWT and returns the current user with org_id."""
+    import logging
+    logger = logging.getLogger("app.core.middleware")
     auth_header = request.headers.get("Authorization", "")
+    logger.info(f"DEBUG AUTH: Authorization Header is: '{auth_header}'")
     if not auth_header.startswith("Bearer "):
+        logger.info("DEBUG AUTH: Missing or invalid Authorization header prefix")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
@@ -40,7 +45,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
 
     token = auth_header.removeprefix("Bearer ").strip()
     payload = decode_access_token(token)
+    logger.info(f"DEBUG AUTH: Decoded payload: {payload}")
     if payload is None:
+        logger.info(f"DEBUG AUTH: Token decoding failed for token: {token[:30]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -76,3 +83,17 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
         role=role,
         org_id=org_id,
     )
+
+
+def get_current_user_optional(
+    request: Request, db: Session = Depends(get_db)
+) -> Optional[CurrentUser]:
+    """Same as get_current_user but returns None instead of raising.
+
+    Lets an endpoint attribute actions to the JWT user when one is present while
+    still serving callers that identify themselves via X-User-* headers.
+    """
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None

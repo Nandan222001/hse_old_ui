@@ -68,7 +68,7 @@ export default function ReportRiskScreen({ navigation }: any) {
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!category)            e.category = 'Select a hazard category';
-    if (!description.trim())  e.description = 'Describe the hazard / risk';
+    if (!description.trim())  e.description = 'Describe the hazard';
     if (!severity)            e.severity = 'Select the severity';
     if (!probability)         e.probability = 'Select the likelihood';
     setErrors(e);
@@ -86,12 +86,12 @@ export default function ReportRiskScreen({ navigation }: any) {
         probability,
       });
       Alert.alert(
-        'Risk Reported',
-        `Your ${rating ?? ''} risk observation has been submitted to your supervisor.`,
+        'Hazard Reported',
+        `Your ${rating ?? ''} hazard observation has been submitted to your supervisor.`,
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch {
-      Alert.alert('Submission Failed', 'Could not submit the risk report. Please try again.');
+      Alert.alert('Submission Failed', 'Could not submit the hazard report. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +99,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
   return (
     <ScreenLayout>
-      <AppHeader title="Report a Risk" onBack={() => navigation.goBack()} rightIcon="🔔" />
+      <AppHeader title="Report a Hazard" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <FormSection label="Hazard Category" required>
@@ -112,7 +112,7 @@ export default function ReportRiskScreen({ navigation }: any) {
           {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
         </FormSection>
 
-        <FormSection label="Risk / Hazard Description" required>
+        <FormSection label="Hazard Description" required>
           <TextArea
             placeholder="What is the hazard? e.g. exposed live wiring near walkway..."
             value={description}
@@ -151,7 +151,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         {rating && (
           <View style={[styles.ratingCard, { borderColor: RATING_COLOR[rating] }]}>
-            <Text style={styles.ratingLabel}>CALCULATED RISK RATING</Text>
+            <Text style={styles.ratingLabel}>CALCULATED HAZARD RATING</Text>
             <View style={[styles.ratingBadge, { backgroundColor: RATING_COLOR[rating] }]}>
               <Text style={styles.ratingBadgeText}>{rating.toUpperCase()}</Text>
             </View>
@@ -178,7 +178,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         <FormSection label="Suggested Control / Mitigation">
           <TextArea
-            placeholder="How could this risk be controlled or removed?"
+            placeholder="How could this hazard be controlled or removed?"
             value={mitigation}
             onChangeText={setMitigation}
             minHeight={80}
@@ -193,7 +193,7 @@ export default function ReportRiskScreen({ navigation }: any) {
         >
           {isLoading
             ? <ActivityIndicator color={Colors.white} />
-            : <Text style={styles.submitText}>SUBMIT RISK REPORT</Text>
+            : <Text style={styles.submitText}>SUBMIT HAZARD REPORT</Text>
           }
         </TouchableOpacity>
         <View style={{ height: 32 }} />

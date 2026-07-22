@@ -1,3 +1,4 @@
+from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
@@ -12,7 +13,7 @@ def _svc(db: Session = Depends(get_db)) -> IncidentService:
     return IncidentService(db)
 
 
-@router.get("/", response_model=list[IncidentResponse])
+@router.get("/", response_model=List[IncidentResponse])
 def list_incidents(
     skip: int = 0,
     limit: int = 100,
