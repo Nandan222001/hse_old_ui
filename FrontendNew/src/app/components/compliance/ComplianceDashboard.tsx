@@ -3,6 +3,24 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianG
 import { getComplianceSummary, type ComplianceSummary } from "../../../services/analytics.service";
 import { useAuth } from "../../context/AuthContext";
 
+// Distinguishes KPIs computed per the client's formal KPI-definition spec from
+// supplementary metrics we compute for extra visibility but that aren't in that spec.
+function KpiTag({ kind }: { kind: "client" | "supplementary" }) {
+  const isClient = kind === "client";
+  return (
+    <span
+      className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px]"
+      style={{
+        background: isClient ? "#DCFCE7" : "#F1F5F9",
+        color: isClient ? "#166534" : "#64748B",
+        fontWeight: 700,
+      }}
+    >
+      {isClient ? "Client KPI" : "Supplementary"}
+    </span>
+  );
+}
+
 export function ComplianceDashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
@@ -22,31 +40,54 @@ export function ComplianceDashboard() {
         <h1>Welcome, {user?.name || "User"}</h1>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Permit Compliance</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.permit_compliance_pct}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>PTW Compliance Rate</div>
+          <KpiTag kind="client" />
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>LOTO Compliance</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>
+            {summary?.loto_compliance_pct != null ? `${summary.loto_compliance_pct}%` : "N/A"}
+          </div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>
+            {summary?.loto_compliance_pct != null ? "Lockout/Isolation permits, no deviation" : "No lockout permits recorded"}
+          </div>
+          <KpiTag kind="client" />
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Corrective Action Closure Rate</div>
+          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.corrective_action_closure_rate}%` : "—"}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>CAPA actions closed</div>
+          <KpiTag kind="client" />
+        </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Compliance Score</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.compliance_score}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.compliance_label ?? ""}</div>
+          <KpiTag kind="supplementary" />
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
-          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Legal Register Coverage</div>
+          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Policy–Hazard Category Coverage</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.legal_register_coverage_pct}%` : "—"}</div>
-          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.legal_register_label ?? ""}</div>
+          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>
+            Policy categories vs. hazard categories — not a full legal/risk register audit
+          </div>
+          <KpiTag kind="supplementary" />
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Audit Readiness Score</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.audit_readiness_pct}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.audit_readiness_label ?? ""}</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
-          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Permit Compliance</div>
-          <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.permit_compliance_pct}%` : "—"}</div>
-          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>PTW Compliance</div>
+          <KpiTag kind="supplementary" />
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Policy Review Status</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.policy_review_pct}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>Current policies</div>
+          <KpiTag kind="supplementary" />
         </div>
       </div>
 

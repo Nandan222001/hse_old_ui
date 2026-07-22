@@ -68,7 +68,13 @@ export function AIAgentPage() {
       const criticalIncidents = dashStats?.critical_incidents ?? 0;
       const openCapa = dashStats?.open_capa_actions ?? 0;
       const totalZones = zones.length;
-      const highRiskZones = zones.filter((z: any) => (z.Risk_Score ?? 0) > 70).length;
+      // Zone/working-station records have no Risk_Score field — derive "high risk"
+      // from the real per-site incident counts already returned by risk-summary
+      // (same data used to build the Risk panel below), instead of a field that
+      // never existed and always evaluated to 0.
+      const zoneRiskRows: { zone: string; value: number }[] = riskSummary?.zone_risk ?? [];
+      const maxZoneVal = Math.max(...zoneRiskRows.map((z) => z.value), 1);
+      const highRiskZones = zoneRiskRows.filter((z) => (z.value / maxZoneVal) * 100 >= 70).length;
 
       setContextStats({ totalIncidents, criticalIncidents, totalZones, highRiskZones, openCapa });
 
@@ -132,17 +138,6 @@ export function AIAgentPage() {
     return () => { recognitionRef.current?.stop(); };
   }, []);
 
-  const buildContextPrompt = (question: string) => [
-    'You are an HSE intelligence assistant. Use the context below to answer precisely.',
-    `Organization: ${orgLabel}`,
-    `Total Incidents: ${contextStats.totalIncidents}`,
-    `Critical Incidents: ${contextStats.criticalIncidents}`,
-    `Total Zones / Sites: ${contextStats.totalZones}`,
-    `High Risk Zones: ${contextStats.highRiskZones}`,
-    `Open CAPA Actions: ${contextStats.openCapa}`,
-    `User Question: ${question}`,
-  ].join('\n');
-
   const askAi = async (question: string) => {
     if (!question.trim() || isProcessing) return;
     setIsProcessing(true);
@@ -152,9 +147,10 @@ export function AIAgentPage() {
       { role: 'ai', content: '', loading: true },
     ]);
     try {
-      const contextPrompt = buildContextPrompt(question);
-      const nextHistory: ChatMessage[] = [...conversationHistory, { role: 'user', content: contextPrompt }];
-      const reply = await chatWithAIAgent(contextPrompt, conversationHistory);
+      // The backend injects a fresh, real data snapshot on every call (see
+      // app/controllers/ai.py:_build_project_briefing) — the question is sent as-is.
+      const nextHistory: ChatMessage[] = [...conversationHistory, { role: 'user', content: question }];
+      const reply = await chatWithAIAgent(question, conversationHistory);
       setConversationHistory([...nextHistory, { role: 'assistant', content: reply }]);
       setMessages(prev => [
         ...prev.filter(m => !m.loading),

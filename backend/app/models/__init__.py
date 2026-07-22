@@ -29,6 +29,8 @@ from app.models.validation_log import ValidationLog
 from app.models.api_integration import ApiIntegration
 from app.models.document import Document
 from app.models.equipment_certification import EquipmentCertification
+from app.models.api_key import ApiKey
+from app.models.webhook import Webhook
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
@@ -37,5 +39,5 @@ __all__ = [
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
-    "EquipmentCertification",
+    "EquipmentCertification", "ApiKey", "Webhook",
 ]

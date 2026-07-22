@@ -82,7 +82,10 @@ export function ActionsPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr]">
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
-          <div className="mb-2 text-[24px]" style={{ color: '#111827', fontWeight: 700 }}>High Risk Work</div>
+          <div className="mb-1 text-[24px]" style={{ color: '#111827', fontWeight: 700 }}>High Risk Work</div>
+          <div className="mb-2 text-[11px]" style={{ color: '#9CA3AF' }}>
+            Active permits weighted by permit-type risk level (Critical/High/Medium/Low)
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <RadarChart data={riskWorkData}>
               <PolarGrid stroke="#D1D5DB" />
@@ -149,7 +152,7 @@ export function ActionsPage() {
             <table className="w-full min-w-[640px]">
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
-                  {["Permit ID", "Work Type", "Contractor", "Location", "Status", "Expiry"].map((h) => (
+                  {["Permit ID", "Work Type", "Issued By", "Location", "Status", "Expiry"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-[12px] uppercase" style={{ color: '#64748B', fontWeight: 700 }}>{h}</th>
                   ))}
                 </tr>
@@ -159,7 +162,7 @@ export function ActionsPage() {
                   <tr key={row.id + row.type} style={{ borderTop: '1px solid #E2E8F0' }}>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#0F172A', fontWeight: 600 }}>{row.id}</td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{row.type}</td>
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{row.contractor}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{row.issued_by}</td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{row.location}</td>
                     <td className="px-3 py-2 text-[12px]"><span className="rounded-full px-2 py-0.5" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>{row.status}</span></td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{row.expiry}</td>

@@ -1160,7 +1160,7 @@ _CSV_TEMPLATES: dict[str, tuple[str, str]] = {
     ),
     "hazards": (
         "hazard_id,category_id,hazard_name,severity,probability\n"
-        "HAZ001,HCAT001,Acid Spill,High,Medium\n",
+        "HAZ001,HCAT001,Acid Spill,Serious,Possible\n",
         "hazards_template.csv",
     ),
     "training_programs": (

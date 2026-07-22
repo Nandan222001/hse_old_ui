@@ -109,7 +109,7 @@ export function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // ── date filter state ──────────────────────────────────────────────────────
-  const [preset, setPreset] = useState<Preset>("30D");
+  const [preset, setPreset] = useState<Preset>("ALL");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [showCustom, setShowCustom] = useState(false);
@@ -213,10 +213,14 @@ export function DashboardPage() {
     },
     {
       title: "Contractor Risk Score",
-      value: `${leading.contractor_risk_label} / ${Number((leading as any).contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
-      sub: ((leading as any).contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
-      accent: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
-      border: ((leading as any).contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
+      value: leading.contractor_has_contractors === false
+        ? "No Contractors"
+        : `${leading.contractor_risk_label} / ${Number(leading.contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
+      sub: leading.contractor_has_contractors === false
+        ? "No contractor workforce recorded"
+        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
+      accent: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
+      border: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
       inline: "",
       trendDown: false,
     },
@@ -331,16 +335,16 @@ export function DashboardPage() {
           </div>
 
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Exposure Index & Competency Coverage (Intelligence-Based)</h2>
+            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Safety Walk Compliance & Corrective Action Closure</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
               <GaugeCard
                 value={stats ? Math.round(stats.avg_compliance_rating * 20) : 0}
-                label="Exposure Index"
+                label="Avg. Safety Walk Compliance"
                 threshold={stats ? `${Math.round(stats.avg_compliance_rating * 20)}%` : '0%'}
               />
               <GaugeCard
                 value={stats ? Math.round(stats.capa_completion_rate) : 0}
-                label="Competency Coverage"
+                label="Corrective Action Closure Rate"
                 threshold={stats ? `${Math.round(stats.capa_completion_rate)}%` : '0%'}
               />
             </div>

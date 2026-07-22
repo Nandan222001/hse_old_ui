@@ -13,8 +13,110 @@ from app.config.settings import get_settings
 from app.core.dependencies import get_current_user, CurrentUser
 from app.utils.logger import get_logger
 
+from app.controllers.dashboard import get_dashboard_stats, get_leading_indicators
+from app.controllers.analytics import get_compliance_summary, get_risk_summary, get_violations_summary
+from app.controllers.vendor import get_vendor_summary
+
 router = APIRouter(prefix="/ai", tags=["AI"])
 logger = get_logger(__name__)
+
+
+def _build_project_briefing(db: Session, current_user: CurrentUser) -> str:
+    """Assemble a real, DB-backed snapshot of this org's HSE data for the AI to
+    reason over — reuses the exact same query logic already shown on the
+    Dashboard/Compliance/Vendors/Violations pages, so the AI's answers stay
+    consistent with what the user sees on screen instead of a handful of numbers
+    typed into the chat box."""
+    lines: list[str] = [f"=== LIVE HSE DATA SNAPSHOT for {current_user.email} (org_id={current_user.org_id}) ==="]
+
+    try:
+        stats = get_dashboard_stats(start_date=None, end_date=None, db=db, current_user=current_user)
+        lines.append(
+            "\n[Overview]\n"
+            f"Total incidents: {stats['total_incidents']} | Critical incidents (Fatal/Serious/Significant): {stats['critical_incidents']}\n"
+            f"Near misses: {stats['near_misses_count']} | Safety walks logged: {stats['safety_walks_count']}\n"
+            f"Employees: {stats['total_employees']} | Sites: {stats['total_sites']} | Active permits: {stats['active_permits']}\n"
+            f"Open CAPA actions: {stats['open_capa_actions']} (overdue: {stats['overdue_capa']}) | CAPA closure rate: {stats['capa_completion_rate']}%\n"
+            f"Avg safety walk compliance rating: {stats['avg_compliance_rating']}/5 | Avg housekeeping rating: {stats['avg_housekeeping_rating']}/5"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: dashboard stats failed: %s", exc)
+
+    try:
+        leading = get_leading_indicators(start_date=None, end_date=None, db=db, current_user=current_user)
+        if leading.get("contractor_has_contractors", True):
+            contractor_text = f"{leading['contractor_risk_label']} ({leading['contractor_risk_score_10']}/10)"
+        else:
+            contractor_text = "N/A (no contractor workforce recorded)"
+        lines.append(
+            "\n[Leading Indicators]\n"
+            f"Predictive injury risk score: {leading['predictive_injury_risk_score']} (trend {leading['predictive_injury_risk_trend']:+})\n"
+            f"TRIR: {leading['trir']} | LTIFR: {leading['ltifr']} | DART: {leading['dart_rate']} | FAR: {leading['far']}\n"
+            f"Near miss ratio: {leading['near_miss_ratio']}\n"
+            f"Contractor risk: {contractor_text}\n"
+            f"Audit readiness: {leading['audit_readiness_score']}% ({leading['audit_readiness_label']})"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: leading indicators failed: %s", exc)
+
+    try:
+        compliance = get_compliance_summary(db=db, current_user=current_user)
+        loto_text = (
+            f"{compliance['loto_compliance_pct']}%"
+            if compliance.get("loto_compliance_pct") is not None
+            else "no lockout permits recorded"
+        )
+        lines.append(
+            "\n[Compliance]\n"
+            f"Permit (PTW) compliance: {compliance['permit_compliance_pct']}%\n"
+            f"LOTO compliance: {loto_text}\n"
+            f"Corrective action closure rate: {compliance['corrective_action_closure_rate']}%\n"
+            f"Policy review status: {compliance['policy_review_pct']}% current"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: compliance summary failed: %s", exc)
+
+    try:
+        risk = get_risk_summary(db=db, current_user=current_user)
+        zones = ", ".join(f"{z['zone']} ({z['value']} incidents)" for z in risk.get("zone_risk", [])[:5]) or "no site data"
+        lines.append(
+            "\n[Risk & CAPA]\n"
+            f"Open CAPA actions: {risk['kpis']['unverified_controls']} | Overdue: {risk['kpis']['risk_escalations']}\n"
+            f"Incidents by site: {zones}"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: risk summary failed: %s", exc)
+
+    try:
+        violations = get_violations_summary(months=6, db=db, current_user=current_user)
+        top_types = ", ".join(f"{t['label']} ({t['value']})" for t in violations.get("by_type", [])[:5]) or "none"
+        top_causes = ", ".join(f"{c['name']} ({c['value']})" for c in violations.get("by_root_cause", [])[:5]) or "none"
+        lines.append(
+            "\n[Incident Breakdown]\n"
+            f"Top incident types: {top_types}\n"
+            f"Top root causes: {top_causes}"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: violations summary failed: %s", exc)
+
+    try:
+        vendor = get_vendor_summary(db=db, current_user=current_user)
+        rscore = vendor["risk_score"]
+        rscore_text = "N/A (no contractors)" if not rscore.get("has_contractors", True) else f"{rscore['value']}/10"
+        lines.append(
+            "\n[Contractors]\n"
+            f"Contractors tracked: {vendor['total_contractors']} | Contractor risk score: {rscore_text}\n"
+            f"Compliance breakdown: " + ", ".join(f"{c['name']} {c['value']}%" for c in vendor.get("compliance", []))
+        )
+    except Exception as exc:
+        logger.warning("Briefing: vendor summary failed: %s", exc)
+
+    lines.append(
+        "\n=== END SNAPSHOT — use only the numbers above; do not invent figures not shown here. "
+        "If asked about something not covered (e.g. training completion, medical fitness, JSA), say the data "
+        "isn't tracked yet rather than guessing. ==="
+    )
+    return "\n".join(lines)
 
 # ── HSE system prompt ─────────────────────────────────────────────────────────
 _SYSTEM_PROMPT = """You are an expert HSE (Health, Safety & Environment) intelligence assistant
@@ -22,12 +124,21 @@ embedded inside a safety management platform. Your role is to help HSE managers,
 supervisors and safety teams interpret their incident data, identify risks, and
 take action to prevent harm.
 
+Every message includes a LIVE HSE DATA SNAPSHOT block with real figures pulled directly
+from this organisation's database (incidents, CAPA, compliance, contractor risk, etc.).
+
 Guidelines:
 - Be concise, practical and action-oriented.
 - Use markdown formatting (headings, bullet lists, short tables) for readability.
-- When data is provided in the user message, reference it specifically.
+- Ground every claim in the snapshot data — cite the specific numbers you're using.
+- Never invent a figure that isn't in the snapshot. If something isn't covered
+  (e.g. training completion, medical fitness, JSA records), say it isn't tracked
+  yet rather than guessing or estimating a number for it.
+- When asked to predict, forecast, or suggest ideas: reason from the real trends
+  and ratios in the snapshot (e.g. rising incident types, overdue CAPA aging,
+  low compliance areas) and clearly label predictions as estimates, not facts —
+  but do give a concrete, specific answer rather than a generic disclaimer.
 - Focus on leading indicators, corrective actions and preventive measures.
-- Never make up numbers — only use data provided in the conversation.
 - Keep responses focused and under 400 words unless explicitly asked for more detail.
 """
 
@@ -168,6 +279,12 @@ def ai_chat(
 
     if not messages:
         return {"answer": "No message provided.", "model": "fallback"}
+
+    # Inject a fresh, real data snapshot on every call so the AI always answers
+    # from this org's actual numbers instead of whatever (if anything) the
+    # frontend happened to include in the user's message text.
+    briefing = _build_project_briefing(db, current_user)
+    messages = [{"role": "system", "content": briefing}] + messages
 
     # Always get fresh settings — bust lru_cache to pick up .env changes
     get_settings.cache_clear()

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { Activity, AlertTriangle, Clock3, HeartPulse, PieChart as PieChartIcon, ShieldAlert, Users, type LucideIcon } from "lucide-react";
+import { Activity, AlertTriangle, ClipboardCheck, Clock3, HeartPulse, ShieldAlert, Users, type LucideIcon } from "lucide-react";
 import { BarChart, Bar, Cell, CartesianGrid, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../services/analytics.service";
 import axiosInstance from "../../api/axiosInstance";
@@ -67,7 +67,7 @@ export function ViolationsPage() {
   const { user: currentUser } = useAuth();
 
   const [incidentTypeData, setIncidentTypeData] = useState<ViolationItem[]>([]);
-  const [causeData, setCauseData] = useState<RcaItem[]>([]);
+  const [investigationStatusData, setInvestigationStatusData] = useState<RcaItem[]>([]);
   const [locationData, setLocationData] = useState<ViolationItem[]>([]);
   const [incidentTrend, setIncidentTrend] = useState<{ month: string; value: number }[]>([]);
   const [downtimeData, setDowntimeData] = useState<ViolationItem[]>([]);
@@ -88,7 +88,7 @@ export function ViolationsPage() {
   useEffect(() => {
     getViolationsSummary(10).then((data) => {
       setIncidentTypeData(data.by_type);
-      setCauseData(data.cause_data);
+      setInvestigationStatusData(data.investigation_status ?? []);
       setLocationData(data.by_location);
       setIncidentTrend(data.monthly_trend);
       setDowntimeData(data.downtime_by_type);
@@ -121,11 +121,11 @@ export function ViolationsPage() {
               <DarkPanel title="Injury Category" icon={Users}>
                 <HorizontalBars data={injuryCategoryData} />
               </DarkPanel>
-              <DarkPanel title="Incident Cause Category" icon={PieChartIcon}>
+              <DarkPanel title="Investigation Status" icon={ClipboardCheck}>
                 <ResponsiveContainer width="100%" height={185}>
                   <PieChart>
                     <Pie
-                      data={causeData}
+                      data={investigationStatusData}
                       dataKey="value"
                       nameKey="name"
                       innerRadius={32}
@@ -134,7 +134,7 @@ export function ViolationsPage() {
                       cx="50%"
                       cy="38%"
                     >
-                      {causeData.map((entry) => (
+                      {investigationStatusData.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
@@ -150,7 +150,7 @@ export function ViolationsPage() {
                   </PieChart>
                 </ResponsiveContainer>
               </DarkPanel>
-              <DarkPanel title="Person Involved" icon={Users}>
+              <DarkPanel title="Reported By (Employment Type)" icon={Users}>
                 <HorizontalBars data={personInvolvedData} />
               </DarkPanel>
               <DarkPanel title="Incident Location" icon={ShieldAlert}>

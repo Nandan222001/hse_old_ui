@@ -1,39 +1,42 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router";
 import { StatusBadge } from "../components/shared/StatusBadge";
-import { Upload, Plus, Eye, EyeOff, Trash2, Palette, FileText, Loader2 } from "lucide-react";
+import { Upload, Plus, Trash2, FileText, Loader2, Copy, Check } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
-
-const integrations = [
-  { name: "Jira", status: "Connected", desc: "Issue tracking integration" },
-  { name: "SharePoint", status: "Connected", desc: "Document management" },
-  { name: "SAP ERP", status: "Disconnected", desc: "Enterprise resource planning" },
-  { name: "Twilio", status: "Connected", desc: "SMS notifications" },
-  { name: "SendGrid", status: "Connected", desc: "Email delivery" },
-  { name: "Power BI", status: "Connected", desc: "Business intelligence" },
-  { name: "Workday", status: "Disconnected", desc: "HR management" },
-  { name: "ServiceNow", status: "Disconnected", desc: "IT service management" },
-];
-
-const apiKeys = [
-  { name: "Production API", prefix: "hse_prod_***", created: "Jan 15, 2026", lastUsed: "2 min ago", scopes: "Read, Write" },
-  { name: "Staging API", prefix: "hse_stg_***", created: "Dec 1, 2025", lastUsed: "3 days ago", scopes: "Read" },
-  { name: "CI/CD Pipeline", prefix: "hse_ci_***", created: "Nov 20, 2025", lastUsed: "1 hour ago", scopes: "Read, Deploy" },
-];
-
-const webhooks = [
-  { url: "https://hooks.company.com/hse/violations", events: "New Violation, Status Change", status: "Active", lastTriggered: "2 min ago" },
-  { url: "https://hooks.company.com/hse/devices", events: "Device Offline", status: "Active", lastTriggered: "6 hrs ago" },
-];
-
-const knowledgeBaseDocs = [
-  { name: "Site_Safety_SOP.pdf", size: "2.4 MB", uploaded: "Jan 12, 2026", status: "Indexed" },
-  { name: "Emergency_Evacuation_Plan.docx", size: "1.1 MB", uploaded: "Feb 05, 2026", status: "Indexed" },
-  { name: "Incident_Reporting_Guidelines.txt", size: "45 KB", uploaded: "Mar 10, 2026", status: "Pending" },
-];
+import {
+  useListApiIntegrationsQuery,
+  useCreateApiIntegrationMutation,
+  useDeleteApiIntegrationMutation,
+} from "../../features/data-management/api/dataManagementApi";
 
 const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge"];
+
+interface ApiKeyRecord {
+  id: number;
+  name: string;
+  prefix: string;
+  scopes: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+interface WebhookRecord {
+  id: number;
+  url: string;
+  event_types: string;
+  is_active: boolean;
+  last_triggered_at: string | null;
+  created_at: string;
+}
+
+interface DocRecord {
+  id: string;
+  file_name: string;
+  size: string | null;
+  uploaded_by: string;
+  created_at: string;
+}
 
 interface OrgData {
   id: number;
@@ -54,7 +57,8 @@ export function SettingsPage() {
   const initialTab = VALID_SETTINGS_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "general";
   const [activeTab, setActiveTab] = useState(initialTab);
   const [isUploading, setIsUploading] = useState(false);
-  const [docsList, setDocsList] = useState(knowledgeBaseDocs);
+  const [docsList, setDocsList] = useState<DocRecord[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // General tab — real org data
@@ -62,6 +66,109 @@ export function SettingsPage() {
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgSaving, setOrgSaving] = useState(false);
   const [orgSaved, setOrgSaved] = useState(false);
+
+  // Integrations tab — real backend (shared with Data Management page)
+  const { data: integrations, isLoading: integrationsLoading, refetch: refetchIntegrations } = useListApiIntegrationsQuery();
+  const [createIntegration, { isLoading: connectingIntegration }] = useCreateApiIntegrationMutation();
+  const [deleteIntegration] = useDeleteApiIntegrationMutation();
+  const [newIntegration, setNewIntegration] = useState({ name: "", type: "custom", endpoint_url: "" });
+  const [showAddIntegration, setShowAddIntegration] = useState(false);
+
+  // API Keys tab
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(true);
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  const fetchApiKeys = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/org-admin/settings/api-keys");
+      setApiKeys((res.data as { data: ApiKeyRecord[] }).data ?? []);
+    } catch (e) { console.error("Failed to load API keys", e); }
+    finally { setApiKeysLoading(false); }
+  }, []);
+  useEffect(() => { fetchApiKeys(); }, [fetchApiKeys]);
+
+  const handleGenerateKey = async () => {
+    const name = newKeyName.trim() || `API Key ${apiKeys.length + 1}`;
+    setGeneratingKey(true);
+    try {
+      const res = await axiosInstance.post("/org-admin/settings/api-keys", { name, scopes: "Read" });
+      const data = (res.data as { data: ApiKeyRecord & { raw_key: string } }).data;
+      setRevealedKey(data.raw_key);
+      setNewKeyName("");
+      await fetchApiKeys();
+    } catch (e) { console.error("Failed to generate API key", e); }
+    finally { setGeneratingKey(false); }
+  };
+
+  const handleRevokeKey = async (id: number) => {
+    await axiosInstance.delete(`/org-admin/settings/api-keys/${id}`);
+    setApiKeys(k => k.filter(x => x.id !== id));
+  };
+
+  // Webhooks tab
+  const [webhooks, setWebhooks] = useState<WebhookRecord[]>([]);
+  const [webhooksLoading, setWebhooksLoading] = useState(true);
+  const [newWebhookUrl, setNewWebhookUrl] = useState("");
+  const [addingWebhook, setAddingWebhook] = useState(false);
+
+  const fetchWebhooks = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/org-admin/settings/webhooks");
+      setWebhooks((res.data as { data: WebhookRecord[] }).data ?? []);
+    } catch (e) { console.error("Failed to load webhooks", e); }
+    finally { setWebhooksLoading(false); }
+  }, []);
+  useEffect(() => { fetchWebhooks(); }, [fetchWebhooks]);
+
+  const handleAddWebhook = async () => {
+    if (!newWebhookUrl.trim()) return;
+    setAddingWebhook(true);
+    try {
+      await axiosInstance.post("/org-admin/settings/webhooks", { url: newWebhookUrl.trim(), event_types: "" });
+      setNewWebhookUrl("");
+      await fetchWebhooks();
+    } catch (e) { console.error("Failed to add webhook", e); }
+    finally { setAddingWebhook(false); }
+  };
+
+  const handleDeleteWebhook = async (id: number) => {
+    await axiosInstance.delete(`/org-admin/settings/webhooks/${id}`);
+    setWebhooks(w => w.filter(x => x.id !== id));
+  };
+
+  // Branding tab
+  const [branding, setBranding] = useState({ primary_color: "#1B5E20", logo_url: null as string | null });
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingSaved, setBrandingSaved] = useState(false);
+
+  useEffect(() => {
+    axiosInstance.get("/org-admin/settings/branding")
+      .then(r => setBranding((r.data as { data: typeof branding }).data))
+      .catch(console.error);
+  }, []);
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setBranding(b => ({ ...b, logo_url: reader.result as string }));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBranding = async () => {
+    setBrandingSaving(true);
+    setBrandingSaved(false);
+    try {
+      await axiosInstance.put("/org-admin/settings/branding", branding);
+      setBrandingSaved(true);
+      setTimeout(() => setBrandingSaved(false), 3000);
+    } catch (e) { console.error("Failed to save branding", e); }
+    finally { setBrandingSaving(false); }
+  };
 
   useEffect(() => {
     axiosInstance
@@ -105,6 +212,17 @@ export function SettingsPage() {
     { id: "knowledge", label: "AI Knowledge Base" },
   ];
 
+  const fetchDocs = useCallback(async () => {
+    setDocsLoading(true);
+    try {
+      const res = await axiosInstance.get("/org-admin/data-management/documents");
+      const items = ((res.data as { data: { items: DocRecord[] } }).data?.items ?? []);
+      setDocsList(items);
+    } catch (e) { console.error("Failed to load documents", e); }
+    finally { setDocsLoading(false); }
+  }, []);
+  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -114,27 +232,13 @@ export function SettingsPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('layer', '3'); // Demo value
-      formData.append('org_code', 'ENFINITY'); // Demo value
-      // formData.append('country_code', 'UK'); // Optional demo value
+      formData.append('category', 'docs');
+      formData.append('record_type', 'Knowledge Base');
 
-      const response = await fetch('/api/kb/upload', {
-        method: 'POST',
-        body: formData,
+      await axiosInstance.post("/org-admin/data-management/documents/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      // Add to list statically for demo
-      setDocsList(prev => [{
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        uploaded: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-        status: "Pending"
-      }, ...prev]);
-
+      await fetchDocs();
     } catch (error) {
       console.error("Error uploading file:", error);
       alert("Failed to upload file");
@@ -144,6 +248,11 @@ export function SettingsPage() {
         fileInputRef.current.value = "";
       }
     }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    await axiosInstance.delete(`/org-admin/data-management/documents/${docId}`);
+    setDocsList(d => d.filter(x => x.id !== docId));
   };
 
   return (
@@ -266,7 +375,7 @@ export function SettingsPage() {
                     style={{ borderColor: '#E2E8E2' }}
                   >
                     <option value="">Select status</option>
-                    {["Certified", "In Progress", "Planned", "Not Applicable"].map(s => (
+                    {["Certified", "In Progress", "Planned", "Not Started", "Expired"].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -294,37 +403,119 @@ export function SettingsPage() {
       )}
 
       {activeTab === "integrations" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {integrations.map(int => (
-            <div key={int.name} className="bg-white rounded-xl border p-5" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[14px]" style={{ background: '#F4F7F4', color: '#1B5E20', fontWeight: 700 }}>
-                  {int.name[0]}
-                </div>
-                <StatusBadge status={int.status} size="sm" />
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowAddIntegration(v => !v)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px]"
+              style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+            >
+              <Plus className="w-4 h-4" /> Add Integration
+            </button>
+          </div>
+          {showAddIntegration && (
+            <div className="bg-white rounded-xl border p-5 space-y-3" style={{ borderColor: '#E8EFE8' }}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input
+                  value={newIntegration.name}
+                  onChange={e => setNewIntegration(v => ({ ...v, name: e.target.value }))}
+                  placeholder="Integration name (e.g. Jira)"
+                  className="h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+                />
+                <input
+                  value={newIntegration.endpoint_url}
+                  onChange={e => setNewIntegration(v => ({ ...v, endpoint_url: e.target.value }))}
+                  placeholder="Endpoint URL"
+                  className="h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+                />
+                <button
+                  onClick={async () => {
+                    if (!newIntegration.name.trim()) return;
+                    await createIntegration(newIntegration);
+                    setNewIntegration({ name: "", type: "custom", endpoint_url: "" });
+                    setShowAddIntegration(false);
+                    refetchIntegrations();
+                  }}
+                  disabled={connectingIntegration || !newIntegration.name.trim()}
+                  className="h-10 px-4 rounded-lg text-white text-[13px] disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+                >
+                  {connectingIntegration ? "Connecting…" : "Connect"}
+                </button>
               </div>
-              <div className="text-[14px] mb-1" style={{ color: '#0A0A0A', fontWeight: 600 }}>{int.name}</div>
-              <div className="text-[12px] mb-4" style={{ color: '#9CA3AF' }}>{int.desc}</div>
-              <button
-                className="w-full py-2 rounded-lg text-[12px] transition-colors"
-                style={
-                  int.status === "Connected"
-                    ? { border: '1px solid #DC2626', color: '#DC2626', fontWeight: 500 }
-                    : { background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', color: '#fff', fontWeight: 500 }
-                }
-              >
-                {int.status === "Connected" ? "Disconnect" : "Connect"}
-              </button>
             </div>
-          ))}
+          )}
+          {integrationsLoading ? (
+            <div className="flex items-center gap-2 py-8 justify-center">
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1B5E20' }} />
+              <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Loading integrations…</span>
+            </div>
+          ) : integrations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16" style={{ background: '#F4F7F4', borderRadius: 12 }}>
+              <p className="text-[15px] mb-1" style={{ color: '#0A0A0A', fontWeight: 500 }}>No integrations connected</p>
+              <p className="text-[13px]" style={{ color: '#9CA3AF' }}>Add one above to push data into HSE Platform via REST API</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {integrations.map(int => (
+                <div key={int.id} className="bg-white rounded-xl border p-5" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[14px]" style={{ background: '#F4F7F4', color: '#1B5E20', fontWeight: 700 }}>
+                      {int.name[0]}
+                    </div>
+                    <StatusBadge status={int.is_active ? "Connected" : "Disconnected"} size="sm" />
+                  </div>
+                  <div className="text-[14px] mb-1" style={{ color: '#0A0A0A', fontWeight: 600 }}>{int.name}</div>
+                  <div className="text-[12px] mb-4" style={{ color: '#9CA3AF' }}>{int.description || int.endpoint_url || int.type}</div>
+                  <button
+                    onClick={async () => { await deleteIntegration(int.id); refetchIntegrations(); }}
+                    className="w-full py-2 rounded-lg text-[12px] transition-colors"
+                    style={{ border: '1px solid #DC2626', color: '#DC2626', fontWeight: 500 }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {activeTab === "api" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
-              <Plus className="w-4 h-4" /> Generate New Key
+          {revealedKey && (
+            <div className="rounded-xl p-4 border" style={{ background: '#FFFBEB', borderColor: '#FDE68A' }}>
+              <div className="text-[13px] font-bold mb-2" style={{ color: '#92400E' }}>
+                Copy this key now — it won't be shown again
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 rounded-lg text-[12px] font-mono break-all" style={{ background: '#fff', border: '1px solid #FDE68A', color: '#111827' }}>
+                  {revealedKey}
+                </code>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(revealedKey); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); }}
+                  className="p-2 rounded-lg border flex-shrink-0" style={{ borderColor: '#FDE68A' }}
+                >
+                  {copiedKey ? <Check className="w-4 h-4" style={{ color: '#059669' }} /> : <Copy className="w-4 h-4" style={{ color: '#92400E' }} />}
+                </button>
+                <button onClick={() => setRevealedKey(null)} className="text-[12px] px-3 py-2" style={{ color: '#92400E' }}>Dismiss</button>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <input
+              value={newKeyName}
+              onChange={e => setNewKeyName(e.target.value)}
+              placeholder="Key name (optional)"
+              className="h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+            />
+            <button
+              onClick={handleGenerateKey}
+              disabled={generatingKey}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px] disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+            >
+              {generatingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Generate New Key
             </button>
           </div>
           <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
@@ -340,15 +531,22 @@ export function SettingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {apiKeys.map(k => (
-                  <tr key={k.name} style={{ borderBottom: '1px solid #EEF2EE' }}>
+                {apiKeysLoading ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</td></tr>
+                ) : apiKeys.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No API keys yet</td></tr>
+                ) : apiKeys.map(k => (
+                  <tr key={k.id} style={{ borderBottom: '1px solid #EEF2EE' }}>
                     <td className="px-4 py-3 text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{k.name}</td>
                     <td className="px-4 py-3 text-[13px] font-mono" style={{ color: '#4A5568' }}>{k.prefix}</td>
-                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{k.created}</td>
-                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{k.lastUsed}</td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{new Date(k.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}</td>
                     <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{k.scopes}</td>
                     <td className="px-4 py-3">
-                      <button className="px-3 py-1 rounded text-[12px] border transition-colors hover:bg-red-50" style={{ borderColor: '#FEE2E2', color: '#DC2626', fontWeight: 500 }}>
+                      <button
+                        onClick={() => handleRevokeKey(k.id)}
+                        className="px-3 py-1 rounded text-[12px] border transition-colors hover:bg-red-50" style={{ borderColor: '#FEE2E2', color: '#DC2626', fontWeight: 500 }}
+                      >
                         Revoke
                       </button>
                     </td>
@@ -363,9 +561,20 @@ export function SettingsPage() {
 
       {activeTab === "webhooks" && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
-              <Plus className="w-4 h-4" /> Add Webhook
+          <div className="flex items-center justify-end gap-2">
+            <input
+              value={newWebhookUrl}
+              onChange={e => setNewWebhookUrl(e.target.value)}
+              placeholder="https://hooks.yoursystem.com/hse"
+              className="h-10 px-3 rounded-lg border text-[13px] w-72" style={{ borderColor: '#E2E8E2' }}
+            />
+            <button
+              onClick={handleAddWebhook}
+              disabled={addingWebhook || !newWebhookUrl.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px] disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+            >
+              {addingWebhook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Webhook
             </button>
           </div>
           <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
@@ -380,14 +589,21 @@ export function SettingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {webhooks.map((w, i) => (
-                  <tr key={i} className="group" style={{ borderBottom: '1px solid #EEF2EE' }}>
+                {webhooksLoading ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</td></tr>
+                ) : webhooks.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No webhooks configured</td></tr>
+                ) : webhooks.map(w => (
+                  <tr key={w.id} className="group" style={{ borderBottom: '1px solid #EEF2EE' }}>
                     <td className="px-4 py-3 text-[13px] font-mono" style={{ color: '#0A0A0A' }}>{w.url}</td>
-                    <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{w.events}</td>
-                    <td className="px-4 py-3"><StatusBadge status={w.status} size="sm" /></td>
-                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{w.lastTriggered}</td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{w.event_types || "All events"}</td>
+                    <td className="px-4 py-3"><StatusBadge status={w.is_active ? "Active" : "Inactive"} size="sm" /></td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{w.last_triggered_at ? new Date(w.last_triggered_at).toLocaleString() : "Never"}</td>
                     <td className="px-4 py-3">
-                      <button className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleDeleteWebhook(w.id)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <Trash2 className="w-3.5 h-3.5" style={{ color: '#DC2626' }} />
                       </button>
                     </td>
@@ -406,21 +622,41 @@ export function SettingsPage() {
             <div className="space-y-5">
               <div>
                 <label className="block mb-1.5">Logo</label>
-                <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2' }}>
-                  <Upload className="w-6 h-6 mb-2" style={{ color: '#9CA3AF' }} />
-                  <span className="text-[12px]" style={{ color: '#4A5568' }}>Upload logo</span>
-                </div>
+                <label
+                  className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2' }}
+                >
+                  {branding.logo_url ? (
+                    <img src={branding.logo_url} alt="Logo preview" className="h-16 object-contain mb-2" />
+                  ) : (
+                    <Upload className="w-6 h-6 mb-2" style={{ color: '#9CA3AF' }} />
+                  )}
+                  <span className="text-[12px]" style={{ color: '#4A5568' }}>{branding.logo_url ? "Change logo" : "Upload logo"}</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleLogoSelect} />
+                </label>
               </div>
               <div>
                 <label className="block mb-1.5">Primary Color</label>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg cursor-pointer" style={{ background: '#1B5E20' }} />
-                  <input defaultValue="#1B5E20" className="flex-1 h-10 px-4 rounded-lg border text-[13px] font-mono" style={{ borderColor: '#E2E8E2' }} />
+                  <div className="w-10 h-10 rounded-lg cursor-pointer flex-shrink-0" style={{ background: branding.primary_color }} />
+                  <input
+                    value={branding.primary_color}
+                    onChange={e => setBranding(b => ({ ...b, primary_color: e.target.value }))}
+                    className="flex-1 h-10 px-4 rounded-lg border text-[13px] font-mono"
+                    style={{ borderColor: '#E2E8E2' }}
+                  />
                 </div>
               </div>
-              <button className="px-6 py-2.5 rounded-lg text-white text-[13px]" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
-                Save Branding
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSaveBranding}
+                  disabled={brandingSaving}
+                  className="px-6 py-2.5 rounded-lg text-white text-[13px] disabled:opacity-60"
+                  style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+                >
+                  {brandingSaving ? "Saving…" : "Save Branding"}
+                </button>
+                {brandingSaved && <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>✓ Saved successfully</span>}
+              </div>
             </div>
           </div>
 
@@ -432,8 +668,9 @@ export function SettingsPage() {
               <div className="flex h-48">
                 <div className="w-16" style={{ background: '#0D1F0D' }}>
                   <div className="p-2 space-y-2 mt-3">
+                    {branding.logo_url && <img src={branding.logo_url} alt="" className="h-6 mb-2 mx-auto object-contain" />}
                     {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="h-2 rounded-full" style={{ background: i === 1 ? 'linear-gradient(135deg, #1A4D1A, #2E7D32)' : '#1E2E1E' }} />
+                      <div key={i} className="h-2 rounded-full" style={{ background: i === 1 ? branding.primary_color : '#1E2E1E' }} />
                     ))}
                   </div>
                 </div>
@@ -492,12 +729,12 @@ export function SettingsPage() {
               </div>
 
               <div>
-                <label className="block mb-3 font-medium text-[14px]">Indexed Documents</label>
+                <label className="block mb-3 font-medium text-[14px]">Uploaded Documents</label>
                 <div className="border rounded-xl overflow-hidden" style={{ borderColor: '#E2E8E2' }}>
                   <table className="w-full">
                     <thead>
                       <tr style={{ background: '#F4F7F4' }}>
-                        {["Document Name", "Size", "Uploaded", "Status", "Actions"].map(h => (
+                        {["Document Name", "Size", "Uploaded By", "Date", "Actions"].map(h => (
                           <th key={h} className="px-4 py-3 text-left">
                             <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</span>
                           </th>
@@ -505,21 +742,26 @@ export function SettingsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {docsList.map((doc, i) => (
-                        <tr key={`${doc.name}-${i}`} style={{ borderBottom: '1px solid #EEF2EE' }}>
+                      {docsLoading ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</td></tr>
+                      ) : docsList.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No documents uploaded yet</td></tr>
+                      ) : docsList.map((doc) => (
+                        <tr key={doc.id} style={{ borderBottom: '1px solid #EEF2EE' }}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <FileText className="w-4 h-4" style={{ color: '#1B5E20' }} />
-                              <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{doc.name}</span>
+                              <span className="text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{doc.file_name}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{doc.size}</td>
-                          <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{doc.uploaded}</td>
+                          <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{doc.size || "—"}</td>
+                          <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{doc.uploaded_by}</td>
+                          <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{doc.created_at ? new Date(doc.created_at).toLocaleDateString() : "—"}</td>
                           <td className="px-4 py-3">
-                            <StatusBadge status={doc.status} size="sm" />
-                          </td>
-                          <td className="px-4 py-3">
-                            <button className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors">
+                            <button
+                              onClick={() => handleDeleteDoc(doc.id)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50 transition-colors"
+                            >
                               <Trash2 className="w-3.5 h-3.5" style={{ color: '#DC2626' }} />
                             </button>
                           </td>

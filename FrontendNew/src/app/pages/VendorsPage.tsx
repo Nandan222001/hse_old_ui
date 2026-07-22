@@ -172,7 +172,7 @@ export function VendorsPage() {
             <CardTitle>Contractor Risk Score</CardTitle>
             <div className="flex items-end gap-3">
               <span className="text-[48px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>
-                {data.risk_score.value}/10
+                {data.risk_score.has_contractors === false ? "N/A" : `${data.risk_score.value}/10`}
               </span>
               {data.risk_score.delta !== null && (
                 <div className="mb-2 flex items-center gap-1 rounded-full px-2.5 py-1"
@@ -186,6 +186,9 @@ export function VendorsPage() {
             </div>
             <p className="mt-1 text-[12px]" style={{ color: "#6B7280" }}>
               Based on {data.total_contractors} contractor{data.total_contractors !== 1 ? "s" : ""} tracked
+            </p>
+            <p className="mt-1 text-[11px]" style={{ color: "#9CA3AF" }}>
+              Estimate derived from the Employment_Type field, not an audited contractor safety record — treat as indicative only.
             </p>
           </Card>
 
@@ -223,6 +226,9 @@ export function VendorsPage() {
                 </div>
               </div>
             )}
+            <p className="mt-2 text-[11px]" style={{ color: "#9CA3AF" }}>
+              Based on induction date and incident history — not a formal induction/compliance audit.
+            </p>
           </Card>
 
           {/* Exposure Hours bar chart */}

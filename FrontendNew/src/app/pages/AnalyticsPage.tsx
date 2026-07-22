@@ -81,9 +81,14 @@ export function AnalyticsPage() {
         <h1>Analytics & Reports</h1>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2', color: '#4A5568' }}>
-            <Calendar className="w-3.5 h-3.5" /> Last 30 Days
+            <Calendar className="w-3.5 h-3.5" /> Last 12 Months
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2', color: '#4A5568', fontWeight: 500 }}>
+          <button
+            disabled
+            title="Export is not available yet"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] cursor-not-allowed opacity-50"
+            style={{ borderColor: '#E2E8E2', color: '#4A5568', fontWeight: 500 }}
+          >
             <Download className="w-4 h-4" /> Export
           </button>
         </div>
@@ -223,7 +228,10 @@ export function AnalyticsPage() {
           </div>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
-              <h2 className="mb-6">Incidents by Employment Type</h2>
+              <h2 className="mb-1">Incidents by Reporter's Employment Type</h2>
+              <p className="mb-5 text-[11px]" style={{ color: '#9CA3AF' }}>
+                Grouped by who reported the incident, not necessarily who was affected
+              </p>
               {personInvolved.length === 0 ? (
                 <div className="flex items-center justify-center py-12 text-[13px]" style={{ color: '#9CA3AF' }}>No incident data available</div>
               ) : (
@@ -425,7 +433,12 @@ export function AnalyticsPage() {
                   ))}
                 </div>
               </div>
-              <button className="w-full py-2.5 rounded-lg text-white text-[13px] mt-4" style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}>
+              <button
+                disabled
+                title="Custom report generation is not available yet"
+                className="w-full py-2.5 rounded-lg text-white text-[13px] mt-4 cursor-not-allowed opacity-50"
+                style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+              >
                 Generate Report
               </button>
             </div>
@@ -435,7 +448,12 @@ export function AnalyticsPage() {
           <div className="bg-white rounded-xl border p-6 xl:col-span-2" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
             <div className="flex items-center justify-between mb-6">
               <h2>Report Preview</h2>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2', color: '#4A5568', fontWeight: 500 }}>
+              <button
+                disabled
+                title="No report has been generated yet"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border text-[13px] cursor-not-allowed opacity-50"
+                style={{ borderColor: '#E2E8E2', color: '#4A5568', fontWeight: 500 }}
+              >
                 <Download className="w-4 h-4" /> Download
               </button>
             </div>

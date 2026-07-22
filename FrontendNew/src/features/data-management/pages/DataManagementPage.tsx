@@ -95,8 +95,8 @@ const MANUAL_MODULES: ManualModule[] = [
     id: "incidents", label: "Incidents", icon: AlertTriangle, color: "#EF4444", bg: "#FEE2E2",
     endpoint: "/incidents/",
     fields: [
-      { label: "Incident Type",  key: "incident_type", type: "select", options: ["incident_report","unsafe_act","unsafe_condition","near_miss"], required: true },
-      { label: "Severity",       key: "severity",      type: "select", options: ["low","medium","high","critical"],   required: true },
+      { label: "Incident Type",  key: "incident_type", type: "select", options: ["Injury","Damage","Near-miss","Environmental","Equipment Failure","Spill","Process","Fire"], required: true },
+      { label: "Severity",       key: "severity",      type: "select", options: ["Fatal","Serious","Significant","Minor","Moderate","Lost Time"],   required: true },
       { label: "Description",    key: "description",   type: "textarea", placeholder: "Brief description of what happened...", required: true },
       { label: "Report Date",    key: "report_date",   type: "date" },
     ],
@@ -107,8 +107,8 @@ const MANUAL_MODULES: ManualModule[] = [
     fields: [
       { label: "Full Name",             key: "full_name",             type: "text",   placeholder: "e.g. Jessica Hernandez", required: true },
       { label: "Date of Birth",         key: "date_of_birth",         type: "date" },
-      { label: "Gender",                key: "gender",                type: "select", options: ["M","F","Other"] },
-      { label: "Employment Type",       key: "employment_type",       type: "select", options: ["Permanent","Contract","Part-time","Temporary"] },
+      { label: "Gender",                key: "gender",                type: "select", options: ["M","F"] },
+      { label: "Employment Type",       key: "employment_type",       type: "select", options: ["Permanent","Contractor"] },
       { label: "Employment Start Date", key: "employment_start_date", type: "date" },
       { label: "Shift Pattern",         key: "shift_pattern",         type: "select", options: ["Rotating","Days","Nights","Afternoon","Fixed"] },
       { label: "Active Status",         key: "active_status",         type: "select", options: ["Active","Inactive","On Leave"] },
@@ -120,8 +120,8 @@ const MANUAL_MODULES: ManualModule[] = [
     fields: [
       { label: "Hazard Name",   key: "hazard_name",  type: "text",   placeholder: "e.g. Slippery walkway",    required: true },
       { label: "Category ID",   key: "category_id",  type: "number", placeholder: "e.g. 1 (leave blank if unknown)" },
-      { label: "Severity",      key: "severity",     type: "select", options: ["Minor","Moderate","Serious","Critical"], required: true },
-      { label: "Probability",   key: "probability",  type: "select", options: ["Unlikely","Possible","Likely","Almost Certain"] },
+      { label: "Severity",      key: "severity",     type: "select", options: ["Fatal","Serious","Significant","Minor","Moderate"], required: true },
+      { label: "Probability",   key: "probability",  type: "select", options: ["Likely","Possible","Unlikely","Rare"] },
     ],
   },
 ];
@@ -253,97 +253,6 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: string
 
 // ── ENTITY TYPES ──────────────────────────────────────────────────────────────
 
-interface EntityType {
-  id: string; label: string; icon: React.ElementType;
-  color: string; bg: string; description: string;
-  fields: string[]; requiredFields: string[];
-  validations: string[]; templateRows: number; sampleData: string;
-  moduleKey: string;
-}
-
-const ENTITY_TYPES: EntityType[] = [
-  {
-    id: "employees", label: "Employees", icon: UserCheck, color: "#0891B2", bg: "#ECFEFF", moduleKey: "employees",
-    description: "Import employee and worker records",
-    fields: ["Employee_ID","Full_Name","Date_of_Birth","Gender","Employment_Type","Employment_Start_Date","Current_Role_ID","Department_ID","Shift_Pattern","Manager_ID","Induction_Date","Active_Status"],
-    requiredFields: ["Employee_ID","Full_Name"],
-    validations: ["Date format: YYYY-MM-DD","Active_Status: Active / Inactive / On Leave","Employment_Type: Permanent / Contract / Part-time / Temporary","Duplicate Employee_ID detection"],
-    templateRows: 200, sampleData: "EMP001, Jessica Hernandez, 1965-06-06, F, Permanent, 2020-11-09, ROLE001, DEPT001, Rotating, , 2020-11-21, Active",
-  },
-  {
-    id: "sites", label: "Sites", icon: MapPin, color: "#0E7490", bg: "#ECFEFF", moduleKey: "sites",
-    description: "Import operational sites and location records",
-    fields: ["Site_ID","Site_Name","Location","Postcode","Region","Site_Type","Operational_Status","Number_of_Working_Stations","Employee_Count","Primary_Products","Hazard_Classification"],
-    requiredFields: ["Site_ID","Site_Name"],
-    validations: ["Duplicate Site_ID detection","Operational_Status: Active / Inactive / Under Construction","Hazard_Classification: Low Risk / Medium Risk / High Risk / Critical","Number_of_Working_Stations and Employee_Count must be numbers"],
-    templateRows: 30, sampleData: "SITE001, Bridgend Manufacturing Complex, Industrial Estate Bridgend, CF31 3TR, South Wales, Manufacturing & Assembly, Active, 32, 150, Wind Turbine Nacelles, High Risk",
-  },
-  {
-    id: "incidents", label: "Incidents", icon: AlertTriangle, color: "#EF4444", bg: "#FEE2E2", moduleKey: "incidents",
-    description: "Bulk import historical incident records",
-    fields: ["Title","Type","Severity","Occurred At","Site ID","Reported By","Status","Description"],
-    requiredFields: ["Title","Type","Severity","Occurred At"],
-    validations: ["Date format: YYYY-MM-DD","Severity must be low / medium / high / critical","Type must be incident / unsafe_act / unsafe_condition"],
-    templateRows: 200, sampleData: "Slip on wet floor, incident, high, 2024-03-15, SITE-001...",
-  },
-  {
-    id: "hazards", label: "Hazards", icon: AlertOctagon, color: "#DC2626", bg: "#FEF2F2", moduleKey: "hazards",
-    description: "Import hazard register records",
-    fields: ["Hazard_ID","Category_ID","Hazard_Name","Severity","Probability"],
-    requiredFields: ["Hazard_ID","Hazard_Name","Severity"],
-    validations: ["Severity: Serious / Moderate / Minor / Critical","Probability: Possible / Unlikely / Likely / Almost Certain","Duplicate Hazard_ID detection"],
-    templateRows: 150, sampleData: "HAZ001,HC001,Moving Machinery,Serious,Possible",
-  },
-  {
-    id: "near_miss", label: "Near Miss", icon: AlertTriangle, color: "#EA580C", bg: "#FFF7ED", moduleKey: "near_miss",
-    description: "Import near miss reports",
-    fields: ["Near_Miss_ID","Report_Date","Event_DateTime","Location_Station","Description","Potential_Consequence","Hazard_Involved","Underlying_Cause","Control_Failure","Reported_By","CAPA_Escalation"],
-    requiredFields: ["Near_Miss_ID","Report_Date"],
-    validations: ["Date format: YYYY-MM-DD","Event_DateTime format: YYYY-MM-DD HH:MM","CAPA_Escalation: Yes / No","Control_Failure: Yes / No"],
-    templateRows: 100, sampleData: "NM00001,2024-03-09,2024-03-09 09:39,STN019,Near-miss description,Injury,HAZ001,Procedure Gap,No,EMP057,Yes",
-  },
-  {
-    id: "capa", label: "CAPA", icon: ClipboardList, color: "#10B981", bg: "#DCFCE7", moduleKey: "capa",
-    description: "Import corrective and preventive action records",
-    fields: ["Action_ID","Incident_ID","Action_Type","Description","Root_Cause_Addressed","Responsible_Person","Due_Date","Status","Effectiveness_Rating"],
-    requiredFields: ["Action_ID","Action_Type","Due_Date"],
-    validations: ["Action_Type: Corrective / Preventive","Date format: YYYY-MM-DD","Status: Open / In Progress / Completed","Effectiveness_Rating: 1–5 (optional)"],
-    templateRows: 100, sampleData: "CAPA00001,INC00001,Corrective,Fix machine guard,Training,EMP037,2024-05-18,Completed,4",
-  },
-  {
-    id: "training_records", label: "Training", icon: GraduationCap, color: "#7C3AED", bg: "#F5F3FF", moduleKey: "training_records",
-    description: "Import training program records",
-    fields: ["Training_ID","Training_Name","Duration_Hours","Frequency","Certification","Expiry_Months"],
-    requiredFields: ["Training_ID","Training_Name","Duration_Hours","Frequency","Certification","Expiry_Months"],
-    validations: ["All 6 fields are required","Duration_Hours must be a number","Expiry_Months must be a number","Duplicate Training_ID detection"],
-    templateRows: 100, sampleData: "TRN001,Fire Safety Awareness,4,Annual,Fire Safety Certificate,12",
-  },
-  {
-    id: "permits", label: "Permits", icon: Shield, color: "#0D9488", bg: "#F0FDFA", moduleKey: "permits",
-    description: "Import Permit to Work records",
-    fields: ["Permit_ID","Permit_Type_ID","Date_Issued","Time_Issued","Location_Station_ID","Work_Description","Duration_Requested_Hours","Issued_By","Approved_By","Validity_Start","Validity_End","Work_Start_Actual","Work_End_Actual","Number_of_Workers","Status","Deviation_Reported","Incident_Occurred"],
-    requiredFields: ["Permit_ID","Work_Description"],
-    validations: ["Date format: YYYY-MM-DD","Duration_Requested_Hours must be a number","Number_of_Workers must be a whole number","Status: active / closed / cancelled / draft"],
-    templateRows: 100, sampleData: "PTW-001,GEN-001,2024-03-01,08:00,STN-001,Welding on roof,4,EMP001,EMP001,2024-03-01,2024-03-01,2024-03-01 08:00,2024-03-01 12:00,5,active,No,No",
-  },
-  {
-    id: "shift_schedule", label: "Shift Schedule", icon: CalendarClock, color: "#4A57B9", bg: "#EEF2FF", moduleKey: "shift_schedule",
-    description: "Import shift schedules and station assignments",
-    fields: ["Schedule_ID","Employee_ID","Shift_Date","Shift_Type","Shift_Start","Shift_End","Actual_Hours_Worked","Station_Assigned","Supervisor"],
-    requiredFields: ["Schedule_ID","Employee_ID"],
-    validations: ["Shift_Date format: YYYY-MM-DD","Shift_Type: Morning / Afternoon / Night / Rotating","Shift_Start and Shift_End format: HH:MM","Actual_Hours_Worked must be a number"],
-    templateRows: 100, sampleData: "SCH001,EMP001,2024-06-01,Morning,06:00,14:00,8.0,Station A,John Smith",
-  },
-  {
-    id: "compliance_standards", label: "ISO / OSHA Standards", icon: BookMarked, color: "#1D4ED8", bg: "#EFF6FF", moduleKey: "compliance_standards",
-    description: "Import ISO Standards and OSHA Policies",
-    fields: ["Standard_ID","Standard_Name","Code","Category","Jurisdiction","Version","Status","Effective_Date","Review_Date","Owner","Description"],
-    requiredFields: ["Standard_Name"],
-    validations: ["Category = 'ISO' → appears in ISO Standards section","Category/Jurisdiction = 'OSHA' → appears in OSHA Policies section","Status: Active / Draft / Under Review / Expired","Date format: YYYY-MM-DD"],
-    templateRows: 50, sampleData: "STD001, ISO 45001:2018, ISO 45001, ISO, International, 2018, Active, 2024-01-01, 2027-01-01, HSE Manager",
-  },
-];
-
 const IMPORT_STATUS: Record<string, { bg: string; color: string; label: string }> = {
   success:    { bg: "#D1FAE5", color: "#059669", label: "Success"    },
   partial:    { bg: "#FEF3C7", color: "#D97706", label: "Partial"    },
@@ -381,7 +290,7 @@ const API_SYSTEMS = [
   { id: "custom",  label: "Custom API",   icon: Code2,     color: "#4A57B9", desc: "REST or GraphQL endpoint"        },
 ];
 
-type ConnectStep = "list" | "configure" | "testing" | "test_ok" | "test_fail" | "done";
+type ConnectStep = "list" | "configure" | "test_ok" | "done";
 
 function ApiIntegrationsTab() {
   const { data: integrations = [], isLoading, refetch } = useListApiIntegrationsQuery();
@@ -399,7 +308,10 @@ function ApiIntegrationsTab() {
     setStep("configure"); setSaveError(null);
   };
 
-  const runTest = async () => { setStep("testing"); await new Promise(r => setTimeout(r, 2000)); setStep("test_ok"); };
+  // No backend endpoint exists to actually probe an arbitrary external API, so this
+  // does not perform a real connectivity check — it only validates the form is filled
+  // in and moves on. See the "test_ok" step below for the honest copy shown to the user.
+  const runTest = async () => { setStep("test_ok"); };
 
   const activate = async () => {
     if (!activeSystem) return;
@@ -468,34 +380,13 @@ function ApiIntegrationsTab() {
     </div>
   );
 
-  if (step === "testing") return (
-    <div className="max-w-lg mx-auto text-center py-16">
-      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "#EEF2FF" }}>
-        <RefreshCw className="w-8 h-8 animate-spin" style={{ color: "#4A57B9" }} />
-      </div>
-      <div className="text-[18px] font-bold mb-2" style={{ color: "#111827" }}>Testing Connection</div>
-      <div className="text-[13px] mb-6" style={{ color: "#9CA3AF" }}>Verifying credentials and checking endpoint availability…</div>
-      {["Authenticating credentials","Checking permissions","Fetching data schema"].map((msg, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded-xl border mb-2 text-left" style={{ borderColor: "#E3E9F6", background: "#F8FAFF" }}>
-          <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: "#4A57B9" }} />
-          <span className="text-[13px]" style={{ color: "#6B7280" }}>{msg}</span>
-        </div>
-      ))}
-    </div>
-  );
-
   if (step === "test_ok") return (
     <div className="max-w-lg mx-auto text-center py-12">
-      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "#D1FAE5" }}><CheckCircle2 className="w-8 h-8" style={{ color: "#059669" }} /></div>
-      <div className="text-[18px] font-bold mb-2" style={{ color: "#111827" }}>Connection Successful!</div>
-      <div className="text-[13px] mb-6" style={{ color: "#9CA3AF" }}>Authentication verified and data schema mapped successfully.</div>
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {[{ label: "Latency", value: "42ms" },{ label: "Records Found", value: "1,247" },{ label: "Schema Version", value: "v2.4" }].map(s => (
-          <div key={s.label} className="rounded-xl p-3 border" style={{ background: "#F0FDF4", borderColor: "#BBF7D0" }}>
-            <div className="text-[20px] font-black" style={{ color: "#059669" }}>{s.value}</div>
-            <div className="text-[11px]" style={{ color: "#9CA3AF" }}>{s.label}</div>
-          </div>
-        ))}
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "#FEF3C7" }}><Shield className="w-8 h-8" style={{ color: "#D97706" }} /></div>
+      <div className="text-[18px] font-bold mb-2" style={{ color: "#111827" }}>Configuration Ready</div>
+      <div className="text-[13px] mb-6 max-w-sm mx-auto" style={{ color: "#9CA3AF" }}>
+        Live connectivity testing isn't available yet — activating will save this configuration.
+        Verify the endpoint URL and credentials are correct before activating.
       </div>
       <div className="flex gap-3 justify-center">
         <button onClick={activate} disabled={creating} className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-[14px] font-bold disabled:opacity-60" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}>
@@ -581,7 +472,12 @@ function ApiIntegrationsTab() {
               <div className="text-[13px] max-w-lg" style={{ color: "#9CA3AF" }}>Generate API keys to allow external systems to push data into HSE Platform via REST API.</div>
             </div>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-[13px] font-bold flex-shrink-0" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}>
+          <button
+            disabled
+            title="API key generation is not available yet"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-[13px] font-bold flex-shrink-0 cursor-not-allowed opacity-50"
+            style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}
+          >
             <Plus className="w-3.5 h-3.5" />Generate Key
           </button>
         </div>
@@ -675,8 +571,8 @@ const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
     { label: "Hazard ID",    key: "hazard_id",    type: "text",   placeholder: "HAZ001", required: true },
     { label: "Hazard Name",  key: "hazard_name",  type: "text",   placeholder: "Moving Machinery", required: true },
     { label: "Category ID",  key: "category_id",  type: "text",   placeholder: "HC001" },
-    { label: "Severity",     key: "severity",     type: "select", options: ["Minor","Moderate","Serious","Critical"] },
-    { label: "Probability",  key: "probability",  type: "select", options: ["Unlikely","Possible","Likely","Almost Certain"] },
+    { label: "Severity",     key: "severity",     type: "select", options: ["Fatal","Serious","Significant","Minor","Moderate"] },
+    { label: "Probability",  key: "probability",  type: "select", options: ["Likely","Possible","Unlikely","Rare"] },
   ],
   training_programs: [
     { label: "Training ID",       key: "training_id",    type: "text",   placeholder: "TRN001", required: true },
@@ -691,13 +587,13 @@ const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
     { label: "Work Description",  key: "work_description",  type: "textarea", placeholder: "Describe the work…", required: true },
     { label: "Date Issued",       key: "date_issued",       type: "date" },
     { label: "Issued By",         key: "issued_by",         type: "text",     placeholder: "EMP001" },
-    { label: "Status",            key: "status",            type: "select",   options: ["active","closed","cancelled","draft"] },
+    { label: "Status",            key: "status",            type: "select",   options: ["Active","Closed","Expired","Cancelled"] },
   ],
   incidents: [
     { label: "Incident ID",    key: "incident_id",    type: "text",     placeholder: "INC00001", required: true },
     { label: "Report Date",    key: "report_date",    type: "date",     required: true },
-    { label: "Incident Type",  key: "incident_type",  type: "select",   options: ["Injury","Damage","Near-miss","Fire","Environmental","Unsafe Act","Unsafe Condition"] },
-    { label: "Severity",       key: "severity",       type: "select",   options: ["Minor","Significant","Serious","Lost Time","Fatality"] },
+    { label: "Incident Type",  key: "incident_type",  type: "select",   options: ["Injury","Damage","Near-miss","Environmental","Equipment Failure","Spill","Process","Fire"] },
+    { label: "Severity",       key: "severity",       type: "select",   options: ["Fatal","Serious","Significant","Minor","Moderate","Lost Time"] },
     { label: "Description",    key: "description",    type: "textarea", placeholder: "Brief description…" },
   ],
   near_misses: [

@@ -10,6 +10,7 @@ from app.models.employee import Employee
 from app.models.incident import Incident
 from app.models.permit_to_work import PermitToWork
 from app.models.training_program import TrainingProgram
+from app.services.contractor_risk import compute_contractor_risk
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
 
@@ -233,58 +234,11 @@ def get_vendor_summary(
         for r in pv_rows
     ]
 
-    # ── Risk Score — use exact same formula as dashboard leading-indicators ──
-    # To guarantee Vendors and Dashboard show identical scores
-    # Re-fetch using JOIN method (same as dashboard)
-    total_permit_violations = (
-        db.query(func.count(PermitToWork.id))
-        .filter(
-            PermitToWork.organisation_id == org_id,
-            PermitToWork.deviation_reported == "Yes",
-        )
-        .scalar() or 0
-    )
-    total_org_incidents = (
-        db.query(func.count(Incident.id))
-        .filter(Incident.organisation_id == org_id)
-        .scalar() or 0
-    )
-    total_org_employees_all = (
-        db.query(func.count(Employee.id))
-        .filter(Employee.organisation_id == org_id)
-        .scalar() or 1
-    )
-    # Use same JOIN logic as dashboard for contractor incidents
-    contractor_incidents_count = (
-        db.query(func.count(Incident.id))
-        .join(Employee, Incident.reported_by == Employee.id)
-        .filter(
-            Incident.organisation_id == org_id,
-            func.lower(Employee.employment_type).like("%contract%"),
-        )
-        .scalar() or 0
-    )
-
-    violation_penalty = min(3.0, total_permit_violations * 0.5)
-
-    if total == 0:
-        raw = 10.0
-        prev_raw = 10.0
-        relative_risk = 0.0
-    elif total_org_incidents == 0:
-        raw = round(max(0.0, 10.0 - violation_penalty), 1)
-        prev_raw = raw
-        relative_risk = 0.0
-    else:
-        contractor_inc_rate = contractor_incidents_count / max(total, 1)
-        overall_inc_rate = total_org_incidents / total_org_employees_all
-        relative_risk = round(contractor_inc_rate / overall_inc_rate, 2) if overall_inc_rate > 0 else 0.0
-        incident_penalty = min(7.0, relative_risk * 3.0)
-        raw = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
-        prev_raw = raw  # delta = 0 for now (previous period not critical for display consistency)
-
-    risk_score = round(raw, 1)
-    delta = round(raw - prev_raw, 1)
+    # ── Risk Score — single shared implementation, see app/services/contractor_risk.py
+    # Guarantees the Vendors page always matches the Dashboard leading-indicators panel.
+    contractor_risk = compute_contractor_risk(db, org_id)
+    risk_score = contractor_risk.score_10
+    delta = 0.0  # previous-period trend not tracked yet; kept at 0 rather than fabricated
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: list[dict] = []
@@ -390,7 +344,12 @@ def get_vendor_summary(
     ]
 
     return {
-        "risk_score":        {"value": risk_score, "delta": delta if total > 0 else None, "up": delta >= 0},
+        "risk_score":        {
+            "value": risk_score,
+            "delta": delta if contractor_risk.has_contractors else None,
+            "up": delta >= 0,
+            "has_contractors": contractor_risk.has_contractors,
+        },
         "total_contractors": total,
         "compliance":        compliance,
         "exposure_hours":    exposure_hours,

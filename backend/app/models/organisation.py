@@ -15,3 +15,4 @@ class Organisation(Base):
     regulatory_authority = Column(String(255))
     establishment_date = Column(Date)
     compliance_config = Column(JSON, nullable=True)
+    branding = Column(JSON, nullable=True)

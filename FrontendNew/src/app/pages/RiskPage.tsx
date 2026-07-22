@@ -110,9 +110,9 @@ export function RiskPage() {
 
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <KpiCard title="Control Effectiveness Score" value={kpis ? kpis.control_effectiveness : "—"} subtitle="Effective" hint="" />
-        <KpiCard title="Unverified Controls"         value={kpis ? String(kpis.unverified_controls) : "—"} subtitle="Pending Review" hint="" />
-        <KpiCard title="Risk Escalations ⚠"          value={kpis ? String(kpis.risk_escalations) : "—"} subtitle="Requires Immediate Action" hint="" />
+        <KpiCard title="Corrective Action Closure Rate" value={kpis ? kpis.control_effectiveness : "—"} subtitle="CAPA actions completed" hint="Client KPI — same metric as Compliance page" />
+        <KpiCard title="Open CAPA Actions"               value={kpis ? String(kpis.unverified_controls) : "—"} subtitle="Pending closure" hint="Not a control-verification record" />
+        <KpiCard title="Overdue CAPA Actions ⚠"          value={kpis ? String(kpis.risk_escalations) : "—"} subtitle="Requires Immediate Action" hint="" />
       </div>
 
       {/* Row 2: Residual Trend | Risk Matrix | Zone Risk */}
@@ -121,12 +121,15 @@ export function RiskPage() {
 
         {/* Residual Risk Trend */}
         <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
-          <div className="mb-4 text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Residual Risk Trend</div>
+          <div className="mb-1 text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Residual Risk Trend</div>
+          <div className="mb-3 text-[11px]" style={{ color: '#9CA3AF' }}>
+            Estimated from incident severity mix — not a numeric Likelihood × Consequence score (that data isn't captured yet).
+          </div>
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={residualTrend} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
               <CartesianGrid stroke="#E2E8F0" vertical={false} />
               <XAxis dataKey="q" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[60, 105]} width={30} />
+              <YAxis tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} width={30} />
               <Tooltip
                 contentStyle={{ borderRadius: 10, border: '1px solid #E2E8F0', fontSize: 12 }}
                 labelStyle={{ fontWeight: 600, color: '#111827' }}
@@ -138,9 +141,12 @@ export function RiskPage() {
 
         {/* Risk Matrix */}
         <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#6BD0D7' }}>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between">
             <div className="text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Risk Matrix</div>
             <MoreHorizontal className="h-4 w-4" style={{ color: '#64748B' }} />
+          </div>
+          <div className="mb-3 text-[11px]" style={{ color: '#9CA3AF' }}>
+            Qualitative estimate from hazard severity/probability text — not a numeric risk-assessment score.
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-center">

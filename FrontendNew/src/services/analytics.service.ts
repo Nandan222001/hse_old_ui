@@ -25,7 +25,7 @@ export interface ViolationsSummary {
   by_type: ViolationItem[];
   by_location: ViolationItem[];
   by_root_cause: RcaItem[];
-  cause_data: RcaItem[];
+  investigation_status: RcaItem[];
   monthly_trend: { month: string; value: number }[];
   near_miss_monthly: { month: string; value: number }[];
   downtime_by_type: ViolationItem[];
@@ -52,7 +52,7 @@ export interface PermitViolation {
 export interface ActiveWorkRow {
   id: string;
   type: string;
-  contractor: string;
+  issued_by: string;
   location: string;
   status: string;
   expiry: string;
@@ -109,6 +109,8 @@ export interface ComplianceSummary {
   audit_readiness_pct: number;
   audit_readiness_label: string;
   permit_compliance_pct: number;
+  loto_compliance_pct: number | null;
+  corrective_action_closure_rate: number;
   policy_review_pct: number;
   compliance_trend: { month: string; value: number }[];
   compliance_trend_mom: number | null;

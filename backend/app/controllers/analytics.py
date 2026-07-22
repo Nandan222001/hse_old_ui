@@ -23,7 +23,6 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 RCA_COLORS = ["#4F8C2F", "#F5C116", "#F59E0B", "#2F3A4F", "#607D8B"]
-CAUSE_COLORS = ["#8BC34A", "#FFC107", "#607D8B", "#2F3A4F", "#E91E63"]
 
 
 def _org_filter(query, model, org_id):
@@ -77,9 +76,34 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
         {"name": r.root_cause_category, "value": r.cnt, "color": RCA_COLORS[i % len(RCA_COLORS)]}
         for i, r in enumerate(by_root_cause_rows)
     ]
-    cause_data = [
-        {"name": r.root_cause_category, "value": r.cnt, "color": CAUSE_COLORS[i % len(CAUSE_COLORS)]}
-        for i, r in enumerate(by_root_cause_rows[:3])
+
+    # Investigation Status breakdown — Excel KPI spec (M1_Incidents_Events, supporting
+    # breakdown): Completed / In Progress / Not Investigated, via COUNTIF Investigation_Status.
+    INVESTIGATION_STATUS_COLORS = {
+        "completed": "#16A34A",
+        "closed": "#0F766E",
+        "in progress": "#F59E0B",
+        "acknowledged": "#3B82F6",
+        "open": "#EF4444",
+        "not investigated": "#9CA3AF",
+    }
+    investigation_status_rows = (
+        _org_filter(
+            db.query(Incident.investigation_status, func.count(Incident.id).label("cnt"))
+            .filter(Incident.investigation_status.isnot(None)),
+            Incident, org_id,
+        )
+        .group_by(Incident.investigation_status)
+        .order_by(func.count(Incident.id).desc())
+        .all()
+    )
+    investigation_status = [
+        {
+            "name": r.investigation_status,
+            "value": r.cnt,
+            "color": INVESTIGATION_STATUS_COLORS.get((r.investigation_status or "").lower(), "#94A3B8"),
+        }
+        for r in investigation_status_rows
     ]
 
     monthly_rows = (
@@ -121,11 +145,18 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
     downtime_rows = (
         _org_filter(
             db.query(Incident.incident_type, func.sum(Incident.days_away).label("total"))
-            .filter(Incident.days_away.isnot(None), Incident.incident_type.isnot(None)),
+            .filter(
+                Incident.days_away.isnot(None),
+                Incident.incident_type.isnot(None),
+                # A near-miss has no actual injury/lost time by definition — a Near-miss
+                # record carrying Days_Away is a data-entry error (see client's own Data
+                # Quality Findings, e.g. INC00037) and shouldn't count toward downtime.
+                func.lower(Incident.incident_type) != "near-miss",
+            ),
             Incident, org_id,
         )
         .group_by(Incident.incident_type)
-        .order_by(func.sum(Incident.days_away).asc())
+        .order_by(func.sum(Incident.days_away).desc())
         .limit(5)
         .all()
     )
@@ -236,7 +267,7 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
         "by_type": by_type,
         "by_location": by_location,
         "by_root_cause": by_root_cause,
-        "cause_data": cause_data,
+        "investigation_status": investigation_status,
         "monthly_trend": monthly_trend,
         "near_miss_monthly": near_miss_monthly,
         "downtime_by_type": downtime_by_type,
@@ -264,21 +295,28 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
     ).scalar() or 0
 
     by_type_rows = (
-        db.query(PermitType.permit_type_name, func.count(PermitToWork.id).label("cnt"))
+        db.query(PermitType.permit_type_name, PermitType.risk_level, func.count(PermitToWork.id).label("cnt"))
         .join(PermitToWork, PermitToWork.permit_type_id == PermitType.id)
         .filter(
             PermitToWork.status == "Active",
             *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
         )
-        .group_by(PermitType.permit_type_name)
+        .group_by(PermitType.permit_type_name, PermitType.risk_level)
         .order_by(func.count(PermitToWork.id).desc())
         .limit(6)
         .all()
     )
-    max_count = max((r.cnt for r in by_type_rows), default=1)
+    # "High Risk Work" = active permit count weighted by the permit type's own risk_level,
+    # not a plain count — a "Cold Work" permit and a "Confined Space Entry" permit are not
+    # equally risky even at the same volume.
+    _RISK_WEIGHT = {"critical": 3.0, "high": 2.0, "medium": 1.0, "low": 0.5}
+    weighted_scores = [
+        r.cnt * _RISK_WEIGHT.get((r.risk_level or "").lower(), 1.0) for r in by_type_rows
+    ]
+    max_score = max(weighted_scores, default=1) or 1
     risk_work_data = [
-        {"subject": r.permit_type_name, "A": round((r.cnt / max_count) * 100)}
-        for r in by_type_rows
+        {"subject": r.permit_type_name, "A": round(score / max_score * 100)}
+        for r, score in zip(by_type_rows, weighted_scores)
     ]
 
     # ── Permit Violations (same logic as /vendors/summary for data consistency) ──
@@ -303,9 +341,10 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
     ]
 
     active_rows = (
-        db.query(PermitToWork, PermitType, WorkingStation)
+        db.query(PermitToWork, PermitType, WorkingStation, Employee)
         .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
         .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
+        .outerjoin(Employee, PermitToWork.issued_by == Employee.id)
         .filter(
             PermitToWork.status == "Active",
             *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
@@ -324,20 +363,30 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         {
             "id": f"PTW-{ptw.id:04d}",
             "type": pt.permit_type_name if pt else "Unknown",
-            "contractor": f"{ptw.number_of_workers or 0} workers",
+            "issued_by": emp.full_name if emp else "Unassigned",
             "location": ws.station_name if ws else f"Station {ptw.location_station_id}",
             "status": ptw.status,
             "expiry": fmt_expiry(ptw.validity_end),
         }
-        for ptw, pt, ws in active_rows
+        for ptw, pt, ws, emp in active_rows
     ]
 
+    # Bar width reflects the permit's real requested duration (not an arbitrary
+    # per-row index) — so the timeline actually represents the underlying data.
+    def _permit_hours(ptw) -> float:
+        if ptw.validity_start and ptw.validity_end:
+            return max(0.0, (ptw.validity_end - ptw.validity_start).total_seconds() / 3600)
+        return float(ptw.duration_requested_hours or 0)
+
+    top5 = active_rows[:5]
+    durations = [_permit_hours(ptw) for ptw, pt, ws, emp in top5]
+    max_duration = max(durations) if durations else 1
     timeline_colors = ["#D64545", "#C14B4B", "#E8B441", "#42A5C6", "#5070C9"]
     expiry_timeline = [
         {
             "label": f"{row['id']} ({row['expiry']})",
-            "left": max(2, i * 12),
-            "width": min(30 + i * 8, 60),
+            "left": 2,
+            "width": round(max(15, durations[i] / max_duration * 90)) if max_duration else 15,
             "color": timeline_colors[i % len(timeline_colors)],
             "rightText": row["expiry"],
         }
@@ -836,11 +885,34 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     ).count()
     permit_compliance_pct = round(closed_permits / total_permits * 100) if total_permits else 0
 
+    # Excel KPI spec (M4_Assets_Operations): LOTO Compliance % (PROXY) =
+    # Lockout/Isolation permits with no deviation reported ÷ Lockout/Isolation permits issued × 100
+    # Not a true field-audit result — indicative only, per client's own methodology note.
+    lockout_permits_q = (
+        _org_filter(db.query(PermitToWork), PermitToWork, org_id)
+        .join(PermitType, PermitToWork.permit_type_id == PermitType.id)
+        .filter(PermitType.permit_type_name == "Equipment Isolation/Lockout")
+    )
+    total_lockout_permits = lockout_permits_q.count()
+    lockout_no_deviation = lockout_permits_q.filter(PermitToWork.deviation_reported == "No").count()
+    loto_compliance_pct = (
+        round(lockout_no_deviation / total_lockout_permits * 100) if total_lockout_permits else None
+    )
+
     total_policies = _org_filter(db.query(Policy), Policy, org_id).count()
     current_policies = _org_filter(
         db.query(Policy).filter(Policy.status == "Current"), Policy, org_id
     ).count()
     policy_review_pct = round(current_policies / total_policies * 100) if total_policies else 0
+
+    # Excel KPI spec (M2_Risk_Hazards): Corrective Action Closure Rate =
+    # CAPA Actions Completed ÷ Total CAPA Actions × 100 — the one Module 2 KPI the client's
+    # own spec marks as computable (all other Module 2 Risk KPIs need a structured risk register).
+    total_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
+    completed_capa = _org_filter(
+        db.query(CapaAction).filter(CapaAction.status == "Completed"), CapaAction, org_id
+    ).count()
+    corrective_action_closure_rate = round(completed_capa / total_capa * 100, 1) if total_capa else 0
 
     distinct_policy_categories = _org_filter(
         db.query(func.count(func.distinct(Policy.category))), Policy, org_id
@@ -934,6 +1006,8 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         "audit_readiness_pct": audit_readiness_pct,
         "audit_readiness_label": audit_label,
         "permit_compliance_pct": permit_compliance_pct,
+        "loto_compliance_pct": loto_compliance_pct,
+        "corrective_action_closure_rate": corrective_action_closure_rate,
         "policy_review_pct": policy_review_pct,
         "compliance_trend": compliance_trend,
         "compliance_trend_mom": trend_mom,

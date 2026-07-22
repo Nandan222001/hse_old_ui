@@ -19,6 +19,7 @@ from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
 from app.models.shift_schedule import ShiftSchedule
 from app.models.working_station import WorkingStation
+from app.services.contractor_risk import compute_contractor_risk
 
 from app.utils.logger import get_logger
 logger = get_logger(__name__)
@@ -89,8 +90,11 @@ def get_dashboard_stats(
     avg_compliance = sw_q().with_entities(func.avg(SafetyWalk.compliance_rating)).scalar()
     avg_housekeeping = sw_q().with_entities(func.avg(SafetyWalk.housekeeping_rating)).scalar()
 
+    # "Critical" is not an actual severity value in this schema (real values are
+    # Fatal/Serious/Significant/Minor/Moderate/Lost Time) — count the genuinely
+    # severe tiers instead of a label that never matches.
     critical_incidents = inc_q().filter(
-        func.lower(Incident.severity).in_(["critical", "significant"])
+        func.lower(Incident.severity).in_(["fatal", "serious", "significant"])
     ).count()
 
     # capa_completion_rate is org-wide (not date filtered) — it's a point-in-time health metric
@@ -204,19 +208,17 @@ def get_leading_indicators(
     incident_close_out_rate = _safe_round((completed_investigations / total_investigations) * 100) if total_investigations else 0.0
 
     # ── Predictive Injury Risk Score ────────────────────────────────────────
+    # Weighted by actual severity values in this schema (Fatal/Serious/Significant/
+    # Lost Time/Moderate/Minor) — the previous "critical"/"high"/"major" labels don't
+    # exist in the data, so Fatal and Serious incidents were silently falling into the
+    # lowest-weight bucket instead of the highest. Max weight stays 3 to match the
+    # existing (count * 3) normalization below.
     severity_weight = case(
-        (
-            func.lower(Incident.severity).in_(["critical", "significant"]),
-            3,
-        ),
-        (
-            func.lower(Incident.severity).in_(["high", "major"]),
-            2,
-        ),
-        (
-            func.lower(Incident.severity).in_(["medium", "moderate"]),
-            1,
-        ),
+        (func.lower(Incident.severity) == "fatal", 3),
+        (func.lower(Incident.severity) == "serious", 2.5),
+        (func.lower(Incident.severity) == "significant", 2),
+        (func.lower(Incident.severity) == "lost time", 1.5),
+        (func.lower(Incident.severity) == "moderate", 1),
         else_=0.5,
     )
 
@@ -248,25 +250,10 @@ def get_leading_indicators(
     injury_risk_score = _safe_round(current_score)
     injury_risk_trend = _safe_round(current_score - previous_score)
 
-    # ── Contractor Risk Score ───────────────────────────────────────────────
-    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
-        func.lower(Employee.employment_type).like("%contract%")
-    ).count()
+    # ── Contractor Risk Score — single shared implementation, see app/services/contractor_risk.py
     permanent_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
         func.lower(Employee.employment_type) == "permanent"
     ).count()
-
-    contractor_incidents = (
-        _org_filter(
-            db.query(func.count(Incident.id)),
-            Incident,
-            org_id,
-        )
-        .join(Employee, Incident.reported_by == Employee.id)
-        .filter(func.lower(Employee.employment_type).like("%contract%"))
-        .scalar()
-        or 0
-    )
     permanent_incidents = (
         _org_filter(
             db.query(func.count(Incident.id)),
@@ -279,39 +266,19 @@ def get_leading_indicators(
         or 0
     )
 
+    contractor_risk = compute_contractor_risk(db, org_id)
+    contractor_employees = contractor_risk.contractor_employees
+    contractor_incidents = contractor_risk.contractor_incidents
     contractor_rate = _safe_round(contractor_incidents / contractor_employees) if contractor_employees else 0.0
     permanent_rate = _safe_round(permanent_incidents / permanent_employees) if permanent_employees else 0.0
 
-    # ── Permit violations count (for risk score penalty) ─────────────────────
-    pv_q = db.query(func.count(PermitToWork.id)).filter(PermitToWork.deviation_reported == "Yes")
-    if org_id is not None:
-        pv_q = pv_q.filter(PermitToWork.organisation_id == org_id)
-    total_permit_violations_cont = pv_q.scalar() or 0
-
-    # ── Contractor Risk Score (0–10) — incidents + permit violations ─────────
-    # Client audit rule: "If a violation exists, a 10/10 score is impossible."
-    # Formula: 10 - incident_penalty(0-7) - violation_penalty(0-3)
-    violation_penalty = min(3.0, total_permit_violations_cont * 0.5)
-    total_org_incidents_count = _org_filter(db.query(Incident), Incident, org_id).count()
-    total_all_employees = max(total_employees, 1)
-
-    if contractor_employees == 0:
-        contractor_risk_score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
-        relative_risk = 0.0
-    elif total_org_incidents_count == 0:
-        contractor_risk_score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
-        relative_risk = 0.0
-    else:
-        cont_inc_rate = contractor_incidents / contractor_employees
-        org_inc_rate = total_org_incidents_count / total_all_employees
-        relative_risk = _safe_round(cont_inc_rate / org_inc_rate) if org_inc_rate > 0 else 0.0
-        incident_penalty = min(7.0, relative_risk * 3.0)
-        contractor_risk_score_10 = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
-
-    contractor_risk_score = _safe_round(contractor_risk_score_10 * 10)
-    contractor_risk_label = "High" if contractor_risk_score_10 < 5 else ("Medium" if contractor_risk_score_10 < 8 else "Low")
-    logger.info("CONTRACTOR_RISK: score_10=%s score_pct=%s label=%s violations=%s",
-                contractor_risk_score_10, contractor_risk_score, contractor_risk_label, total_permit_violations_cont)
+    contractor_risk_score_10 = contractor_risk.score_10
+    contractor_risk_score = contractor_risk.score_pct
+    contractor_risk_label = contractor_risk.label
+    relative_risk = contractor_risk.relative_risk
+    logger.info("CONTRACTOR_RISK: score_10=%s score_pct=%s label=%s violations=%s has_contractors=%s",
+                contractor_risk_score_10, contractor_risk_score, contractor_risk_label,
+                contractor_risk.contractor_violations, contractor_risk.has_contractors)
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
     # Anchor on latest walk date so historical data is not missed
@@ -354,6 +321,7 @@ def get_leading_indicators(
         "relative_risk": relative_risk,
         "contractor_risk_score": contractor_risk_score,
         "contractor_risk_score_10": contractor_risk_score_10,
+        "contractor_has_contractors": contractor_risk.has_contractors,
         "audit_readiness_score": audit_readiness_score,
         "average_compliance": average_compliance,
         "audit_readiness_label": audit_readiness_label,
@@ -367,58 +335,20 @@ def get_contractor_debug(
 ):
     """Debug endpoint to verify contractor risk score calculation."""
     org_id = current_user.org_id
-
-    contractor_employees = _org_filter(db.query(Employee), Employee, org_id).filter(
-        func.lower(Employee.employment_type).like("%contract%")
-    ).count()
-
-    pv_q = db.query(func.count(PermitToWork.id)).filter(PermitToWork.deviation_reported == "Yes")
-    if org_id is not None:
-        pv_q = pv_q.filter(PermitToWork.organisation_id == org_id)
-    total_permit_violations = pv_q.scalar() or 0
-
-    total_org_incidents = _org_filter(db.query(Incident), Incident, org_id).count()
-    total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
-
-    violation_penalty = min(3.0, total_permit_violations * 0.5)
-
-    if contractor_employees == 0:
-        score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
-    elif total_org_incidents == 0:
-        score_10 = round(max(0.0, 10.0 - violation_penalty), 1)
-    else:
-        contractor_incidents = (
-            _org_filter(db.query(func.count(Incident.id)), Incident, org_id)
-            .join(Employee, Incident.reported_by == Employee.id)
-            .filter(func.lower(Employee.employment_type).like("%contract%"))
-            .scalar() or 0
-        )
-        cont_inc_rate = contractor_incidents / contractor_employees
-        org_inc_rate = total_org_incidents / max(total_employees, 1)
-        rel_risk = round(cont_inc_rate / org_inc_rate, 2) if org_inc_rate > 0 else 0.0
-        incident_penalty = min(7.0, rel_risk * 3.0)
-        score_10 = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
-        return {
-            "contractor_employees": contractor_employees,
-            "contractor_incidents": contractor_incidents,
-            "total_org_incidents": total_org_incidents,
-            "total_employees": total_employees,
-            "cont_inc_rate": cont_inc_rate,
-            "org_inc_rate": org_inc_rate,
-            "rel_risk": rel_risk,
-            "incident_penalty": incident_penalty,
-            "violation_penalty": violation_penalty,
-            "score_10": score_10,
-            "score_pct": score_10 * 10,
-        }
-
+    r = compute_contractor_risk(db, org_id)
     return {
-        "contractor_employees": contractor_employees,
-        "total_permit_violations": total_permit_violations,
-        "total_org_incidents": total_org_incidents,
-        "violation_penalty": violation_penalty,
-        "score_10": score_10,
-        "score_pct": score_10 * 10,
+        "has_contractors": r.has_contractors,
+        "contractor_employees": r.contractor_employees,
+        "total_employees": r.total_employees,
+        "contractor_incidents": r.contractor_incidents,
+        "total_org_incidents": r.total_org_incidents,
+        "contractor_violations": r.contractor_violations,
+        "relative_risk": r.relative_risk,
+        "incident_penalty": r.incident_penalty,
+        "violation_penalty": r.violation_penalty,
+        "score_10": r.score_10,
+        "score_pct": r.score_pct,
+        "label": r.label,
     }
 
 
