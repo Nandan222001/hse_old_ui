@@ -34,7 +34,6 @@ import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
 import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
 import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
 import { SuperAdminRolesPage } from "./pages/SuperAdminRolesPage";
-import { IncidentReportingPage } from "./pages/IncidentReportingPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -204,7 +203,6 @@ export const router = createBrowserRouter([
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
       { path: "data-management", Component: DataManagementPage },
       { path: "vendors", Component: VendorsPage },
-      { path: "incident-reporting", Component: IncidentReportingPage },
     ],
   },
   {

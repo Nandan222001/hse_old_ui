@@ -217,15 +217,15 @@ export interface ComplianceStandard {
 }
 
 export interface AuditTrail {
-  Audit_ID: string;
-  Timestamp: string;
-  User: string;
-  Action: string;
-  Module: string;
-  Record_ID: string;
-  Previous_Value: string;
-  New_Value: string;
-  IP_Address: string;
+  id: number;
+  timestamp: string;
+  user: string;
+  action: string;
+  module: string;
+  record_id: string | null;
+  previous_value: string | null;
+  new_value: string | null;
+  ip_address: string | null;
 }
 
 // ============= Analytics =============

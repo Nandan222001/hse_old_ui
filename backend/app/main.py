@@ -9,6 +9,7 @@ from app.core.exceptions import (
     not_found_handler, conflict_handler, validation_handler,
 )
 from app.core.middleware import RequestLoggingMiddleware
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 # Ensure all models are registered with SQLAlchemy metadata
 import app.models  # noqa: F401
@@ -48,7 +49,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 def create_app() -> FastAPI:

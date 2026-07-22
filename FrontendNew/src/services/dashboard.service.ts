@@ -22,7 +22,6 @@ export interface CapaAction {
   root_cause_addressed: string;
   status: string;
   due_date: string | null;
-  days_until_due: number | null;
   is_overdue: boolean;
   incident_id: number;
   assignee: string;
@@ -43,7 +42,6 @@ export interface OverdueCapa {
 export interface IncidentByCategory {
   name: string;
   data: number;
-  intelligence: number;
 }
 
 export interface ComplianceTrend {

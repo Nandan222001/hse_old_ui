@@ -33,6 +33,7 @@ from app.models.document import Document
 from app.models.equipment_certification import EquipmentCertification
 from app.models.api_key import ApiKey
 from app.models.webhook import Webhook
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
@@ -42,5 +43,5 @@ __all__ = [
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
-    "EquipmentCertification", "ApiKey", "Webhook",
+    "EquipmentCertification", "ApiKey", "Webhook", "AuditLog",
 ]

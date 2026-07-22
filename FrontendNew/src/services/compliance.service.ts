@@ -5,6 +5,8 @@ export const getComplianceStandards = () =>
   axiosInstance.get<ComplianceStandard[]>('/compliance-standards').then((r) => r.data);
 
 export const getAuditTrail = () =>
-  axiosInstance.get<AuditTrail[]>('/audit-trail').then((r) => r.data);
+  axiosInstance
+    .get<{ data: AuditTrail[] }>('/org-admin/settings/audit-logs')
+    .then((r) => r.data.data);
 
 export type { ComplianceStandard, AuditTrail };

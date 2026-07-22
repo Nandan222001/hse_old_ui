@@ -648,8 +648,15 @@ def get_risk_matrix(
 
 @router.get("/risk-summary")
 def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
-    today = date.today()
     org_id = current_user.org_id
+    # Anchor "today" on this org's own latest CAPA due_date rather than the real
+    # system clock — the seed data's due dates are all 2024-2025, so comparing
+    # against a 2026 clock made every open action read as deeply overdue and
+    # collapsed the whole aging chart into a single ">90 Days" bucket.
+    today = (
+        _org_filter(db.query(func.max(CapaAction.due_date)), CapaAction, org_id).scalar()
+        or date.today()
+    )
 
     zone_rows = (
         db.query(Site.site_name, func.count(Incident.id).label("cnt"))
@@ -676,12 +683,11 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
     )
 
     def capa_status_label(c: CapaAction) -> str:
-        if not c.due_date:
-            return "Pending (Yellow)"
-        days = (c.due_date - today).days
-        if days < 0:
+        # Real CAPA status, not a due_date-vs-today comparison — see the anchor
+        # comment above for why the date math alone was unreliable here.
+        if c.status == "Overdue":
             return "Overdue (Red)"
-        if days <= 3:
+        if c.status == "In Progress":
             return "In Progress (Amber)"
         return "Pending (Yellow)"
 
@@ -740,11 +746,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
         db.query(CapaAction).filter(CapaAction.status != "Completed"), CapaAction, org_id
     ).count()
     overdue_count = _org_filter(
-        db.query(CapaAction).filter(
-            CapaAction.status != "Completed",
-            CapaAction.due_date < today,
-            CapaAction.due_date.isnot(None),
-        ),
+        db.query(CapaAction).filter(CapaAction.status == "Overdue"),
         CapaAction, org_id,
     ).count()
 

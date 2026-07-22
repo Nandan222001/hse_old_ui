@@ -70,7 +70,7 @@ function formatDueDate(dateStr: string | null): string {
   });
 }
 
-function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold: string }>) {
+function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold?: string }>) {
   const angle = Math.round((Math.max(0, Math.min(value, 100)) / 100) * 240);
   const ringStyle = {
     background: `conic-gradient(from 150deg, #4F62B8 0deg 140deg, #3AAFC9 140deg 205deg, #F1B435 205deg 240deg, #E5E7EB 240deg 360deg)`,
@@ -91,7 +91,9 @@ function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label:
         </div>
       </div>
       <div className="mt-2 text-[15px]" style={{ color: '#111827', fontWeight: 700 }}>{label}</div>
-      <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Alert threshold &nbsp;•&nbsp; {threshold}</div>
+      {threshold && (
+        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;•&nbsp; {threshold}</div>
+      )}
     </div>
   );
 }
@@ -312,7 +314,7 @@ export function DashboardPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Risk Chart (Data-Based)</h2>
+            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Incident Categories</h2>
             <ResponsiveContainer width="100%" height={380}>
               <BarChart data={riskBars} barGap={6} margin={{ bottom: 56 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
@@ -328,8 +330,7 @@ export function DashboardPage() {
                 />
                 <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
                 <Tooltip />
-                <Bar dataKey="data" fill="#5E7992" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="intelligence" fill="#5A63A8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="data" name="Incidents" fill="#5E7992" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -340,12 +341,11 @@ export function DashboardPage() {
               <GaugeCard
                 value={stats ? Math.round(stats.avg_compliance_rating * 20) : 0}
                 label="Avg. Safety Walk Compliance"
-                threshold={stats ? `${Math.round(stats.avg_compliance_rating * 20)}%` : '0%'}
               />
               <GaugeCard
                 value={stats ? Math.round(stats.capa_completion_rate) : 0}
                 label="Corrective Action Closure Rate"
-                threshold={stats ? `${Math.round(stats.capa_completion_rate)}%` : '0%'}
+                threshold=">90% (ISO 45001 §10)"
               />
             </div>
           </div>

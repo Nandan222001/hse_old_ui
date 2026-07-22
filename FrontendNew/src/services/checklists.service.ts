@@ -23,16 +23,11 @@ export interface CreateChecklistTemplatePayload {
   submitter_roles: string[];
   validator_roles: string[];
   items: { section_name: string; item_text: string; is_required: boolean }[];
+  sla?: { draft_submission_sla_hours: number; validation_sla_hours: number };
 }
 
 export const createChecklistTemplate = (payload: CreateChecklistTemplatePayload) =>
   axiosInstance.post<ChecklistTemplate>('/checklists/templates', payload).then((r) => r.data);
-
-export const updateChecklistTemplate = (
-  checklistType: string,
-  payload: Partial<CreateChecklistTemplatePayload>,
-) =>
-  axiosInstance.put<ChecklistTemplate>(`/checklists/templates/${checklistType}`, payload).then((r) => r.data);
 
 export const deactivateChecklistTemplate = (checklistType: string) =>
   axiosInstance.delete(`/checklists/templates/${checklistType}`).then((r) => r.data);

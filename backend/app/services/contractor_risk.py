@@ -5,9 +5,27 @@ from sqlalchemy.orm import Session
 
 from app.models.employee import Employee
 from app.models.incident import Incident
+from app.models.organisation import Organisation
 from app.models.permit_to_work import PermitToWork
 
 CONTRACTOR_TYPE_PATTERN = "%contract%"
+
+# Admin-configurable via /org-admin/settings/formula-config (Organisation.formula_config
+# -> "contractor_score"); these are the built-in defaults used when an org hasn't set any.
+DEFAULT_CONTRACTOR_WEIGHTS = {
+    "violation_penalty_per_violation": 0.5,
+    "violation_penalty_cap": 3.0,
+    "incident_penalty_multiplier": 3.0,
+    "incident_penalty_cap": 7.0,
+}
+
+
+def get_contractor_weights(db: Session, org_id: int | None) -> dict:
+    if org_id is not None:
+        org = db.query(Organisation).filter(Organisation.id == org_id).first()
+        if org and org.formula_config and org.formula_config.get("contractor_score"):
+            return {**DEFAULT_CONTRACTOR_WEIGHTS, **org.formula_config["contractor_score"]}
+    return dict(DEFAULT_CONTRACTOR_WEIGHTS)
 
 
 @dataclass
@@ -30,6 +48,8 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
     """Single source of truth for the Contractor Risk Score, shared by the
     dashboard leading-indicators panel and the Vendors/Contractors page so both
     always display the same number for the same organisation."""
+
+    weights = get_contractor_weights(db, org_id)
 
     def _org(query, model):
         if org_id is not None:
@@ -67,7 +87,10 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
         or 0
     )
 
-    violation_penalty = min(3.0, contractor_violations * 0.5)
+    violation_penalty = min(
+        weights["violation_penalty_cap"],
+        contractor_violations * weights["violation_penalty_per_violation"],
+    )
 
     if contractor_employees == 0:
         # No contractor workforce recorded for this org — a score would be
@@ -96,7 +119,10 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
         cont_inc_rate = contractor_incidents / contractor_employees
         org_inc_rate = total_org_incidents / max(total_employees, 1)
         relative_risk = round(cont_inc_rate / org_inc_rate, 2) if org_inc_rate > 0 else 0.0
-        incident_penalty = min(7.0, relative_risk * 3.0)
+        incident_penalty = min(
+            weights["incident_penalty_cap"],
+            relative_risk * weights["incident_penalty_multiplier"],
+        )
 
     score_10 = round(max(0.0, 10.0 - incident_penalty - violation_penalty), 1)
     score_pct = round(score_10 * 10, 1)

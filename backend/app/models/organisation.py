@@ -16,3 +16,4 @@ class Organisation(Base):
     establishment_date = Column(Date)
     compliance_config = Column(JSON, nullable=True)
     branding = Column(JSON, nullable=True)
+    formula_config = Column(JSON, nullable=True)

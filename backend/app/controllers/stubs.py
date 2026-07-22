@@ -26,11 +26,6 @@ def list_compliance_standards() -> list:
     return []
 
 
-@router.get("/audit-trail")
-def get_audit_trail() -> list:
-    return []
-
-
 # ── Onboarding / Access Profile ───────────────────────────────────────────────
 
 @router.get("/onboarding/access-profile")

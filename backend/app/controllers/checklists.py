@@ -184,11 +184,17 @@ def create_template(
     ui = {"form_title": display_name, "short_label": display_name[:24], "version_tag": "v1.0"}
     description = (payload.get("description") or "").strip() or None
 
+    sla_in = payload.get("sla") or {}
+    sla = {
+        "draft_submission_sla_hours": int(sla_in.get("draft_submission_sla_hours", 24)),
+        "validation_sla_hours": int(sla_in.get("validation_sla_hours", 48)),
+    }
+
     db.execute(text("""
         INSERT INTO checklist_templates
             (checklist_type, display_name, submitter_roles, validator_roles,
-             items_json, ui_json, description)
-        VALUES (:ct, :dn, :sr, :vr, :ij, :uj, :de)
+             items_json, ui_json, description, sla_json)
+        VALUES (:ct, :dn, :sr, :vr, :ij, :uj, :de, :sj)
     """), {
         "ct": checklist_type,
         "dn": display_name,
@@ -197,6 +203,7 @@ def create_template(
         "ij": json.dumps(normalized_items),
         "uj": json.dumps(ui),
         "de": description,
+        "sj": json.dumps(sla),
     })
     db.commit()
 
@@ -244,14 +251,21 @@ def update_template(
     validator_roles = payload.get("validator_roles") or json.loads(row["validator_roles"])
     description = payload.get("description", row.get("description"))
 
+    existing_sla = json.loads(row["sla_json"]) if row.get("sla_json") else {}
+    sla_in = payload.get("sla") or {}
+    sla = {
+        "draft_submission_sla_hours": int(sla_in.get("draft_submission_sla_hours", existing_sla.get("draft_submission_sla_hours", 24))),
+        "validation_sla_hours": int(sla_in.get("validation_sla_hours", existing_sla.get("validation_sla_hours", 48))),
+    }
+
     db.execute(text("""
         UPDATE checklist_templates
         SET display_name = :dn, submitter_roles = :sr, validator_roles = :vr,
-            items_json = :ij, description = :de, updated_at = :ua
+            items_json = :ij, description = :de, sla_json = :sj, updated_at = :ua
         WHERE checklist_type = :t
     """), {
         "dn": display_name, "sr": json.dumps(submitter_roles), "vr": json.dumps(validator_roles),
-        "ij": items_json, "de": description, "ua": datetime.utcnow(), "t": checklist_type,
+        "ij": items_json, "de": description, "sj": json.dumps(sla), "ua": datetime.utcnow(), "t": checklist_type,
     })
     db.commit()
 

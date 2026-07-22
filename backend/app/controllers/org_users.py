@@ -15,6 +15,7 @@ from app.models.organisation import Organisation
 from app.models.organisation_invite import OrganisationInvite
 from app.models.user import User
 from app.services.email_service import send_email, _build_invite_html
+from app.services.audit_log import record_audit, resolve_employee_id
 from app.utils.logger import get_logger
 
 router = APIRouter(prefix="/org", tags=["Org Users"])
@@ -219,7 +220,13 @@ def toggle_user(
     if role and role.name in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Cannot modify admin accounts")
 
+    previous_active = user.is_active
     user.is_active = bool(payload.get("is_active", True))
+    record_audit(
+        db, org_id, resolve_employee_id(db, current_user.user_id),
+        action="activate" if user.is_active else "deactivate", module="User Account",
+        record_id=user.id, previous_value=str(previous_active), new_value=str(user.is_active),
+    )
     db.commit()
     return {"id": user.id, "email": user.email, "is_active": user.is_active}
 
@@ -244,7 +251,13 @@ def change_user_role(
     if not app_role:
         raise HTTPException(status_code=400, detail=f"Role '{role_name}' not found")
 
+    previous_role = db.query(AppRole).filter(AppRole.id == user.app_role_id).first()
     user.app_role_id = app_role.id
+    record_audit(
+        db, org_id, resolve_employee_id(db, current_user.user_id),
+        action="update", module="User Role", record_id=user.id,
+        previous_value=previous_role.label if previous_role else None, new_value=app_role.label,
+    )
     db.commit()
     return {"id": user.id, "email": user.email, "role": role_name, "role_label": app_role.label}
 
@@ -264,5 +277,9 @@ def remove_user(
     if role and role.name in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Cannot delete admin accounts")
 
+    record_audit(
+        db, org_id, resolve_employee_id(db, current_user.user_id),
+        action="delete", module="User Account", record_id=user.id, previous_value=user.email,
+    )
     db.delete(user)
     db.commit()

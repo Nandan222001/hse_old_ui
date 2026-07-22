@@ -9,8 +9,17 @@ import {
   useCreateApiIntegrationMutation,
   useDeleteApiIntegrationMutation,
 } from "../../features/data-management/api/dataManagementApi";
+import { getAuditTrail } from "../../services/compliance.service";
+import type { AuditTrail } from "../../types";
 
-const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge"];
+const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge", "formula", "audit"];
+
+interface ContractorWeights {
+  violation_penalty_per_violation: number;
+  violation_penalty_cap: number;
+  incident_penalty_multiplier: number;
+  incident_penalty_cap: number;
+}
 
 interface ApiKeyRecord {
   id: number;
@@ -203,6 +212,44 @@ export function SettingsPage() {
     }
   };
 
+  // Audit Trail tab
+  const [auditLogs, setAuditLogs] = useState<AuditTrail[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+
+  useEffect(() => {
+    getAuditTrail()
+      .then(setAuditLogs)
+      .catch((e) => console.error("Failed to load audit trail", e))
+      .finally(() => setAuditLoading(false));
+  }, []);
+
+  // Formula & Rules tab — Contractor Risk Score weights
+  const [contractorWeights, setContractorWeights] = useState<ContractorWeights | null>(null);
+  const [formulaLoading, setFormulaLoading] = useState(true);
+  const [formulaSaving, setFormulaSaving] = useState(false);
+  const [formulaSaved, setFormulaSaved] = useState(false);
+
+  const fetchFormulaConfig = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/org-admin/settings/formula-config");
+      setContractorWeights((res.data as { data: { contractor_score: ContractorWeights } }).data.contractor_score);
+    } catch (e) { console.error("Failed to load formula config", e); }
+    finally { setFormulaLoading(false); }
+  }, []);
+  useEffect(() => { fetchFormulaConfig(); }, [fetchFormulaConfig]);
+
+  const handleSaveFormulaConfig = async () => {
+    if (!contractorWeights) return;
+    setFormulaSaving(true);
+    setFormulaSaved(false);
+    try {
+      await axiosInstance.put("/org-admin/settings/formula-config", { contractor_score: contractorWeights });
+      setFormulaSaved(true);
+      setTimeout(() => setFormulaSaved(false), 3000);
+    } catch (e) { console.error("Failed to save formula config", e); }
+    finally { setFormulaSaving(false); }
+  };
+
   const tabs = [
     { id: "general", label: "General" },
     { id: "integrations", label: "Integrations" },
@@ -210,6 +257,8 @@ export function SettingsPage() {
     { id: "webhooks", label: "Webhooks" },
     { id: "branding", label: "Branding" },
     { id: "knowledge", label: "AI Knowledge Base" },
+    { id: "formula", label: "Formula & Rules" },
+    { id: "audit", label: "Audit Trail" },
   ];
 
   const fetchDocs = useCallback(async () => {
@@ -771,6 +820,121 @@ export function SettingsPage() {
                   </table>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "formula" && (
+        <div className="max-w-xl space-y-6">
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <h2 className="mb-1">Contractor Risk Score Weights</h2>
+            <p className="text-[12px] mb-5" style={{ color: '#6B7280' }}>
+              Tune how the Contractor Risk Score (Vendors page, Dashboard) penalises permit
+              deviations and relative incident rate. Score = 10 − incident penalty − violation
+              penalty, floored at 0.
+            </p>
+            {formulaLoading || !contractorWeights ? (
+              <div className="flex items-center gap-2 py-8 justify-center">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1B5E20' }} />
+                <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</span>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label className="block mb-1.5">Penalty per Contractor-Issued Permit Deviation</label>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={contractorWeights.violation_penalty_per_violation}
+                    onChange={e => setContractorWeights(w => w ? { ...w, violation_penalty_per_violation: Number(e.target.value) } : w)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Max Violation Penalty (cap)</label>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={contractorWeights.violation_penalty_cap}
+                    onChange={e => setContractorWeights(w => w ? { ...w, violation_penalty_cap: Number(e.target.value) } : w)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Relative Incident-Rate Penalty Multiplier</label>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={contractorWeights.incident_penalty_multiplier}
+                    onChange={e => setContractorWeights(w => w ? { ...w, incident_penalty_multiplier: Number(e.target.value) } : w)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5">Max Incident Penalty (cap)</label>
+                  <input
+                    type="number" step="0.1" min="0"
+                    value={contractorWeights.incident_penalty_cap}
+                    onChange={e => setContractorWeights(w => w ? { ...w, incident_penalty_cap: Number(e.target.value) } : w)}
+                    className="w-full h-10 px-4 rounded-lg border text-[13px]"
+                    style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSaveFormulaConfig}
+                    disabled={formulaSaving}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white text-[13px] disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+                  >
+                    {formulaSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {formulaSaving ? "Saving…" : "Save Weights"}
+                  </button>
+                  {formulaSaved && (
+                    <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>✓ Saved successfully</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "audit" && (
+        <div className="space-y-4">
+          <p className="text-[12px]" style={{ color: '#9CA3AF' }}>
+            Admin actions on API keys, webhooks and branding — most recent 100 events.
+          </p>
+          <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+                <thead>
+                  <tr style={{ background: '#F4F7F4' }}>
+                    {["Timestamp", "User", "Action", "Module", "Previous Value", "New Value"].map(h => (
+                      <th key={h} className="px-4 py-3 text-left">
+                        <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLoading ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</td></tr>
+                  ) : auditLogs.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No audit events recorded yet</td></tr>
+                  ) : auditLogs.map(log => (
+                    <tr key={log.id} style={{ borderBottom: '1px solid #EEF2EE' }}>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{log.timestamp ? new Date(log.timestamp).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#0A0A0A', fontWeight: 500 }}>{log.user}</td>
+                      <td className="px-4 py-3 text-[13px] capitalize" style={{ color: '#4A5568' }}>{log.action}</td>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#4A5568' }}>{log.module}</td>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{log.previous_value || "—"}</td>
+                      <td className="px-4 py-3 text-[13px]" style={{ color: '#9CA3AF' }}>{log.new_value || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

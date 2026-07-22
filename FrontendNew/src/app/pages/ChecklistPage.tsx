@@ -22,13 +22,16 @@ interface BuilderItem {
   is_required: boolean;
 }
 
-// ── Checklist Builder modal ───────────────────────────────────────────────────
+// ── Checklist Builder modal — Organisation Admin only, per client architecture
+// (Web Portal: "Templates (Checklist, Audit, Permit)" is an Admin control-center item) ──
 function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void; onCreated: () => void }>) {
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
   const [submitterRoles, setSubmitterRoles] = useState<string[]>(['Supervisor']);
   const [validatorRoles, setValidatorRoles] = useState<string[]>(['Admin', 'HSE Manager']);
   const [items, setItems] = useState<BuilderItem[]>([{ section_name: 'General', item_text: '', is_required: true }]);
+  const [submitSlaHours, setSubmitSlaHours] = useState(24);
+  const [validateSlaHours, setValidateSlaHours] = useState(48);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +55,10 @@ function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void
         submitter_roles: submitterRoles,
         validator_roles: validatorRoles,
         items: cleanItems,
+        sla: {
+          draft_submission_sla_hours: submitSlaHours,
+          validation_sla_hours: validateSlaHours,
+        },
       });
       onCreated();
     } catch (err) {
@@ -102,7 +109,7 @@ function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who submits this?</label>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who submits this? (Mobile App)</label>
             <div className="flex flex-wrap gap-1.5">
               {ROLE_OPTIONS.map((role) => (
                 <button
@@ -119,7 +126,7 @@ function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void
             </div>
           </div>
           <div>
-            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who validates this?</label>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Who validates this? (Web Portal)</label>
             <div className="flex flex-wrap gap-1.5">
               {ROLE_OPTIONS.map((role) => (
                 <button
@@ -134,6 +141,31 @@ function ChecklistBuilder({ onClose, onCreated }: Readonly<{ onClose: () => void
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Submission SLA (hours)</label>
+            <input
+              type="number" min={1}
+              value={submitSlaHours}
+              onChange={(e) => setSubmitSlaHours(Number(e.target.value) || 24)}
+              className="w-full h-10 px-3 rounded-lg border text-[13px]"
+              style={{ borderColor: '#D6E4FF' }}
+            />
+            <p className="mt-1 text-[11px]" style={{ color: '#9CA3AF' }}>Time allowed to submit before it's flagged overdue.</p>
+          </div>
+          <div>
+            <label className="block mb-1.5 text-[13px]" style={{ color: '#374151', fontWeight: 600 }}>Validation SLA (hours)</label>
+            <input
+              type="number" min={1}
+              value={validateSlaHours}
+              onChange={(e) => setValidateSlaHours(Number(e.target.value) || 48)}
+              className="w-full h-10 px-3 rounded-lg border text-[13px]"
+              style={{ borderColor: '#D6E4FF' }}
+            />
+            <p className="mt-1 text-[11px]" style={{ color: '#9CA3AF' }}>Time allowed for the validator to review before it's flagged overdue.</p>
           </div>
         </div>
 
@@ -337,6 +369,7 @@ export function ChecklistPage() {
     : submissions.filter((s) => s.status === filterStatus);
 
   const isHSEManager = ['Admin', 'HSE Manager', 'Safety Manager'].includes(user?.role ?? '');
+  const isAdmin = user?.role === 'Admin';
 
   const handleDeactivate = async (checklistType: string) => {
     setDeletingType(checklistType);
@@ -365,7 +398,7 @@ export function ChecklistPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isHSEManager && (
+          {isAdmin && (
             <button
               onClick={() => setShowBuilder(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-[13px]"
@@ -374,7 +407,7 @@ export function ChecklistPage() {
               <Plus className="w-4 h-4" /> New Checklist
             </button>
           )}
-          {user?.role === 'Admin' && templates.length === 0 && (
+          {isAdmin && templates.length === 0 && (
             <button
               onClick={bootstrapIfNeeded}
               disabled={bootstrapping}
@@ -622,29 +655,31 @@ export function ChecklistPage() {
               {templates.length === 0 ? (
                 <p className="text-[12px]" style={{ color: '#9CA3AF' }}>No templates loaded.</p>
               ) : templates.map((t) => (
-                <div key={t.checklist_type} className="flex items-start justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: '#F1F5F9' }}>
-                  <div className="min-w-0">
-                    <span className="block text-[12px] truncate" style={{ color: '#374151', fontWeight: 500 }}>{t.display_name}</span>
-                    {t.description && (
-                      <span className="block text-[11px] truncate" style={{ color: '#9CA3AF' }}>{t.description}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: '#F0FFF4', color: '#15803D', fontWeight: 700 }}>
-                      Active
-                    </span>
-                    {isHSEManager && (
-                      <button
-                        onClick={() => handleDeactivate(t.checklist_type)}
-                        disabled={deletingType === t.checklist_type}
-                        className="p-1 rounded hover:bg-red-50"
-                        title="Remove template"
-                      >
-                        {deletingType === t.checklist_type
-                          ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#9CA3AF' }} />
-                          : <Trash2 className="w-3 h-3" style={{ color: '#DC2626' }} />}
-                      </button>
-                    )}
+                <div key={t.checklist_type} className="py-1.5 border-b last:border-0" style={{ borderColor: '#F1F5F9' }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="block text-[12px] truncate" style={{ color: '#374151', fontWeight: 500 }}>{t.display_name}</span>
+                      {t.description && (
+                        <span className="block text-[11px] truncate" style={{ color: '#9CA3AF' }}>{t.description}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: '#F0FFF4', color: '#15803D', fontWeight: 700 }}>
+                        Active
+                      </span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeactivate(t.checklist_type)}
+                          disabled={deletingType === t.checklist_type}
+                          className="p-1 rounded hover:bg-red-50"
+                          title="Remove template"
+                        >
+                          {deletingType === t.checklist_type
+                            ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#9CA3AF' }} />
+                            : <Trash2 className="w-3 h-3" style={{ color: '#DC2626' }} />}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -654,8 +689,8 @@ export function ChecklistPage() {
           <div className="rounded-2xl border p-4" style={{ background: '#FFF7ED', borderColor: '#FED7AA' }}>
             <div className="text-[12px]" style={{ color: '#C2410C', fontWeight: 700 }}>Field Execution</div>
             <p className="mt-1 text-[12px]" style={{ color: '#92400E' }}>
-              Filling out checklists happens on the Mobile App. HSE Managers can create and manage checklist
-              templates here — new templates appear on mobile automatically.
+              Filling out checklists happens on the Mobile App. The Organisation Admin creates and manages
+              checklist templates here — new templates appear on mobile automatically.
             </p>
           </div>
         </div>

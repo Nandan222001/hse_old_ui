@@ -61,7 +61,6 @@ def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    today = date.today()
     org_id = current_user.org_id
 
     def inc_q():
@@ -78,10 +77,12 @@ def get_dashboard_stats(
 
     total_incidents = inc_q().count()
     open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status != "Completed").count()
+    # CAPA data already carries a real "Overdue" status (client's own Excel spec counts
+    # it the same way: COUNTIF Status = "Overdue"). Recomputing via due_date < today
+    # was comparing seed due-dates from 2024-2025 against a 2026 system clock, so it
+    # counted almost every open/in-progress action as "overdue" (107 instead of 6).
     overdue_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
-        CapaAction.status != "Completed",
-        CapaAction.due_date < today,
-        CapaAction.due_date.isnot(None),
+        CapaAction.status == "Overdue",
     ).count()
     active_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).filter(PermitToWork.status == "Active").count()
     total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
@@ -370,7 +371,6 @@ def get_ranked_capa_actions(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    today = date.today()
     org_id = current_user.org_id
     q = _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)\
         .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)\
@@ -382,12 +382,10 @@ def get_ranked_capa_actions(
     rows = q.order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc()).limit(limit).all()
     result = []
     for capa, emp in rows:
-        days_until_due = None
-        is_overdue = False
-        if capa.due_date:
-            delta = (capa.due_date - today).days
-            days_until_due = delta
-            is_overdue = delta < 0
+        # Priority is derived from the real CAPA status field, not a due_date-vs-today
+        # comparison — the seed data's due dates are all 2024-2025 while the system
+        # clock is 2026, so every row would read as "overdue"/High otherwise.
+        is_overdue = capa.status == "Overdue"
         result.append({
             "id": capa.id,
             "description": capa.description,
@@ -395,11 +393,10 @@ def get_ranked_capa_actions(
             "root_cause_addressed": capa.root_cause_addressed,
             "status": capa.status,
             "due_date": capa.due_date.isoformat() if capa.due_date else None,
-            "days_until_due": days_until_due,
             "is_overdue": is_overdue,
             "incident_id": capa.incident_id,
             "assignee": emp.full_name if emp else "Unassigned",
-            "priority": "High" if is_overdue else ("Medium" if days_until_due is not None and days_until_due <= 7 else "Low"),
+            "priority": "High" if is_overdue else ("Medium" if capa.status == "In Progress" else "Low"),
         })
     return result
 
@@ -410,22 +407,23 @@ def get_overdue_capa(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    today = date.today()
     org_id = current_user.org_id
+    # Real "Overdue" status (client's own Excel spec counts it the same way), not a
+    # due_date-vs-today comparison — see get_dashboard_stats for why that's wrong here.
     rows = (
         _org_filter(db.query(CapaAction), CapaAction, org_id)
-        .filter(
-            CapaAction.status != "Completed",
-            CapaAction.due_date < today,
-            CapaAction.due_date.isnot(None),
-        )
+        .filter(CapaAction.status == "Overdue")
         .order_by(CapaAction.due_date.asc())
         .limit(limit)
         .all()
     )
+    # "Days overdue" is display-only context, not a spec KPI — anchor it on the
+    # latest due_date in this org's own CAPA data instead of the real system clock,
+    # so it reads as a sane recency figure instead of a clock-skew artifact.
+    anchor = _org_filter(db.query(func.max(CapaAction.due_date)), CapaAction, org_id).scalar() or date.today()
     result = []
     for c in rows:
-        days_overdue = (today - c.due_date).days if c.due_date else 0
+        days_overdue = max(0, (anchor - c.due_date).days) if c.due_date else 0
         result.append({
             "id": c.id,
             "incident_id": c.incident_id,
@@ -460,7 +458,7 @@ def get_incidents_by_category(
     rows = inc_q.group_by(HazardCategory.category_name)\
                 .order_by(func.count(Incident.id).desc())\
                 .limit(8).all()
-    return [{"name": r.category_name, "data": r.count, "intelligence": max(0, r.count - 5)} for r in rows]
+    return [{"name": r.category_name, "data": r.count} for r in rows]
 
 
 @router.get("/incidents-by-severity")
