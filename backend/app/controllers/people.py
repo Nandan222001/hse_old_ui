@@ -355,6 +355,38 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     }
 
 
+@router.get("/hierarchy")
+def get_team_hierarchy(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
+    from app.models.user import User
+    from app.models.app_role import AppRole
+
+    org_id = current_user.org_id
+
+    q = (
+        db.query(Employee, Role, User, AppRole)
+        .outerjoin(Role, Employee.role_id == Role.id)
+        .outerjoin(User, User.employee_id == Employee.id)
+        .outerjoin(AppRole, User.app_role_id == AppRole.id)
+    )
+    if org_id is not None:
+        q = q.filter(Employee.organisation_id == org_id)
+    rows = q.order_by(Employee.full_name.asc()).all()
+
+    return [
+        {
+            "id": emp.id,
+            "full_name": emp.full_name,
+            "role_name": (app_role.label if app_role else None) or (role.role_name if role else None),
+            "manager_id": emp.manager_id,
+            "active_status": emp.active_status,
+            "email": user.email if user else None,
+            "has_login": user is not None,
+            "is_active": bool(user.is_active) if user else None,
+        }
+        for emp, role, user, app_role in rows
+    ]
+
+
 @router.get("/directory")
 def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     from app.models.user import User

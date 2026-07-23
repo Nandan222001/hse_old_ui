@@ -14,7 +14,7 @@ import {
 } from '../../services/checklists.service';
 import { useAuth } from '../context/AuthContext';
 
-const ROLE_OPTIONS = ['Admin', 'HSE Manager', 'Safety Manager', 'Supervisor', 'Site Inspector', 'Site Engineer', 'Auditor'];
+const ROLE_OPTIONS = ['Admin', 'HSE Manager', 'Supervisor', 'Site Inspector', 'Site Engineer', 'Auditor'];
 
 interface BuilderItem {
   section_name: string;
@@ -368,7 +368,7 @@ export function ChecklistPage() {
     ? submissions
     : submissions.filter((s) => s.status === filterStatus);
 
-  const isHSEManager = ['Admin', 'HSE Manager', 'Safety Manager'].includes(user?.role ?? '');
+  const isHSEManager = ['Admin', 'HSE Manager'].includes(user?.role ?? '');
   const isAdmin = user?.role === 'Admin';
 
   const handleDeactivate = async (checklistType: string) => {

@@ -713,8 +713,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     switch (backendRole.toLowerCase()) {
       case "superadmin":
       case "admin":        return "Admin";
-      case "hse_manager":  return "HSE Manager";
-      case "safety_manager": return "Safety Manager";
+      case "hse_manager":
+      case "safety_manager": return "HSE Manager";
       case "supervisor":
       case "operator":     return "Supervisor";
       case "viewer":       return "Auditor";

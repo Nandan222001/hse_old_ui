@@ -27,6 +27,15 @@ _ALPHABET = string.ascii_letters + string.digits + "!@#$%"
 # Roles that org admin can assign (cannot create another admin or superadmin)
 INVITABLE_ROLES = {"safety_manager", "supervisor", "operator", "viewer"}
 
+# Who can invite whom — mirrors the org hierarchy story: Admin invites the HSE
+# Manager (safety_manager); the HSE Manager then invites Supervisors (and can
+# also add operators/viewers directly). Supervisors don't invite via email —
+# they add Workers through the mobile app's /team/add-worker flow instead.
+INVITE_PERMISSIONS = {
+    "admin": {"safety_manager", "supervisor", "operator", "viewer"},
+    "safety_manager": {"supervisor", "operator", "viewer"},
+}
+
 
 def _gen_password(length: int = 12) -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(length))
@@ -96,6 +105,19 @@ def invite_user(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid role. Allowed: {sorted(INVITABLE_ROLES)}",
+        )
+
+    inviter_role = (current_user.role or "").strip().lower()
+    allowed_targets = INVITE_PERMISSIONS.get(inviter_role)
+    if not allowed_targets:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an Admin or HSE Manager can invite users",
+        )
+    if role_name not in allowed_targets:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"As {inviter_role.replace('_', ' ').title()} you can only invite: {sorted(allowed_targets)}",
         )
 
     if db.query(User).filter(User.email == email).first():

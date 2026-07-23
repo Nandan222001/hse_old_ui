@@ -9,10 +9,11 @@ import {
   LineChart, Line, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  getEmployeeDirectory, getPeopleOverview,
-  type EmployeeDirectoryRow, type PeopleOverview,
+  getEmployeeDirectory, getPeopleOverview, getTeamHierarchy,
+  type EmployeeDirectoryRow, type PeopleOverview, type TeamHierarchyRow,
 } from "../../services/personnel.service";
 import { useAuth } from "../context/AuthContext";
+import { TeamHierarchyTree } from "../components/people/TeamHierarchyTree";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -55,11 +56,21 @@ interface OrgUser {
 }
 
 const ORG_ROLES = [
-  { value: "safety_manager", label: "Safety Manager" },
+  { value: "safety_manager", label: "HSE Manager" },
   { value: "supervisor",     label: "Supervisor" },
   { value: "operator",       label: "Operator" },
   { value: "viewer",         label: "Viewer" },
 ];
+
+// Mirrors backend INVITE_PERMISSIONS in org_users.py: Admin invites the HSE
+// Manager (safety_manager); the HSE Manager invites Supervisor/Operator/Viewer.
+// Keyed by the *display* role from AuthContext's mapBackendRole() (e.g.
+// "safety_manager" -> "HSE Manager"), not the raw backend role string —
+// currentUser.role on the frontend is always the mapped display name.
+const INVITE_TARGETS_BY_ROLE: Record<string, string[]> = {
+  "admin": ["safety_manager", "supervisor", "operator", "viewer"],
+  "hse manager": ["supervisor", "operator", "viewer"],
+};
 
 // ── Shared UI helpers ─────────────────────────────────────────────────────────
 
@@ -83,10 +94,12 @@ function ToneChip({ tone, children }: { tone: "green" | "amber" | "red" | "blue"
 }
 
 function MiniSparkline({ data, stroke }: { data: readonly number[]; stroke: string }) {
+  const hasData = data.some((value) => value > 0);
   return (
     <ResponsiveContainer width="100%" height={64}>
       <LineChart data={data.map((value, index) => ({ index, value }))}>
-        <Line type="monotone" dataKey="value" stroke={stroke} strokeWidth={3} dot={false} />
+        <YAxis domain={[0, 100]} hide />
+        <Line type="monotone" dataKey="value" stroke={hasData ? stroke : "#D1D5DB"} strokeWidth={3} dot={false} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -94,11 +107,15 @@ function MiniSparkline({ data, stroke }: { data: readonly number[]; stroke: stri
 
 function GaugeDial({ value }: { value: number }) {
   const clamped = Math.max(0, Math.min(value, 100));
+  const filledDeg = (clamped / 100) * 180;
+  const redEnd = Math.min(filledDeg, 34);
+  const amberEnd = Math.min(filledDeg, 92);
+  const greenEnd = Math.min(filledDeg, 180);
   return (
     <div className="relative h-[86px] w-[132px] overflow-hidden">
       <div
         className="absolute left-1/2 top-0 h-[132px] w-[132px] -translate-x-1/2 rounded-full"
-        style={{ background: "conic-gradient(from 180deg, #D9534F 0deg 34deg, #F3C34C 34deg 92deg, #67BC6B 92deg 180deg, #E5E7EB 180deg 360deg)" }}
+        style={{ background: `conic-gradient(from 180deg, #D9534F 0deg ${redEnd}deg, #F3C34C ${redEnd}deg ${amberEnd}deg, #67BC6B ${amberEnd}deg ${greenEnd}deg, #E5E7EB ${greenEnd}deg 360deg)` }}
       />
       <div className="absolute left-1/2 top-[15px] h-[101px] w-[101px] -translate-x-1/2 rounded-full bg-white" />
       <div className="absolute left-1/2 top-[42px] -translate-x-1/2 text-[18px] font-semibold" style={{ color: "#111827" }}>
@@ -408,7 +425,10 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
 
 export function UsersPage() {
   const { user: currentUser } = useAuth();
-  const isAdmin = currentUser?.role?.toLowerCase() === "admin";
+  const currentRole = currentUser?.role?.toLowerCase() ?? "";
+  const isAdmin = currentRole === "admin";
+  const inviteTargetRoles = INVITE_TARGETS_BY_ROLE[currentRole] ?? [];
+  const canInvite = inviteTargetRoles.length > 0;
 
   // ── Org users state ─────────────────────────────────────────────────────────
   const [orgUsers, setOrgUsers]           = useState<OrgUser[]>([]);
@@ -416,7 +436,7 @@ export function UsersPage() {
 
   // ── Invite modal state ──────────────────────────────────────────────────────
   const [showInviteModal, setShowInviteModal]   = useState(false);
-  const [inviteForm, setInviteForm]             = useState({ name: "", email: "", role: "operator" });
+  const [inviteForm, setInviteForm]             = useState({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" });
   const [inviteLoading, setInviteLoading]       = useState(false);
   const [inviteError, setInviteError]           = useState("");
   const [inviteResult, setInviteResult]         = useState<{
@@ -430,6 +450,10 @@ export function UsersPage() {
   const [search, setSearch]         = useState("");
   const [filterRole, setFilterRole] = useState("All Roles");
   const [filterStatus, setFilterStatus] = useState("All Statuses");
+
+  // ── Team hierarchy state ─────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"directory" | "hierarchy">("directory");
+  const [teamHierarchy, setTeamHierarchy] = useState<TeamHierarchyRow[]>([]);
 
   // ── Load data ────────────────────────────────────────────────────────────────
 
@@ -447,8 +471,8 @@ export function UsersPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) loadOrgUsers();
-  }, [isAdmin, loadOrgUsers]);
+    if (canInvite) loadOrgUsers();
+  }, [canInvite, loadOrgUsers]);
 
   useEffect(() => {
     getPeopleOverview().then(setPeopleOverview).catch(console.error);
@@ -456,6 +480,10 @@ export function UsersPage() {
 
   useEffect(() => {
     getEmployeeDirectory().then(setEmployeeDirectory).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    getTeamHierarchy().then(setTeamHierarchy).catch(console.error);
   }, []);
 
   // ── Org user actions ─────────────────────────────────────────────────────────
@@ -509,10 +537,10 @@ export function UsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1>Users</h1>
-        {isAdmin && (
+        {canInvite && (
           <button
             onClick={() => {
-              setInviteForm({ name: "", email: "", role: "operator" });
+              setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" });
               setInviteError("");
               setInviteResult(null);
               setCopied(false);
@@ -526,98 +554,139 @@ export function UsersPage() {
         )}
       </div>
 
-      {/* ── Filters ── */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
-          <input
-            placeholder="Search users…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 rounded-lg border text-[13px]"
-            style={{ borderColor: "#E2E8E2" }}
-          />
-        </div>
-        <select
-          value={filterRole}
-          onChange={(e) => setFilterRole(e.target.value)}
-          className="px-3 py-2 rounded-lg border text-[13px] bg-white"
-          style={{ borderColor: "#E2E8E2", color: "#4A5568" }}
-        >
-          <option>All Roles</option>
-          {employeeRoleOptions.map((r) => <option key={r}>{r}</option>)}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-3 py-2 rounded-lg border text-[13px] bg-white"
-          style={{ borderColor: "#E2E8E2", color: "#4A5568" }}
-        >
-          <option>All Statuses</option>
-          <option>Active</option>
-          <option>On Leave</option>
-        </select>
+      {/* ── Tabs ── */}
+      <div className="flex items-center gap-1 rounded-lg border p-1 w-fit" style={{ borderColor: "#E2E8E2", background: "#F4F7F4" }}>
+        {([
+          { key: "directory", label: "Directory" },
+          { key: "hierarchy", label: "Team Hierarchy" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className="px-4 py-1.5 rounded-md text-[13px] transition-colors"
+            style={
+              activeTab === tab.key
+                ? { background: "#fff", color: "#1B5E20", fontWeight: 600, boxShadow: "0px 1px 4px rgba(27,94,32,0.15)" }
+                : { color: "#6B7280", fontWeight: 500 }
+            }
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* ── All Users Table ── */}
-      <div
-        className="bg-white rounded-xl border overflow-hidden"
-        style={{ borderColor: "#E8EFE8", boxShadow: "0px 2px 12px rgba(27, 94, 32, 0.08)" }}
-      >
-        <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "#EEF2EE", background: "#F4F7F4" }}>
-          <ShieldCheck className="w-4 h-4" style={{ color: "#2E7D32" }} />
-          <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#2E7D32" }}>
-            {orgUsersLoading ? "Loading…" : `All Users — ${filteredEmployees.length}`}
-          </span>
+      {activeTab === "directory" ? (
+        <>
+          {/* ── Filters ── */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
+              <input
+                placeholder="Search users…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full h-10 pl-10 pr-4 rounded-lg border text-[13px]"
+                style={{ borderColor: "#E2E8E2" }}
+              />
+            </div>
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="px-3 py-2 rounded-lg border text-[13px] bg-white"
+              style={{ borderColor: "#E2E8E2", color: "#4A5568" }}
+            >
+              <option>All Roles</option>
+              {employeeRoleOptions.map((r) => <option key={r}>{r}</option>)}
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 rounded-lg border text-[13px] bg-white"
+              style={{ borderColor: "#E2E8E2", color: "#4A5568" }}
+            >
+              <option>All Statuses</option>
+              <option>Active</option>
+              <option>On Leave</option>
+            </select>
+          </div>
+
+          {/* ── All Users Table ── */}
+          <div
+            className="bg-white rounded-xl border overflow-hidden"
+            style={{ borderColor: "#E8EFE8", boxShadow: "0px 2px 12px rgba(27, 94, 32, 0.08)" }}
+          >
+            <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "#EEF2EE", background: "#F4F7F4" }}>
+              <ShieldCheck className="w-4 h-4" style={{ color: "#2E7D32" }} />
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#2E7D32" }}>
+                {orgUsersLoading ? "Loading…" : `All Users — ${filteredEmployees.length}`}
+              </span>
+            </div>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: "#F4F7F4" }}>
+                  {["Name", "Role", "Department", "Site", "Employment Type", "Status"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left">
+                      <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: "#9CA3AF", fontWeight: 600 }}>{h}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center">
+                      <UsersIcon className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "#9CA3AF" }} />
+                      <p className="text-[13px]" style={{ color: "#9CA3AF" }}>No users found</p>
+                    </td>
+                  </tr>
+                ) : filteredEmployees.map((e) => (
+                  <tr key={e.id} className="group hover:bg-[#F9FBF9] transition-colors" style={{ borderBottom: "1px solid #EEF2EE" }}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px]"
+                          style={{ background: "linear-gradient(135deg, #1B5E20, #43A047)", fontWeight: 600 }}
+                        >
+                          {employeeInitials(e)}
+                        </div>
+                        <span className="text-[13px]" style={{ color: "#0A0A0A", fontWeight: 500 }}>{e.full_name ?? "—"}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><RoleBadge role={e.role_name ?? "Worker"} /></td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.department_name ?? "—"}</td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.site_name ?? "—"}</td>
+                    <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.employment_type ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ background: e.active_status === "Active" ? "#2E7D32" : "#C78800" }} />
+                        <span className="text-[13px]" style={{ color: e.active_status === "Active" ? "#2E7D32" : "#C78800", fontWeight: 500 }}>
+                          {e.active_status ?? "Unknown"}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        /* ── Team Hierarchy ── */
+        <div
+          className="bg-white rounded-xl border overflow-hidden"
+          style={{ borderColor: "#E8EFE8", boxShadow: "0px 2px 12px rgba(27, 94, 32, 0.08)" }}
+        >
+          <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ borderColor: "#EEF2EE", background: "#F4F7F4" }}>
+            <UsersIcon className="w-4 h-4" style={{ color: "#2E7D32" }} />
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "#2E7D32" }}>
+              Reporting Structure — {teamHierarchy.length}
+            </span>
+          </div>
+          <div className="px-2 py-1">
+            <TeamHierarchyTree rows={teamHierarchy} />
+          </div>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr style={{ background: "#F4F7F4" }}>
-              {["Name", "Role", "Department", "Site", "Employment Type", "Status"].map((h) => (
-                <th key={h} className="px-4 py-3 text-left">
-                  <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: "#9CA3AF", fontWeight: 600 }}>{h}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEmployees.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center">
-                  <UsersIcon className="w-8 h-8 mx-auto mb-2 opacity-20" style={{ color: "#9CA3AF" }} />
-                  <p className="text-[13px]" style={{ color: "#9CA3AF" }}>No users found</p>
-                </td>
-              </tr>
-            ) : filteredEmployees.map((e) => (
-              <tr key={e.id} className="group hover:bg-[#F9FBF9] transition-colors" style={{ borderBottom: "1px solid #EEF2EE" }}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px]"
-                      style={{ background: "linear-gradient(135deg, #1B5E20, #43A047)", fontWeight: 600 }}
-                    >
-                      {employeeInitials(e)}
-                    </div>
-                    <span className="text-[13px]" style={{ color: "#0A0A0A", fontWeight: 500 }}>{e.full_name ?? "—"}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3"><RoleBadge role={e.role_name ?? "Worker"} /></td>
-                <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.department_name ?? "—"}</td>
-                <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.site_name ?? "—"}</td>
-                <td className="px-4 py-3 text-[13px]" style={{ color: "#4A5568" }}>{e.employment_type ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ background: e.active_status === "Active" ? "#2E7D32" : "#C78800" }} />
-                    <span className="text-[13px]" style={{ color: e.active_status === "Active" ? "#2E7D32" : "#C78800", fontWeight: 500 }}>
-                      {e.active_status ?? "Unknown"}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      )}
 
       {/* ── Invite User Modal ── */}
       {showInviteModal && (
@@ -687,7 +756,7 @@ export function UsersPage() {
                       </div>
                     </div>
                     <button
-                      onClick={() => { setInviteResult(null); setInviteForm({ name: "", email: "", role: "operator" }); setInviteError(""); setCopied(false); }}
+                      onClick={() => { setInviteResult(null); setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" }); setInviteError(""); setCopied(false); }}
                       className="w-full py-2.5 rounded-xl text-[13px]"
                       style={{ background: "linear-gradient(135deg, #0B3D91, #1D4ED8)", color: "#fff", fontWeight: 600 }}
                     >
@@ -737,7 +806,7 @@ export function UsersPage() {
                         className="w-full h-11 px-4 rounded-xl border text-[13px] bg-white focus:outline-none"
                         style={{ borderColor: "#E2E8E2", color: "#0A0A0A" }}
                       >
-                        {ORG_ROLES.map((r) => (
+                        {ORG_ROLES.filter((r) => inviteTargetRoles.includes(r.value)).map((r) => (
                           <option key={r.value} value={r.value}>{r.label}</option>
                         ))}
                       </select>

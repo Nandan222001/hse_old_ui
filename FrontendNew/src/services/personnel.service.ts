@@ -68,6 +68,22 @@ export interface EmployeeDirectoryRow {
 export const getEmployeeDirectory = () =>
   axiosInstance.get<EmployeeDirectoryRow[]>('/people/directory').then((r) => r.data);
 
+// ── Team Hierarchy ───────────────────────────────────────────────────────────
+
+export interface TeamHierarchyRow {
+  id: number;
+  full_name: string;
+  role_name: string | null;
+  manager_id: number | null;
+  active_status: string | null;
+  email: string | null;
+  has_login: boolean;
+  is_active: boolean | null;
+}
+
+export const getTeamHierarchy = () =>
+  axiosInstance.get<TeamHierarchyRow[]>('/people/hierarchy').then((r) => r.data);
+
 // ── People Dashboard Overview ───────────────────────────────────────────────
 
 export interface PeopleKpiMetric {

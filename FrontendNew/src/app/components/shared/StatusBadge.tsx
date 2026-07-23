@@ -69,7 +69,6 @@ const roleStyles: Record<string, { bg: string; text: string }> = {
   "Admin": { bg: "#DBEAFE", text: "#1E3A8A" },
   "Supervisor": { bg: "#DBEAFE", text: "#1E3A8A" },
   "Auditor": { bg: "#F3F4F6", text: "#6B7280" },
-  "Safety Manager": { bg: "#DBEAFE", text: "#1D4ED8" },
   "HSE Manager": { bg: "#EDE9FE", text: "#6D28D9" },
 };
 
