@@ -214,26 +214,34 @@ def get_vendor_summary(
             for r in hr_rows
         ]
 
-    # ── Permit Violations (shared logic: permits with deviation_reported = "Yes") ─
-    pv_rows = (
-        db.query(Employee.full_name, PermitToWork.date_issued, PermitToWork.id)
-        .join(Employee, PermitToWork.issued_by == Employee.id)
-        .filter(
-            PermitToWork.organisation_id == org_id,
-            PermitToWork.deviation_reported == "Yes",
+    # ── Permit Violations (contractor-issued permits with deviation_reported = "Yes") ─
+    # Must stay scoped to contractor_ids — this is what feeds the Risk Score's
+    # violation penalty (see contractor_risk.py), so an unscoped org-wide list here
+    # let the widget show violations from non-contractor permits while the score
+    # (correctly counting 0 contractor violations) still read 10/10 — a perfect
+    # score displayed next to a violations list that didn't actually belong to it.
+    permit_violations: List[dict] = []
+    if contractor_ids:
+        pv_rows = (
+            db.query(Employee.full_name, PermitToWork.date_issued, PermitToWork.id)
+            .join(Employee, PermitToWork.issued_by == Employee.id)
+            .filter(
+                PermitToWork.organisation_id == org_id,
+                PermitToWork.deviation_reported == "Yes",
+                PermitToWork.issued_by.in_(contractor_ids),
+            )
+            .order_by(PermitToWork.date_issued.desc())
+            .limit(5)
+            .all()
         )
-        .order_by(PermitToWork.date_issued.desc())
-        .limit(5)
-        .all()
-    )
-    permit_violations = [
-        {
-            "name": r.full_name,
-            "desc": f"PTW-{r.id:04d}: Deviation Reported",
-            "time": r.date_issued.strftime("%d %b %Y") if r.date_issued else "—",
-        }
-        for r in pv_rows
-    ]
+        permit_violations = [
+            {
+                "name": r.full_name,
+                "desc": f"PTW-{r.id:04d}: Deviation Reported",
+                "time": r.date_issued.strftime("%d %b %Y") if r.date_issued else "—",
+            }
+            for r in pv_rows
+        ]
 
     # ── Risk Score — single shared implementation, see app/services/contractor_risk.py
     # Guarantees the Vendors page always matches the Dashboard leading-indicators panel.
