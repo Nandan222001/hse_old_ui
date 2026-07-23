@@ -58,8 +58,8 @@ interface OrgUser {
 const ORG_ROLES = [
   { value: "safety_manager", label: "HSE Manager" },
   { value: "supervisor",     label: "Supervisor" },
-  { value: "operator",       label: "Operator" },
-  { value: "viewer",         label: "Viewer" },
+  { value: "operator",       label: "Worker" },
+  { value: "viewer",         label: "Auditor" },
 ];
 
 // Mirrors backend INVITE_PERMISSIONS in org_users.py: Admin invites the HSE

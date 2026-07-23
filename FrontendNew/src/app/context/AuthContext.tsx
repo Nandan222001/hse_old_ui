@@ -715,8 +715,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       case "admin":        return "Admin";
       case "hse_manager":
       case "safety_manager": return "HSE Manager";
-      case "supervisor":
-      case "operator":     return "Supervisor";
+      case "supervisor":   return "Supervisor";
+      case "operator":     return "Worker";
       case "viewer":       return "Auditor";
       default:             return "Auditor";
     }
