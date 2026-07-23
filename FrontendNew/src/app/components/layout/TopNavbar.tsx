@@ -15,7 +15,6 @@ const breadcrumbMap: Record<string, string> = {
   "/checklists": "Daily Checklists",
   "/compliance": "Compliance",
   "/sites-zones": "Sites & Zones",
-  "/cameras-devices": "Cameras & Devices",
   "/policies": "Policies & Rules",
   "/users": "Users",
   "/ai-agent": "AI Agent",

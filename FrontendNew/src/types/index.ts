@@ -37,45 +37,6 @@ export interface Shift {
   Status: string;
 }
 
-export interface Camera {
-  Camera_ID: string;
-  Camera_Name: string;
-  Zone_ID: string;
-  Site_ID: string;
-  IP_Address: string;
-  Protocol: string;
-  Resolution: string;
-  FPS: number;
-  Installed_Date: string;
-  Status: string;
-  Last_Maintenance: string;
-}
-
-export interface RFIDReader {
-  RFID_ID: string;
-  Gate_Name: string;
-  Zone_ID: string;
-  Site_ID: string;
-  Reader_Type: string;
-  Last_Seen: string;
-  Status: string;
-  Total_Reads_Today: number;
-}
-
-export interface EdgeDevice {
-  Device_ID: string;
-  Device_Name: string;
-  Device_Type: string;
-  Site_ID: string;
-  Zone_ID: string;
-  Firmware_Version: string;
-  AI_Model_Version: string;
-  Last_Seen: string;
-  Status: string;
-  CPU_Usage: number;
-  GPU_Usage: number;
-  Memory_Usage: number;
-}
 
 // ============= Personnel =============
 export interface User {

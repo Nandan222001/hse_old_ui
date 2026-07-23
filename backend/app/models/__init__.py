@@ -34,10 +34,6 @@ from app.models.equipment_certification import EquipmentCertification
 from app.models.api_key import ApiKey
 from app.models.webhook import Webhook
 from app.models.audit_log import AuditLog
-from app.models.cctv_camera import CctvCamera
-from app.models.rfid_reader import RfidReader
-from app.models.rfid_access_log import RfidAccessLog
-from app.models.edge_device import EdgeDevice
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
@@ -48,5 +44,4 @@ __all__ = [
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
     "EquipmentCertification", "ApiKey", "Webhook", "AuditLog",
-    "CctvCamera", "RfidReader", "RfidAccessLog", "EdgeDevice",
 ]

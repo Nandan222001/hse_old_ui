@@ -1,5 +1,5 @@
 import axiosInstance from '../api/axiosInstance';
-import type { Site, Zone, Shift, Camera, RFIDReader, EdgeDevice } from '../types';
+import type { Site, Zone, Shift } from '../types';
 
 // Backend response shape for sites
 interface BackendSite {
@@ -82,33 +82,4 @@ function adaptShiftPattern(p: BackendShiftPattern): Shift {
 export const getShifts = (): Promise<Shift[]> =>
   axiosInstance.get<BackendShiftPattern[]>('/shift-schedules/patterns').then((r) => r.data.map(adaptShiftPattern));
 
-export const getCameras = (): Promise<Camera[]> =>
-  axiosInstance.get<Camera[]>('/cameras').then((r) => r.data);
-
-export const getRFIDReaders = (): Promise<RFIDReader[]> =>
-  axiosInstance.get<RFIDReader[]>('/rfid-readers').then((r) => r.data);
-
-export const getEdgeDevices = (): Promise<EdgeDevice[]> =>
-  axiosInstance.get<EdgeDevice[]>('/edge-devices').then((r) => r.data);
-
-export interface WorkerAccessLogRow {
-  worker: string;
-  gate: string;
-  entry: string;
-  time: string;
-  result: string;
-}
-
-export const getAccessLog = (): Promise<WorkerAccessLogRow[]> =>
-  axiosInstance.get<WorkerAccessLogRow[]>('/rfid-readers/access-log').then((r) => r.data);
-
-export interface GateStatsRow {
-  gate: string;
-  entries: number;
-  exits: number;
-}
-
-export const getGateStats = (): Promise<GateStatsRow[]> =>
-  axiosInstance.get<GateStatsRow[]>('/rfid-readers/gate-stats').then((r) => r.data);
-
-export type { Site, Zone, Shift, Camera, RFIDReader, EdgeDevice };
+export type { Site, Zone, Shift };

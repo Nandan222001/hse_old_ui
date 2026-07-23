@@ -43,7 +43,6 @@ from app.controllers import (
     risk_workflow as risk_workflow_controller,
     permit_workflow as permit_workflow_controller,
     hazard_register as hazard_register_controller,
-    site_security as site_security_controller,
 )
 
 settings = get_settings()
@@ -118,7 +117,6 @@ def create_app() -> FastAPI:
     # Permit to Work (flow 6) and Hazard register (flow 5) role workflows.
     app.include_router(permit_workflow_controller.router, prefix=prefix)
     app.include_router(hazard_register_controller.router, prefix=prefix)
-    app.include_router(site_security_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

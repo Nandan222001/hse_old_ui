@@ -7,7 +7,6 @@ import { ViolationsPage } from "./pages/ViolationsPage";
 import { ViolationDetailPage } from "./pages/ViolationDetailPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { SitesZonesPage } from "./pages/SitesZonesPage";
-import { CamerasDevicesPage } from "./pages/CamerasDevicesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
@@ -100,7 +99,6 @@ const ActionsRoute = ActionsPage;
 const ChecklistsRoute = ChecklistPage;
 const ComplianceRoute = CompliancePage;
 const SitesZonesRoute = SitesZonesPage;
-const CamerasDevicesRoute = CamerasDevicesPage;
 const AIAgentRoute = AIAgentPage;
 const AnalyticsRoute = AnalyticsPage;
 const NearMissRoute = NearMissPage;
@@ -187,7 +185,6 @@ export const router = createBrowserRouter([
       { path: "checklists", Component: ChecklistsRoute },
       { path: "compliance", Component: ComplianceRoute },
       { path: "sites-zones", Component: SitesZonesRoute },
-      { path: "cameras-devices", Component: CamerasDevicesRoute },
       { path: "policies", Component: PoliciesRoute },
       { path: "users", Component: UsersRoute },
       { path: "analytics", Component: AnalyticsRoute },
