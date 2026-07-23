@@ -989,7 +989,7 @@ async def org_setup_onboarding_bulk(
                 wb.worksheets[0].title = sheet_name
 
         db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-        count = _INSERT_FNS[module](db, wb)
+        count = _INSERT_FNS[module](db, wb, {})
         if current_user.org_id and current_user.org_id > 0:
             link_new_rows_to_org(db, current_user.org_id, before_ids)
         db.commit()

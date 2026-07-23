@@ -363,6 +363,7 @@ async def full_import(
     if not org_id or org_id <= 0:
         raise HTTPException(status_code=400, detail="Organisation setup is not complete. Complete setup before importing data.")
     before_ids = capture_tenant_table_max_ids(db)
+    id_maps: Dict[str, Dict[int, int]] = {}
 
     per_sheet = []
     total_processed = 0
@@ -377,7 +378,7 @@ async def full_import(
             try:
                 # SET inside the transaction so it stays on the same connection as INSERTs
                 db.execute(_text("SET FOREIGN_KEY_CHECKS=0"))
-                processed = fn(db, wb)
+                processed = fn(db, wb, id_maps)
                 db.commit()
             except Exception as exc:
                 logger.error("full-import: error in %s: %s", sheet_label, exc, exc_info=True)

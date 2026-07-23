@@ -4,6 +4,16 @@ sheet into the database in FK-safe order.
 
 All string ID prefixes (ORG001, SITE001, EMP001, STN001 …) are stripped to
 plain integers before insertion.
+
+Every sheet's first column is that sheet's OWN row id as declared in the
+Excel file (e.g. "EMP007" -> 7). Other sheets reference rows by that same
+declared id (e.g. Employees.manager_id = 7 means "the employee whose own
+Employees-sheet id is 7"). Declared ids are only unique *within one workbook
+upload* — they are NOT the same as the table's auto-increment `id` once more
+than one organisation's data lives in the same physical table. `id_maps`
+tracks {table_key: {declared_id: actual_db_id}} for the current import so
+every FK column can be resolved to the row this same import just inserted,
+instead of accidentally colliding with another organisation's real id.
 """
 
 import re
@@ -21,6 +31,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+IdMaps = Dict[str, Dict[int, int]]
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +42,36 @@ def _strip_id(val) -> Optional[int]:
         return None
     m = re.search(r"(\d+)$", str(val).strip())
     return int(m.group(1)) if m else None
+
+
+def _resolve(id_maps: IdMaps, table_key: str, raw_val) -> Optional[int]:
+    """Resolve a sheet-declared id (e.g. 'EMP007') to the db id this import assigned it.
+
+    Falls back to the raw stripped id when this import's own rows don't cover it —
+    that's the normal case for standalone single-sheet re-imports (e.g. re-uploading
+    just Shift_Schedule against employees created in an earlier import), where the
+    sheet's id column is necessarily already a real database id.
+    """
+    declared_id = _strip_id(raw_val)
+    if declared_id is None:
+        return None
+    resolved = id_maps.get(table_key, {}).get(declared_id)
+    if resolved is None:
+        logger.debug(
+            "%s reference %r (declared id %s) not inserted by this import — "
+            "treating it as an existing database id",
+            table_key, raw_val, declared_id,
+        )
+        return declared_id
+    return resolved
+
+
+def _remember(db: Session, id_maps: IdMaps, table_key: str, declared_id: Optional[int]) -> int:
+    """Capture LAST_INSERT_ID() and, if this row declared its own id, map it."""
+    new_id = int(db.execute(text("SELECT LAST_INSERT_ID()")).scalar())
+    if declared_id is not None:
+        id_maps.setdefault(table_key, {})[declared_id] = new_id
+    return new_id
 
 
 def _fmt_date(val) -> Optional[str]:
@@ -117,7 +159,7 @@ def latest_org_id(db: Session) -> Optional[int]:
 
 # ── per-table insert functions ────────────────────────────────────────────────
 
-def _insert_organisation(db: Session, wb) -> int:
+def _insert_organisation(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Organisation"):
         return 0
     count = 0
@@ -137,59 +179,66 @@ def _insert_organisation(db: Session, wb) -> int:
     return count
 
 
-def _insert_hazard_categories(db: Session, wb) -> int:
+def _insert_hazard_categories(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Hazard_Categories"):
         return 0
     count = 0
     for r in _rows(wb["Hazard_Categories"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("INSERT INTO hazard_categories (category_name,description) VALUES (:n,:d)"),
             dict(n=r[1], d=r[2]),
         )
+        _remember(db, id_maps, "hazard_categories", declared_id)
         count += 1
     return count
 
 
-def _insert_hazards(db: Session, wb) -> int:
+def _insert_hazards(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Hazards"):
         return 0
     count = 0
     for r in _rows(wb["Hazards"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("INSERT INTO hazards (category_id,hazard_name,severity,probability) VALUES (:c,:n,:s,:p)"),
-            dict(c=_strip_id(r[1]), n=r[2], s=r[3], p=r[4]),
+            dict(c=_resolve(id_maps, "hazard_categories", r[1]), n=r[2], s=r[3], p=r[4]),
         )
+        _remember(db, id_maps, "hazards", declared_id)
         count += 1
     return count
 
 
-def _insert_roles(db: Session, wb) -> int:
+def _insert_roles(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Roles"):
         return 0
     count = 0
     for r in _rows(wb["Roles"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO roles (role_name,job_category,authority_level,
                  permit_authority,safety_signatory) VALUES (:n,:jc,:al,:pa,:ss)"""),
             dict(n=r[1], jc=r[2], al=r[3], pa=r[4], ss=r[5]),
         )
+        _remember(db, id_maps, "roles", declared_id)
         count += 1
     return count
 
 
-def _insert_sites(db: Session, wb) -> int:
+def _insert_sites(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Sites"):
         return 0
     count = 0
     for r in _rows(wb["Sites"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO sites
                  (site_name,address,postcode,city,type,operational_status,
@@ -198,6 +247,7 @@ def _insert_sites(db: Session, wb) -> int:
             dict(sn=r[1], a=r[2], p=r[3], c=r[4], t=r[5], os=r[6],
                  nws=r[7], cap=r[8], pp=r[9], hc=r[10]),
         )
+        _remember(db, id_maps, "sites", declared_id)
         count += 1
     return count
 
@@ -212,24 +262,26 @@ def _link_org_to_data(db: Session, wb) -> int:
     return 0
 
 
-def _insert_permit_types(db: Session, wb) -> int:
+def _insert_permit_types(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Permit_Types"):
         return 0
     count = 0
     for r in _rows(wb["Permit_Types"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO permit_types
                  (permit_type_name,risk_level,validity_period_hours,concurrent_limit)
                  VALUES (:n,:rl,:vph,:cl)"""),
             dict(n=r[1], rl=r[2], vph=r[3], cl=r[4]),
         )
+        _remember(db, id_maps, "permit_types", declared_id)
         count += 1
     return count
 
 
-def _insert_training_programs(db: Session, wb) -> int:
+def _insert_training_programs(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Training_Programs"):
         return 0
     count = 0
@@ -246,7 +298,7 @@ def _insert_training_programs(db: Session, wb) -> int:
     return count
 
 
-def _insert_policies(db: Session, wb) -> int:
+def _insert_policies(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Policies"):
         return 0
     count = 0
@@ -261,7 +313,7 @@ def _insert_policies(db: Session, wb) -> int:
     return count
 
 
-def _insert_departments(db: Session, wb) -> int:
+def _insert_departments(db: Session, wb, id_maps: IdMaps) -> int:
     """Insert departments without manager_id (circular FK with employees)."""
     if not _check_sheet(wb, "Departments"):
         return 0
@@ -269,68 +321,89 @@ def _insert_departments(db: Session, wb) -> int:
     for r in _rows(wb["Departments"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("INSERT INTO departments (site_id,department_name,number_of_teams) VALUES (:sid,:n,:nt)"),
-            dict(sid=_strip_id(r[1]), n=r[2], nt=r[4]),
+            dict(sid=_resolve(id_maps, "sites", r[1]), n=r[2], nt=r[4]),
         )
+        _remember(db, id_maps, "departments", declared_id)
         count += 1
     return count
 
 
-def _insert_working_stations(db: Session, wb) -> int:
+def _insert_working_stations(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Working_Stations"):
         return 0
     count = 0
     for r in _rows(wb["Working_Stations"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO working_stations
                  (station_name,site_id,department,zone_classification,
                   primary_hazard_id,staffing_requirement,equipment_list,
                   permit_types_required,access_restrictions)
                  VALUES (:sn,:sid,:d,:zc,:phi,:sr,:el,:ptr,:ar)"""),
-            dict(sn=r[1], sid=_strip_id(r[2]), d=r[3], zc=r[4],
-                 phi=_strip_id(r[5]), sr=r[6], el=r[7], ptr=r[8], ar=r[9]),
+            dict(sn=r[1], sid=_resolve(id_maps, "sites", r[2]), d=r[3], zc=r[4],
+                 phi=_resolve(id_maps, "hazards", r[5]), sr=r[6], el=r[7], ptr=r[8], ar=r[9]),
         )
+        _remember(db, id_maps, "working_stations", declared_id)
         count += 1
     return count
 
 
-def _insert_employees(db: Session, wb) -> int:
+def _insert_employees(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Employees"):
         return 0
-    count = 0
-    for r in _rows(wb["Employees"]):
-        if not any(c for c in r):
-            continue
+    rows = [r for r in _rows(wb["Employees"]) if any(c for c in r)]
+
+    # Pass 1: insert every employee (manager_id deferred — it may forward-reference
+    # a row later in this same sheet), building the declared-id -> db-id map.
+    pending_manager_updates: List[tuple] = []  # (this row's db_id, manager's declared id)
+    for r in rows:
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO employees
                  (full_name,date_of_birth,gender,employment_type,employment_start_date,
-                  role_id,department_id,shift_pattern,manager_id,induction_date,active_status)
-                 VALUES (:fn,:dob,:g,:et,:esd,:rid,:did,:sp,:mid,:ind,:as_)"""),
+                  role_id,department_id,shift_pattern,induction_date,active_status)
+                 VALUES (:fn,:dob,:g,:et,:esd,:rid,:did,:sp,:ind,:as_)"""),
             dict(fn=r[1], dob=_fmt_date(r[2]), g=r[3], et=r[4],
                  esd=_fmt_date(r[5]),
-                 rid=_strip_id(r[6]),
-                 did=_strip_id(r[7]),
+                 rid=_resolve(id_maps, "roles", r[6]),
+                 did=_resolve(id_maps, "departments", r[7]),
                  sp=r[8],
-                 mid=_strip_id(r[9]) if r[9] else None,
                  ind=_fmt_date(r[10]),
                  as_=r[11]),
         )
-        count += 1
-    return count
+        new_id = _remember(db, id_maps, "employees", declared_id)
+        mgr_declared_id = _strip_id(r[9]) if r[9] else None
+        if mgr_declared_id is not None:
+            pending_manager_updates.append((new_id, mgr_declared_id))
+
+    # Pass 2: now every employee in this sheet has a db id — resolve manager_id.
+    # A manager declared in *this* sheet resolves via id_maps; a manager from an
+    # earlier import (not part of this sheet) falls back to being treated as an
+    # existing database id, same as _resolve() does for cross-table references.
+    for emp_db_id, mgr_declared_id in pending_manager_updates:
+        mgr_db_id = id_maps.get("employees", {}).get(mgr_declared_id, mgr_declared_id)
+        db.execute(
+            text("UPDATE employees SET manager_id = :mid WHERE id = :eid"),
+            dict(mid=mgr_db_id, eid=emp_db_id),
+        )
+
+    return len(rows)
 
 
-def _update_department_managers(db: Session, wb) -> int:
+def _update_department_managers(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Departments"):
         return 0
     count = 0
     for r in _rows(wb["Departments"]):
         if not any(c for c in r):
             continue
-        dept_id = _strip_id(r[0]) if r[0] is not None else None
-        mgr_id = _strip_id(r[3]) if r[3] else None
+        dept_id = _resolve(id_maps, "departments", r[0]) if r[0] is not None else None
+        mgr_id = _resolve(id_maps, "employees", r[3]) if r[3] else None
         if dept_id and mgr_id:
             db.execute(
                 text("UPDATE departments SET manager_id = :mid WHERE id = :did"),
@@ -340,7 +413,7 @@ def _update_department_managers(db: Session, wb) -> int:
     return count
 
 
-def _insert_permits_to_work(db: Session, wb) -> int:
+def _insert_permits_to_work(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Permits_To_Work"):
         return 0
     count = 0
@@ -354,9 +427,9 @@ def _insert_permits_to_work(db: Session, wb) -> int:
                   validity_start,validity_end,work_start_actual,work_end_actual,
                   number_of_workers,status,deviation_reported,incident_occurred)
                  VALUES (:ptid,:di,:ti,:lsid,:wd,:drh,:ib,:ab,:vs,:ve,:wsa,:wea,:nw,:st,:dr,:io)"""),
-            dict(ptid=_strip_id(r[1]), di=_fmt_date(r[2]), ti=_fmt_time(r[3]),
-                 lsid=_strip_id(r[4]), wd=r[5], drh=r[6],
-                 ib=_strip_id(r[7]), ab=_strip_id(r[8]),
+            dict(ptid=_resolve(id_maps, "permit_types", r[1]), di=_fmt_date(r[2]), ti=_fmt_time(r[3]),
+                 lsid=_resolve(id_maps, "working_stations", r[4]), wd=r[5], drh=r[6],
+                 ib=_resolve(id_maps, "employees", r[7]), ab=_resolve(id_maps, "employees", r[8]),
                  vs=_fmt_datetime(r[9]), ve=_fmt_datetime(r[10]),
                  wsa=_fmt_datetime(r[11]), wea=_fmt_datetime(r[12]),
                  nw=r[13], st=r[14], dr=r[15], io=r[16]),
@@ -365,13 +438,14 @@ def _insert_permits_to_work(db: Session, wb) -> int:
     return count
 
 
-def _insert_incidents(db: Session, wb) -> int:
+def _insert_incidents(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Incidents"):
         return 0
     count = 0
     for r in _rows(wb["Incidents"]):
         if not any(c for c in r):
             continue
+        declared_id = _strip_id(r[0])
         db.execute(
             text("""INSERT INTO incidents
                  (report_date,incident_date_time,location_station_id,incident_type,
@@ -380,16 +454,17 @@ def _insert_incidents(db: Session, wb) -> int:
                   investigation_status,capa_generated,days_away,root_cause_category)
                  VALUES (:rd,:idt,:lsid,:it,:sev,:npi,:desc,:ic,:rc,:hid,:pa,:cf,:rb,:is_,:cg,:da,:rcc)"""),
             dict(rd=_fmt_date(r[1]), idt=_fmt_datetime(r[2]),
-                 lsid=_strip_id(r[3]), it=r[4], sev=r[5], npi=r[6],
-                 desc=r[7], ic=r[8], rc=r[9], hid=_strip_id(r[10]),
-                 pa=r[11], cf=r[12], rb=_strip_id(r[13]),
+                 lsid=_resolve(id_maps, "working_stations", r[3]), it=r[4], sev=r[5], npi=r[6],
+                 desc=r[7], ic=r[8], rc=r[9], hid=_resolve(id_maps, "hazards", r[10]),
+                 pa=r[11], cf=r[12], rb=_resolve(id_maps, "employees", r[13]),
                  is_=r[14], cg=r[15], da=r[16] or 0, rcc=r[17]),
         )
+        _remember(db, id_maps, "incidents", declared_id)
         count += 1
     return count
 
 
-def _insert_near_misses(db: Session, wb) -> int:
+def _insert_near_misses(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Near_Misses"):
         return 0
     count = 0
@@ -403,15 +478,15 @@ def _insert_near_misses(db: Session, wb) -> int:
                   reported_by,capa_escalation)
                  VALUES (:rd,:edt,:lsid,:desc,:pc,:hid,:uc,:cf,:rb,:ce)"""),
             dict(rd=_fmt_date(r[1]), edt=_fmt_datetime(r[2]),
-                 lsid=_strip_id(r[3]), desc=r[4], pc=r[5],
-                 hid=_strip_id(r[6]), uc=r[7], cf=r[8],
-                 rb=_strip_id(r[9]), ce=r[10]),
+                 lsid=_resolve(id_maps, "working_stations", r[3]), desc=r[4], pc=r[5],
+                 hid=_resolve(id_maps, "hazards", r[6]), uc=r[7], cf=r[8],
+                 rb=_resolve(id_maps, "employees", r[9]), ce=r[10]),
         )
         count += 1
     return count
 
 
-def _insert_safety_walks(db: Session, wb) -> int:
+def _insert_safety_walks(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Safety_Walks"):
         return 0
     count = 0
@@ -424,15 +499,15 @@ def _insert_safety_walks(db: Session, wb) -> int:
                   inspection_type,issues_found,critical_issues,
                   housekeeping_rating,compliance_rating,follow_up_required)
                  VALUES (:idt,:lsid,:iid,:it,:if_,:ci,:hr,:cr,:fur)"""),
-            dict(idt=_fmt_datetime(r[1]), lsid=_strip_id(r[2]),
-                 iid=_strip_id(r[3]), it=r[4], if_=r[5] or 0,
+            dict(idt=_fmt_datetime(r[1]), lsid=_resolve(id_maps, "working_stations", r[2]),
+                 iid=_resolve(id_maps, "employees", r[3]), it=r[4], if_=r[5] or 0,
                  ci=r[6] or 0, hr=r[7], cr=r[8], fur=r[9]),
         )
         count += 1
     return count
 
 
-def _insert_capa_actions(db: Session, wb) -> int:
+def _insert_capa_actions(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "CAPA_Actions"):
         return 0
     count = 0
@@ -444,15 +519,15 @@ def _insert_capa_actions(db: Session, wb) -> int:
                  (incident_id,action_type,description,root_cause_addressed,
                   responsible_person_id,due_date,status,effectiveness_rating)
                  VALUES (:iid,:at,:desc,:rca,:rpid,:dd,:st,:er)"""),
-            dict(iid=_strip_id(r[1]), at=r[2], desc=r[3], rca=r[4],
-                 rpid=_strip_id(r[5]), dd=_fmt_date(r[6]),
+            dict(iid=_resolve(id_maps, "incidents", r[1]), at=r[2], desc=r[3], rca=r[4],
+                 rpid=_resolve(id_maps, "employees", r[5]), dd=_fmt_date(r[6]),
                  st=r[7], er=r[8]),
         )
         count += 1
     return count
 
 
-def _insert_shift_schedule(db: Session, wb) -> int:
+def _insert_shift_schedule(db: Session, wb, id_maps: IdMaps) -> int:
     if not _check_sheet(wb, "Shift_Schedule"):
         return 0
     count = 0
@@ -464,9 +539,10 @@ def _insert_shift_schedule(db: Session, wb) -> int:
                  (employee_id,shift_date,shift_type,shift_start,shift_end,
                   actual_hours_worked,station_id,supervisor_id)
                  VALUES (:eid,:sd,:st,:ss,:se,:ahw,:stid,:supid)"""),
-            dict(eid=_strip_id(r[1]), sd=_fmt_date(r[2]),
+            dict(eid=_resolve(id_maps, "employees", r[1]), sd=_fmt_date(r[2]),
                  st=r[3], ss=_fmt_time(r[4]), se=_fmt_time(r[5]),
-                 ahw=r[6], stid=_strip_id(r[7]), supid=_strip_id(r[8])),
+                 ahw=r[6], stid=_resolve(id_maps, "working_stations", r[7]),
+                 supid=_resolve(id_maps, "employees", r[8])),
         )
         count += 1
     return count
@@ -518,6 +594,7 @@ def import_excel_stream(file_bytes: bytes, db: Session):
     results: Dict[str, int] = {}
     errors: Dict[str, str] = {}
     before_ids = capture_tenant_table_max_ids(db)
+    id_maps: IdMaps = {}
 
     try:
         for idx, (sheet_label, table_key, fn) in enumerate(SHEET_STEPS):
@@ -526,7 +603,7 @@ def import_excel_stream(file_bytes: bytes, db: Session):
                 # Must SET within the same transaction as the INSERTs; committing
                 # after SET returns the connection to the pool, resetting the flag.
                 db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-                count = fn(db, wb)
+                count = fn(db, wb, id_maps)
                 db.commit()
                 results[table_key] = count
                 logger.info("Imported %s rows into %s", count, table_key)
@@ -579,12 +656,13 @@ def import_excel(file_bytes: bytes, db: Session) -> dict:
     results: Dict[str, int] = {}
     errors: Dict[str, str] = {}
     before_ids = capture_tenant_table_max_ids(db)
+    id_maps: IdMaps = {}
 
     try:
         for sheet_label, table_key, fn in SHEET_STEPS:
             try:
                 db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
-                count = fn(db, wb)
+                count = fn(db, wb, id_maps)
                 db.commit()
                 results[table_key] = count
                 logger.info("Imported %s rows into %s", count, table_key)
