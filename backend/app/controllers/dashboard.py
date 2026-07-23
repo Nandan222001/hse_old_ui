@@ -233,8 +233,14 @@ def get_leading_indicators(
         else_=0.5,
     )
 
-    def weighted_risk_score(start_date, end_date) -> float:
-        row = (
+    def weighted_risk_score(start_date, end_date, inclusive_end: bool = False) -> float:
+        # inclusive_end=True for the "current" window: end_date is anchored on the
+        # latest incident's own date (see latest_date above), so a strict `<` would
+        # exclude that incident from its own window — e.g. right after a worker
+        # submits a same-day report, the score would drop to 0 instead of reflecting
+        # it. The "previous" window keeps the exclusive bound so the two windows
+        # don't double-count incidents dated exactly on the current_start boundary.
+        q = (
             _org_filter(
                 db.query(
                     func.count(Incident.id).label("count"),
@@ -245,9 +251,11 @@ def get_leading_indicators(
             )
             .filter(Incident.incident_date_time.isnot(None))
             .filter(func.date(Incident.incident_date_time) >= start_date)
-            .filter(func.date(Incident.incident_date_time) < end_date)
-            .first()
         )
+        q = q.filter(func.date(Incident.incident_date_time) <= end_date) if inclusive_end else q.filter(
+            func.date(Incident.incident_date_time) < end_date
+        )
+        row = q.first()
         count = int(row.count or 0)
         weight_sum = float(row.weight_sum or 0)
         if not count:
@@ -256,7 +264,7 @@ def get_leading_indicators(
 
     current_start = latest_date - timedelta(days=90)
     previous_start = latest_date - timedelta(days=180)
-    current_score = weighted_risk_score(current_start, latest_date)
+    current_score = weighted_risk_score(current_start, latest_date, inclusive_end=True)
     previous_score = weighted_risk_score(previous_start, current_start)
     injury_risk_score = _safe_round(current_score)
     injury_risk_trend = _safe_round(current_score - previous_score)
