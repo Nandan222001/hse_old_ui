@@ -58,18 +58,57 @@ export const getZones = (_siteId?: string): Promise<Zone[]> =>
     .get<BackendWorkingStation[]>('/working-stations/', { params: { limit: 200 } })
     .then((r) => r.data.map(adaptZone));
 
-const STATIC_SHIFTS: Shift[] = [
-  { Shift_ID: 'day',       Shift_Name: 'Day Shift',       Start_Time: '06:00', End_Time: '14:00', Sites: '', Active_Rules: 0, Status: 'Active' },
-  { Shift_ID: 'afternoon', Shift_Name: 'Afternoon Shift', Start_Time: '14:00', End_Time: '22:00', Sites: '', Active_Rules: 0, Status: 'Active' },
-  { Shift_ID: 'night',     Shift_Name: 'Night Shift',     Start_Time: '22:00', End_Time: '06:00', Sites: '', Active_Rules: 0, Status: 'Active' },
-];
+interface BackendShiftPattern {
+  shift_id: string;
+  shift_name: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  sites: string;
+  active_employees: number;
+}
 
-export const getShifts = (): Promise<Shift[]> => Promise.resolve(STATIC_SHIFTS);
+function adaptShiftPattern(p: BackendShiftPattern): Shift {
+  return {
+    Shift_ID: p.shift_id,
+    Shift_Name: p.shift_name ?? p.shift_id,
+    Start_Time: p.start_time ?? '—',
+    End_Time: p.end_time ?? '—',
+    Sites: p.sites || '—',
+    Active_Rules: p.active_employees,
+    Status: 'Active',
+  } as unknown as Shift;
+}
 
-export const getCameras = (_siteId?: string): Promise<Camera[]> => Promise.resolve([]);
+export const getShifts = (): Promise<Shift[]> =>
+  axiosInstance.get<BackendShiftPattern[]>('/shift-schedules/patterns').then((r) => r.data.map(adaptShiftPattern));
 
-export const getRFIDReaders = (): Promise<RFIDReader[]> => Promise.resolve([]);
+export const getCameras = (): Promise<Camera[]> =>
+  axiosInstance.get<Camera[]>('/cameras').then((r) => r.data);
 
-export const getEdgeDevices = (): Promise<EdgeDevice[]> => Promise.resolve([]);
+export const getRFIDReaders = (): Promise<RFIDReader[]> =>
+  axiosInstance.get<RFIDReader[]>('/rfid-readers').then((r) => r.data);
+
+export const getEdgeDevices = (): Promise<EdgeDevice[]> =>
+  axiosInstance.get<EdgeDevice[]>('/edge-devices').then((r) => r.data);
+
+export interface WorkerAccessLogRow {
+  worker: string;
+  gate: string;
+  entry: string;
+  time: string;
+  result: string;
+}
+
+export const getAccessLog = (): Promise<WorkerAccessLogRow[]> =>
+  axiosInstance.get<WorkerAccessLogRow[]>('/rfid-readers/access-log').then((r) => r.data);
+
+export interface GateStatsRow {
+  gate: string;
+  entries: number;
+  exits: number;
+}
+
+export const getGateStats = (): Promise<GateStatsRow[]> =>
+  axiosInstance.get<GateStatsRow[]>('/rfid-readers/gate-stats').then((r) => r.data);
 
 export type { Site, Zone, Shift, Camera, RFIDReader, EdgeDevice };

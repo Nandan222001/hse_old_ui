@@ -180,7 +180,7 @@ export function SitesZonesPage() {
               <table className="w-full min-w-[700px]">
               <thead>
                 <tr style={{ background: '#F3F7FF' }}>
-                  {["Shift Name", "Start Time", "End Time", "Sites", "Rules Count"].map(h => (
+                  {["Shift Name", "Start Time", "End Time", "Sites", "Active Employees"].map(h => (
                     <th key={h} className="px-6 py-3 text-left">
                       <span className="text-[11px] uppercase tracking-[0.5px]" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</span>
                     </th>
