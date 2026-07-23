@@ -1,19 +1,17 @@
-import React, { useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  SafeAreaView,
-  RefreshControl,
-} from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboard } from '../hooks/useDashboard';
+import { permitService } from '../services/permitService';
 import { Avatar } from '../components';
+
+const PERMIT_STATUS_COLOR: Record<string, string> = {
+  active: '#16A34A', approved: '#16A34A', pending: '#F59E0B',
+  pending_approval: '#F59E0B', rejected: '#EF4444', expired: '#94A3B8',
+};
 
 interface Props {
   navigation: any;
@@ -21,24 +19,33 @@ interface Props {
 
 export function DashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
-  const { stats, alerts, isLoading, refresh } = useDashboard();
+  const { stats, alerts, shiftStatus, isLoading, refresh } = useDashboard();
+
+  // Real permits for the "Active Permits" section.
+  const [permits, setPermits] = useState<any[]>([]);
+  const loadPermits = useCallback(() => {
+    permitService.getPermits().then((r: any) => setPermits(r?.items ?? [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     refresh();
+    loadPermits();
 
     const unsubscribe = navigation.addListener('focus', () => {
       refresh();
+      loadPermits();
     });
 
     const interval = setInterval(() => {
       refresh();
+      loadPermits();
     }, 5000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
     };
-  }, [navigation, refresh]);
+  }, [navigation, refresh, loadPermits]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -82,7 +89,7 @@ export function DashboardScreen({ navigation }: Props) {
               <Ionicons name="people" size={20} color="#004AC6" />
             </View>
             <Text style={styles.statValue}>
-              {stats?.attendance_pct ? `${stats.attendance_pct}%` : '85%'}
+              {stats?.attendance_pct != null ? `${stats.attendance_pct}%` : '—'}
             </Text>
             <Text style={styles.statLabel}>Team Attendance</Text>
           </TouchableOpacity>
@@ -98,7 +105,7 @@ export function DashboardScreen({ navigation }: Props) {
             </View>
             <View style={styles.permitStats}>
               <Text style={styles.statValue}>
-                {stats?.active_permits ?? 3} Active
+                {stats?.active_permits ?? '—'} Active
               </Text>
               {stats?.pending_permits ? (
                 <Text style={styles.statSubValue}>
@@ -120,7 +127,7 @@ export function DashboardScreen({ navigation }: Props) {
               <Ionicons name="shield-checkmark" size={20} color="#F97316" />
             </View>
             <Text style={styles.statValue}>
-              {stats?.safety_compliance_pct ? `${stats.safety_compliance_pct}%` : '98%'}
+              {stats?.safety_compliance_pct != null ? `${stats.safety_compliance_pct}%` : '—'}
             </Text>
             <Text style={styles.statLabel}>Safety Score</Text>
           </TouchableOpacity>
@@ -210,7 +217,11 @@ export function DashboardScreen({ navigation }: Props) {
             </View>
             <View style={styles.aiTextBox}>
               <Text style={styles.aiTitle}>AI Safety Insights</Text>
-              <Text style={styles.aiDesc}>2 minor non-compliances flagged in Sector 4</Text>
+              <Text style={styles.aiDesc}>
+                {alerts.length > 0
+                  ? `${alerts.length} safety alert${alerts.length > 1 ? 's' : ''} flagged — tap to review`
+                  : 'No active safety alerts — all clear'}
+              </Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#FFFFFF" style={{ opacity: 0.8 }} />
@@ -224,20 +235,20 @@ export function DashboardScreen({ navigation }: Props) {
         >
           <View style={styles.wfHeader}>
             <Text style={styles.wfTitle}>Workforce Status</Text>
-            <Text style={styles.wfLive}>● Live</Text>
+            {shiftStatus?.is_live && <Text style={styles.wfLive}>● Live</Text>}
           </View>
           <View style={styles.wfRow}>
             <View style={styles.wfItem}>
-              <Text style={styles.wfVal}>14</Text>
+              <Text style={styles.wfVal}>{shiftStatus?.logged_in ?? '—'}</Text>
               <Text style={styles.wfLbl}>On Site Today</Text>
             </View>
             <View style={styles.wfItem}>
-              <Text style={styles.wfVal}>12</Text>
-              <Text style={styles.wfLbl}>Inducted</Text>
+              <Text style={styles.wfVal}>{shiftStatus?.total ?? '—'}</Text>
+              <Text style={styles.wfLbl}>Total Team</Text>
             </View>
             <View style={styles.wfItem}>
-              <Text style={styles.wfVal}>2</Text>
-              <Text style={[styles.wfVal, { color: '#EF4444' }]}>Pending ID</Text>
+              <Text style={[styles.wfVal, { color: '#EF4444' }]}>{shiftStatus?.pending ?? '—'}</Text>
+              <Text style={styles.wfLbl}>Pending</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -250,43 +261,47 @@ export function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Coded Permits List */}
+        {/* Coded Permits List — real data */}
         <View style={styles.permitsList}>
-          <TouchableOpacity
-            style={styles.permitItem}
-            onPress={() => navigation.navigate('PermitRequestManagement')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.permitLeft}>
-              <View style={[styles.permitIndicator, { backgroundColor: '#16A34A' }]} />
-              <View>
-                <Text style={styles.permitName}>Hot Work Permit</Text>
-                <Text style={styles.permitSub}>Welding - Sector 4 · Exp. 17:00</Text>
-              </View>
+          {permits.length === 0 ? (
+            <View style={styles.permitItem}>
+              <Text style={styles.permitSub}>No permits to show right now.</Text>
             </View>
-            <View style={styles.permitRight}>
-              <Text style={styles.permitStatusText}>Active</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.permitItem}
-            onPress={() => navigation.navigate('PermitRequestManagement')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.permitLeft}>
-              <View style={[styles.permitIndicator, { backgroundColor: '#16A34A' }]} />
-              <View>
-                <Text style={styles.permitName}>Confined Space Entry</Text>
-                <Text style={styles.permitSub}>Tank 12 Cleaning · Exp. 18:30</Text>
-              </View>
-            </View>
-            <View style={styles.permitRight}>
-              <Text style={styles.permitStatusText}>Active</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-            </View>
-          </TouchableOpacity>
+          ) : (
+            permits.slice(0, 5).map((p: any) => {
+              const statusKey = String(p.status || '').toLowerCase();
+              const color = PERMIT_STATUS_COLOR[statusKey] || '#94A3B8';
+              const expTime = p.validity_end
+                ? new Date(p.validity_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : null;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={styles.permitItem}
+                  onPress={() => navigation.navigate('PermitRequestManagement')}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.permitLeft}>
+                    <View style={[styles.permitIndicator, { backgroundColor: color }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.permitName} numberOfLines={1}>
+                        {p.title || p.permit_type || p.permit_ref || 'Permit'}
+                      </Text>
+                      <Text style={styles.permitSub} numberOfLines={1}>
+                        {[p.location, expTime ? `Exp. ${expTime}` : null].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.permitRight}>
+                    <Text style={[styles.permitStatusText, { color }]}>
+                      {statusKey ? statusKey.replace(/_/g, ' ') : 'Active'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -541,9 +556,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   permitLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 10,
   },
   permitIndicator: {
     width: 6,
@@ -564,10 +581,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
   },
   permitStatusText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#16A34A',
+    textTransform: 'capitalize',
   },
 });

@@ -1,8 +1,8 @@
 import type { Incident, Permit, Complaint, Capa, Audit } from "../data/mockData";
 
 export interface ScreenProps {
-  currentScreen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals";
-  setCurrentScreen: (screen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals") => void;
+  currentScreen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks" | "add_supervisor";
+  setCurrentScreen: (screen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks" | "add_supervisor") => void;
   layoutVersion: "A" | "B";
   activeTab: number;
   setActiveTab: (tab: number) => void;

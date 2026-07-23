@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { teamService } from '../services/teamService';
@@ -85,6 +78,30 @@ export function OperationsScreen({ navigation }: Props) {
 
         {/* Quick Access Grid */}
         <View style={styles.grid}>
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('AssignTask')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#E0F2F1' }]}>
+              <Ionicons name="clipboard-outline" size={26} color="#12B8A6" />
+            </View>
+            <Text style={styles.gridLabel}>Assign Task</Text>
+            <Text style={styles.gridDesc}>To worker(s)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('AddWorker')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="person-add-outline" size={26} color="#004AC6" />
+            </View>
+            <Text style={styles.gridLabel}>Add Worker</Text>
+            <Text style={styles.gridDesc}>New team member</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.gridCard}
             onPress={() => navigation.navigate('TeamManagement')}

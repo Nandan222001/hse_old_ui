@@ -1,14 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  SafeAreaView,
-  TextInput,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { permitWorkflowService, type PermitListItem } from '../services/permitWorkflowService';
@@ -22,7 +14,7 @@ interface Props {
 function toDisplayPermit(p: PermitListItem): Permit {
   const ws = p.workflow_status || 'requested';
   const status = ws === 'approved' ? 'approved' : ws === 'rejected' ? 'rejected' : 'pending';
-  return {
+  const out: any = {
     id: String(p.id),
     permit_ref: p.permit_ref || `PTW-${p.id}`,
     permit_type: p.work_description ? 'Permit to Work' : 'Permit to Work',
@@ -30,9 +22,11 @@ function toDisplayPermit(p: PermitListItem): Permit {
     location: p.location_station_id ? `Station ${p.location_station_id}` : 'Site',
     requestor: p.requested_by ? `Emp ${p.requested_by}` : '—',
     status: status as Permit['status'],
+    workflow_status: ws,
     risk_level: 'medium',
     validity_end: p.validity_end ? new Date(p.validity_end).toLocaleString() : 'Awaiting Authorization',
   };
+  return out as Permit;
 }
 
 export function PermitsScreen({ navigation }: Props) {
@@ -144,7 +138,7 @@ export function PermitsScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={p.id}
                 style={styles.card}
-                onPress={() => navigation.navigate('PermitRequestManagement')}
+                onPress={() => navigation.navigate('PermitRequestManagement', { permit: p })}
                 activeOpacity={0.85}
               >
                 <View style={styles.cardHeader}>

@@ -408,19 +408,26 @@ def report_incident(
 
 @router.get("/incidents")
 def list_driver_incidents(
+    mine: bool = False,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    # Query all incidents for this organisation, ordered by ID desc
+    # By default all org incidents; mine=true → only ones this worker reported.
+    where = "i.organisation_id = :org_id"
+    params = {"org_id": current_user.org_id}
+    if mine:
+        params["emp"] = _employee_id(db, current_user)
+        where += " AND i.reported_by = :emp"
+
     rows = db.execute(
-        text("""
-            SELECT i.*, ws.station_name as location_name 
-            FROM incidents i 
-            LEFT JOIN working_stations ws ON i.location_station_id = ws.id 
-            WHERE i.organisation_id = :org_id 
+        text(f"""
+            SELECT i.*, ws.station_name as location_name
+            FROM incidents i
+            LEFT JOIN working_stations ws ON i.location_station_id = ws.id
+            WHERE {where}
             ORDER BY i.id DESC
         """),
-        {"org_id": current_user.org_id}
+        params
     ).mappings().all()
     
     items = []

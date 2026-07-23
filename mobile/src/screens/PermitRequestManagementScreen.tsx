@@ -1,10 +1,50 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { permitWorkflowService } from '../services/permitWorkflowService';
 
-export function PermitRequestManagementScreen({ navigation }: any) {
-  const handleAction = (act: string) => {
-    Alert.alert("Permits", `Permit request has been ${act} successfully.`);
+const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
+  requested:    { label: 'Awaiting your acknowledgement', color: '#F97316', bg: '#FFF7ED' },
+  acknowledged: { label: 'Acknowledged — forwarded to Manager', color: '#2563EB', bg: '#EFF6FF' },
+  approved:     { label: 'Approved — active on site', color: '#16A34A', bg: '#F0FDF4' },
+  rejected:     { label: 'Rejected', color: '#EF4444', bg: '#FEF2F2' },
+};
+
+export function PermitRequestManagementScreen({ navigation, route }: any) {
+  const permit = route?.params?.permit;
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!permit) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#0B1C30" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Review Permit Request</Text>
+        </View>
+        <Text style={styles.empty}>No permit selected. Go back and tap a permit from the list.</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const ws = String(permit.workflow_status || 'requested').toLowerCase();
+  const meta = STATUS_META[ws] || STATUS_META.requested;
+  const canAcknowledge = ws === 'requested';
+
+  const acknowledge = async () => {
+    try {
+      setSubmitting(true);
+      await permitWorkflowService.acknowledge(Number(permit.id));
+      Alert.alert('Acknowledged', 'Permit acknowledged and forwarded to the Manager for approval.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not acknowledge this permit.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -15,24 +55,46 @@ export function PermitRequestManagementScreen({ navigation }: any) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Review Permit Request</Text>
       </View>
+
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Scaffolding Height Permit</Text>
-          <Text style={styles.meta}>Zone: Structure C · Roof</Text>
-          <Text style={styles.meta}>Worker: Sarah Jenkins</Text>
-          <Text style={styles.meta}>Shift: Day Operations</Text>
-          
-          <Text style={styles.desc}>This permit covers mounting platform rails on Sector C roof area. High-altitude harness check has been completed.</Text>
+        <View style={[styles.statusBanner, { backgroundColor: meta.bg }]}>
+          <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
         </View>
 
-        <View style={styles.btnRow}>
-          <TouchableOpacity style={[styles.btn, styles.rejectBtn]} onPress={() => handleAction('Rejected')}>
-            <Text style={styles.rejectBtnText}>Reject</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.approveBtn]} onPress={() => handleAction('Approved')}>
-            <Text style={styles.approveBtnText}>Approve & Sign</Text>
-          </TouchableOpacity>
+        <View style={styles.card}>
+          <Text style={styles.title}>{permit.title || 'Permit to Work'}</Text>
+          <Text style={styles.ref}>{permit.permit_ref}</Text>
+
+          <View style={styles.row}><Ionicons name="pin-outline" size={15} color="#737686" /><Text style={styles.meta}>{permit.location || 'Site'}</Text></View>
+          <View style={styles.row}><Ionicons name="person-outline" size={15} color="#737686" /><Text style={styles.meta}>Requested by {permit.requestor || '—'}</Text></View>
+          <View style={styles.row}><Ionicons name="time-outline" size={15} color="#737686" /><Text style={styles.meta}>Valid till {permit.validity_end || '—'}</Text></View>
+          {!!permit.permit_type && (
+            <View style={styles.row}><Ionicons name="document-text-outline" size={15} color="#737686" /><Text style={styles.meta}>{permit.permit_type}</Text></View>
+          )}
         </View>
+
+        {canAcknowledge ? (
+          <TouchableOpacity
+            style={[styles.ackBtn, submitting && { opacity: 0.6 }]}
+            onPress={acknowledge}
+            disabled={submitting}
+            activeOpacity={0.85}
+          >
+            {submitting ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.ackBtnText}>Acknowledge &amp; Forward to Manager</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.doneNote}>
+            No action needed — this permit has already moved past supervisor review.
+          </Text>
+        )}
+        <Text style={styles.hint}>
+          As Supervisor you acknowledge that you have reviewed this request. Final approval is done by the HSE Manager.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -44,14 +106,16 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0B1C30', marginLeft: 12 },
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
+  empty: { textAlign: 'center', marginTop: 40, color: '#737686', paddingHorizontal: 30 },
+  statusBanner: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
+  statusText: { fontSize: 13, fontWeight: '700' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04 },
-  title: { fontSize: 16, fontWeight: '800', color: '#0B1C30', marginBottom: 12 },
-  meta: { fontSize: 12, color: '#737686', marginBottom: 6 },
-  desc: { fontSize: 13, color: '#434655', lineHeight: 18, marginTop: 12, borderTopWidth: 1, borderColor: '#F1F5F9', paddingTop: 12 },
-  btnRow: { flexDirection: 'row', gap: 12 },
-  btn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  rejectBtn: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5' },
-  rejectBtnText: { color: '#EF4444', fontWeight: '700' },
-  approveBtn: { backgroundColor: '#004AC6' },
-  approveBtnText: { color: '#FFFFFF', fontWeight: '700' }
+  title: { fontSize: 17, fontWeight: '800', color: '#0B1C30' },
+  ref: { fontSize: 12, color: '#94A3B8', fontWeight: '600', marginTop: 2, marginBottom: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  meta: { fontSize: 13, color: '#434655', flex: 1 },
+  ackBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#004AC6', borderRadius: 12, paddingVertical: 15 },
+  ackBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
+  doneNote: { textAlign: 'center', color: '#64748B', fontSize: 13, paddingVertical: 12 },
+  hint: { fontSize: 12, color: '#94A3B8', marginTop: 16, lineHeight: 17, textAlign: 'center' },
 });

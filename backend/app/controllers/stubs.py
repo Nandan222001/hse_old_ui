@@ -1274,49 +1274,92 @@ def get_supervisor_alerts(
 
 @router.get("/supervisor/dashboard")
 def get_supervisor_dashboard(
+    db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
+    org = current_user.org_id
+    total_emp = db.execute(text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o"), {"o": org}).scalar() or 0
+    active_emp = db.execute(
+        text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o AND (active_status IS NULL OR active_status='Active')"),
+        {"o": org},
+    ).scalar() or 0
+    attendance = round(active_emp / total_emp * 100) if total_emp else 0
+
+    avg_comp = db.execute(text("SELECT AVG(compliance_rating) FROM safety_walks WHERE organisation_id=:o"), {"o": org}).scalar()
+    safety = round(float(avg_comp) / 5 * 100) if avg_comp else 0
+
+    active_permits = db.execute(
+        text("SELECT COUNT(*) FROM permits_to_work WHERE organisation_id=:o AND status='Active'"), {"o": org}
+    ).scalar() or 0
+    pending_permits = db.execute(
+        text("SELECT COUNT(*) FROM permits_to_work WHERE organisation_id=:o AND workflow_status='requested'"), {"o": org}
+    ).scalar() or 0
+
     return {
-        "attendance_pct": 94,
-        "safety_compliance_pct": 98,
-        "active_permits": 5,
-        "pending_permits": 2
+        "attendance_pct": attendance,
+        "safety_compliance_pct": safety,
+        "active_permits": active_permits,
+        "pending_permits": pending_permits,
     }
 
 
 @router.get("/supervisor/team/shift-status")
 def get_supervisor_shift_status(
+    db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    return {
-        "total": 15,
-        "logged_in": 12,
-        "pending": 3,
-        "is_live": True
-    }
+    org = current_user.org_id
+    total = db.execute(text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o"), {"o": org}).scalar() or 0
+    active = db.execute(
+        text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o AND (active_status IS NULL OR active_status='Active')"),
+        {"o": org},
+    ).scalar() or 0
+    return {"total": total, "logged_in": active, "pending": max(0, total - active), "is_live": total > 0}
 
 
 @router.get("/supervisor/permits")
 def get_supervisor_permits(
+    db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
+    org = current_user.org_id
+    rows = db.execute(
+        text("""
+            SELECT p.id, p.status, p.workflow_status, p.validity_start, p.validity_end, p.work_description,
+                   pt.permit_type_name, ws.station_name, e.full_name AS requestor
+            FROM permits_to_work p
+            LEFT JOIN permit_types pt ON p.permit_type_id = pt.id
+            LEFT JOIN working_stations ws ON p.location_station_id = ws.id
+            LEFT JOIN employees e ON p.requested_by = e.id
+            WHERE p.organisation_id = :o
+            ORDER BY p.id DESC LIMIT 20
+        """),
+        {"o": org},
+    ).mappings().all()
+
+    items = []
+    for r in rows:
+        status = (r["status"] or r["workflow_status"] or "pending").lower()
+        items.append({
+            "id": str(r["id"]),
+            "permit_ref": f"PTW-{r['id']}",
+            "permit_type": r["permit_type_name"] or "Permit to Work",
+            "title": r["work_description"] or r["permit_type_name"] or "Permit to Work",
+            "location": r["station_name"] or "Site",
+            "requestor": r["requestor"] or "—",
+            "status": status,
+            "risk_level": "medium",
+            "validity_start": r["validity_start"].isoformat() if r["validity_start"] else None,
+            "validity_end": r["validity_end"].isoformat() if r["validity_end"] else None,
+        })
+
+    active_count = sum(1 for i in items if i["status"] == "active")
+    pending_count = sum(1 for i in items if i["status"] in ("pending", "requested", "pending_approval"))
     return {
-        "items": [
-            {
-                "id": "1",
-                "permit_ref": "PTW-2026-081",
-                "permit_type": "Hot Work",
-                "title": "Welding in Tank Farm 3",
-                "location": "Sector 4 - Tank Farm",
-                "requestor": "John Doe",
-                "status": "pending",
-                "risk_level": "high",
-                "validity_start": "2026-07-14T08:00:00",
-                "validity_end": "2026-07-14T17:00:00"
-            }
-        ],
-        "total": 1,
-        "pending_count": 1,
+        "items": items,
+        "total": len(items),
+        "active_count": active_count,
+        "pending_count": pending_count,
         "approved_today": 0,
-        "risk_flags": 1
+        "risk_flags": pending_count,
     }

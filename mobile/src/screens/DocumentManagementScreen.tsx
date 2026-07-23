@@ -1,13 +1,34 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { apiClient } from '../api/client';
+
+interface Policy { id: string; title: string; category: string; owner: string; status: string; }
 
 export function DocumentManagementScreen({ navigation }: any) {
-  const docs = [
-    { id: '1', title: 'HSE Safety Guidelines Manual 2026.pdf', size: '4.2 MB' },
-    { id: '2', title: 'Emergency evacuation procedures map.pdf', size: '1.8 MB' },
-    { id: '3', title: 'Crane operating safety regulations.pdf', size: '2.5 MB' }
-  ];
+  const [docs, setDocs] = useState<Policy[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiClient.get('/policys/')
+      .then((r: any) => {
+        const items = Array.isArray(r.data) ? r.data : (r.data?.items ?? []);
+        setDocs(items.map((p: any) => ({
+          id: String(p.id),
+          title: p.policy_name || 'Policy Document',
+          category: p.category || '',
+          owner: p.owner || '',
+          status: p.status || '',
+        })));
+      })
+      .catch(() => setDocs([]))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -17,21 +38,32 @@ export function DocumentManagementScreen({ navigation }: any) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Document Library</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {docs.map(d => (
-          <View key={d.id} style={styles.card}>
-            <View style={styles.docLeft}>
-              <Ionicons name="document-attach" size={24} color="#004AC6" />
-              <View>
-                <Text style={styles.title}>{d.title}</Text>
-                <Text style={styles.size}>{d.size}</Text>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
+      >
+        {loading && docs.length === 0 ? (
+          <ActivityIndicator color="#004AC6" style={{ marginTop: 30 }} />
+        ) : docs.length === 0 ? (
+          <Text style={styles.empty}>No documents available.</Text>
+        ) : (
+          docs.map((d) => (
+            <View key={d.id} style={styles.card}>
+              <View style={styles.iconBox}>
+                <Ionicons name="document-text" size={20} color="#004AC6" />
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title} numberOfLines={2}>{d.title}</Text>
+                <Text style={styles.sub}>{[d.category, d.owner].filter(Boolean).join(' · ')}</Text>
+              </View>
+              {!!d.status && (
+                <View style={[styles.badge, { backgroundColor: d.status === 'Active' ? '#F0FDF4' : '#F1F5F9' }]}>
+                  <Text style={[styles.badgeText, { color: d.status === 'Active' ? '#16A34A' : '#64748B' }]}>{d.status}</Text>
+                </View>
+              )}
             </View>
-            <TouchableOpacity style={styles.dlBtn}>
-              <Ionicons name="cloud-download-outline" size={18} color="#004AC6" />
-            </TouchableOpacity>
-          </View>
-        ))}
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -43,9 +75,11 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0B1C30', marginLeft: 12 },
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
-  card: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04 },
-  docLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  title: { fontSize: 13, fontWeight: '700', color: '#0B1C30', marginRight: 16 },
-  size: { fontSize: 11, color: '#737686', marginTop: 2 },
-  dlBtn: { padding: 8, backgroundColor: '#EEF2FF', borderRadius: 8 }
+  empty: { textAlign: 'center', color: '#737686', marginTop: 30 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04 },
+  iconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 14, fontWeight: '700', color: '#0B1C30' },
+  sub: { fontSize: 11, color: '#737686', marginTop: 2 },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: '700' },
 });

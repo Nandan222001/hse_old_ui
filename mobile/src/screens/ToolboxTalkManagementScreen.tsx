@@ -1,13 +1,33 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { apiClient } from '../api/client';
+
+interface Topic { id: string; title: string; description: string; minutes: number; }
 
 export function ToolboxTalkManagementScreen({ navigation }: any) {
-  const topics = [
-    { id: '1', title: 'Height safety & harness checks', duration: '15 mins', completed: true },
-    { id: '2', title: 'Welding hot work gas levels', duration: '10 mins', completed: true },
-    { id: '3', title: 'Emergency evacuation assembly points', duration: '20 mins', completed: false }
-  ];
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiClient.get('/worker/training')
+      .then((res: any) => {
+        const items = res?.data?.items ?? [];
+        setTopics(items.map((t: any) => ({
+          id: String(t.id),
+          title: t.title,
+          description: t.description || '',
+          minutes: t.estimated_minutes || 15,
+        })));
+      })
+      .catch(() => setTopics([]))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -17,20 +37,28 @@ export function ToolboxTalkManagementScreen({ navigation }: any) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Toolbox Talks</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {topics.map(t => (
-          <View key={t.id} style={styles.card}>
-            <View>
-              <Text style={styles.title}>{t.title}</Text>
-              <Text style={styles.sub}>Required duration: {t.duration}</Text>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
+      >
+        {loading && topics.length === 0 ? (
+          <ActivityIndicator color="#004AC6" style={{ marginTop: 30 }} />
+        ) : topics.length === 0 ? (
+          <Text style={styles.empty}>No toolbox talk topics available.</Text>
+        ) : (
+          topics.map((t) => (
+            <View key={t.id} style={styles.card}>
+              <View style={styles.iconBox}>
+                <Ionicons name="megaphone-outline" size={20} color="#F97316" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title} numberOfLines={2}>{t.title}</Text>
+                {!!t.description && <Text style={styles.sub} numberOfLines={1}>{t.description}</Text>}
+                <Text style={styles.dur}>Approx. {t.minutes} mins</Text>
+              </View>
             </View>
-            <View style={[styles.badge, { backgroundColor: t.completed ? '#F0FDF4' : '#FFF7ED' }]}>
-              <Text style={[styles.badgeText, { color: t.completed ? '#16A34A' : '#F97316' }]}>
-                {t.completed ? 'Completed' : 'Pending'}
-              </Text>
-            </View>
-          </View>
-        ))}
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -42,9 +70,10 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0B1C30', marginLeft: 12 },
   scroll: { paddingHorizontal: 20, paddingBottom: 40 },
-  card: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04 },
+  empty: { textAlign: 'center', color: '#737686', marginTop: 30 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04 },
+  iconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 14, fontWeight: '700', color: '#0B1C30' },
   sub: { fontSize: 11, color: '#737686', marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: '700' }
+  dur: { fontSize: 11, color: '#F97316', fontWeight: '600', marginTop: 4 },
 });

@@ -16,7 +16,7 @@ function buildFormData(payload: Record<string, any>, photos?: PhotoAttachment[])
 }
 
 export const incidentService = {
-  async getIncidents(params?: { type?: string; status?: string }): Promise<IncidentListResponse> {
+  async getIncidents(params?: { type?: string; status?: string; mine?: boolean }): Promise<IncidentListResponse> {
     const { data } = await apiClient.get<IncidentListResponse>(ENDPOINTS.INCIDENTS.LIST, { params });
     return data;
   },

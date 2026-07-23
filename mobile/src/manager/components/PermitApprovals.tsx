@@ -1,31 +1,42 @@
+import { useEffect, useState, useCallback } from "react";
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  ScrollView,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert,
 } from "react-native";
-import { ArrowLeft, Check, X, ShieldCheck } from "lucide-react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { ArrowLeft, CheckCircle2, ShieldCheck, X } from "lucide-react-native";
 import type { ScreenProps } from "./types";
+import { permitWorkflowService } from "../../services/permitWorkflowService";
 
-export function PermitApprovalsView({
-  setCurrentScreen,
-  permits,
-  setPermits,
-  showToast,
-}: ScreenProps) {
-  const pendingPermits = permits.filter((p) => p.status === "PENDING");
+export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
 
-  const handleAction = (id: string, approve: boolean) => {
-    setPermits((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: approve ? "APPROVED" : "REJECTED" } : p))
-    );
-    showToast(`Permit ${id} was ${approve ? "APPROVED" : "REJECTED"}`);
+  const load = useCallback(() => {
+    setLoading(true);
+    permitWorkflowService.managerQueue()
+      .then((q) => setItems(Array.isArray(q) ? q : []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (id: number, approve: boolean) => {
+    try {
+      setBusy(id);
+      if (approve) await permitWorkflowService.approve(id);
+      else await permitWorkflowService.reject(id, "Rejected by manager");
+      showToast?.(`Permit PTW-${id} ${approve ? "approved" : "rejected"}`);
+      load();
+    } catch (e: any) {
+      Alert.alert("Failed", e?.response?.data?.detail || "Could not update permit.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header Bar */}
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.headerBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => setCurrentScreen("app")}>
           <ArrowLeft size={22} color="#0B3D91" />
@@ -34,191 +45,74 @@ export function PermitApprovalsView({
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>Pending Safety Permits ({pendingPermits.length})</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={["#0B3D91"]} />}
+      >
+        <Text style={styles.sectionTitle}>Awaiting Approval ({items.length})</Text>
 
-        {pendingPermits.length === 0 ? (
+        {loading && items.length === 0 ? (
+          <ActivityIndicator color="#0B3D91" style={{ marginTop: 30 }} />
+        ) : items.length === 0 ? (
           <View style={styles.emptyBox}>
-            <ShieldCheck size={48} color="#10B981" style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTitle}>Queue Cleared</Text>
+            <CheckCircle2 size={48} color="#10B981" style={{ marginBottom: 12 }} />
+            <Text style={styles.emptyTitle}>All Clear</Text>
             <Text style={styles.emptyText}>All permits have been reviewed and resolved.</Text>
           </View>
         ) : (
-          pendingPermits.map((item) => (
-            <View key={item.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardId}>{item.id}</Text>
-                <View style={styles.pendingBadge}>
-                  <Text style={styles.pendingText}>Pending Review</Text>
+          items.map((p) => {
+            const exp = p.validity_end ? new Date(p.validity_end).toLocaleDateString() : null;
+            return (
+              <View key={p.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardId}>{p.permit_ref || `PTW-${p.id}`}</Text>
+                  <View style={styles.pendBadge}><Text style={styles.pendText}>{(p.status || "pending").replace(/_/g, " ")}</Text></View>
+                </View>
+                <Text style={styles.cardDesc}>{p.work_description || "Permit to Work"}</Text>
+                <View style={styles.cardMeta}>
+                  <Text style={styles.metaText}>👤 Emp {p.requested_by ?? "—"}</Text>
+                  {exp && <Text style={styles.metaText}>📅 Valid till {exp}</Text>}
+                </View>
+                <View style={styles.btnRow}>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => decide(p.id, false)} disabled={busy === p.id}>
+                    <X size={15} color="#DC2626" /><Text style={styles.rejectText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.approveBtn} onPress={() => decide(p.id, true)} disabled={busy === p.id}>
+                    {busy === p.id ? <ActivityIndicator size="small" color="#fff" /> : (
+                      <><ShieldCheck size={15} color="#FFFFFF" /><Text style={styles.approveText}>Approve</Text></>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
-              <Text style={styles.cardType}>{item.type}</Text>
-              <View style={styles.cardMeta}>
-                <Text style={styles.metaText}>📍 Area: {item.area}</Text>
-                <Text style={styles.metaText}>👤 Applicant: {item.applicant}</Text>
-              </View>
-
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.rejectButton]}
-                  onPress={() => handleAction(item.id, false)}
-                >
-                  <X size={16} color="#DC2626" style={{ marginRight: 4 }} />
-                  <Text style={styles.rejectText}>Reject</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.approveButton]}
-                  onPress={() => handleAction(item.id, true)}
-                >
-                  <Check size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.approveText}>Approve</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F4F7FC",
-  },
-  headerBar: {
-    height: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0B3D91",
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#63739B",
-    textTransform: "uppercase",
-    marginBottom: 16,
-    letterSpacing: 0.5,
-  },
-  emptyBox: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#2D3748",
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: "#718096",
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 16,
-    marginBottom: 12,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  cardId: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#63739B",
-  },
-  pendingBadge: {
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  pendingText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#D97706",
-    textTransform: "uppercase",
-  },
-  cardType: {
-    fontSize: 15,
-    color: "#2D3748",
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  cardMeta: {
-    borderBottomWidth: 1,
-    borderColor: "#EDF2F7",
-    paddingBottom: 10,
-    marginBottom: 12,
-  },
-  metaText: {
-    fontSize: 12,
-    color: "#718096",
-    marginBottom: 4,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    height: 38,
-    borderRadius: 8,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  rejectButton: {
-    borderColor: "#FEB2B2",
-    backgroundColor: "#FFF5F5",
-  },
-  approveButton: {
-    borderColor: "#10B981",
-    backgroundColor: "#10B981",
-  },
-  rejectText: {
-    color: "#DC2626",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  approveText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+  container: { flex: 1, backgroundColor: "#F4F7FC" },
+  headerBar: { height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 16 },
+  backButton: { padding: 8 },
+  headerTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "700", color: "#0B3D91" },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  sectionTitle: { fontSize: 13, fontWeight: "800", color: "#63739B", textTransform: "uppercase", marginBottom: 16, letterSpacing: 0.5 },
+  emptyBox: { backgroundColor: "#FFFFFF", borderRadius: 20, borderWidth: 1, borderColor: "#E2E8F0", padding: 32, alignItems: "center", justifyContent: "center", marginTop: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#2D3748", marginBottom: 6 },
+  emptyText: { fontSize: 13, color: "#718096", textAlign: "center", lineHeight: 18 },
+  card: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#E2E8F0", padding: 16, marginBottom: 12 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  cardId: { fontSize: 12, fontWeight: "800", color: "#63739B" },
+  pendBadge: { backgroundColor: "#FFF7ED", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  pendText: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: "#EA580C" },
+  cardDesc: { fontSize: 14, color: "#2D3748", fontWeight: "600", lineHeight: 20, marginBottom: 10 },
+  cardMeta: { flexDirection: "row", justifyContent: "space-between", borderBottomWidth: 1, borderColor: "#EDF2F7", paddingBottom: 10, marginBottom: 12 },
+  metaText: { fontSize: 12, color: "#718096" },
+  btnRow: { flexDirection: "row", gap: 10 },
+  rejectBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, height: 40, borderRadius: 10, backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FCA5A5" },
+  rejectText: { color: "#DC2626", fontSize: 13, fontWeight: "700" },
+  approveBtn: { flex: 1.4, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, height: 40, borderRadius: 10, backgroundColor: "#0B3D91" },
+  approveText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 });

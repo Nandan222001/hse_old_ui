@@ -58,14 +58,14 @@ export default function ReportsScreen({ navigation }: any) {
   const { incidents, isLoading, fetchIncidents } = useIncidents();
 
   useEffect(() => {
-    fetchIncidents();
+    fetchIncidents({ mine: true });
 
     const unsubscribe = navigation.addListener('focus', () => {
-      fetchIncidents();
+      fetchIncidents({ mine: true });
     });
 
     const interval = setInterval(() => {
-      fetchIncidents();
+      fetchIncidents({ mine: true });
     }, 5000);
 
     return () => {
@@ -74,7 +74,7 @@ export default function ReportsScreen({ navigation }: any) {
     };
   }, [navigation]);
 
-  const onRefresh = useCallback(() => { fetchIncidents(); }, []);
+  const onRefresh = useCallback(() => { fetchIncidents({ mine: true }); }, []);
 
   return (
     <ScreenLayout>

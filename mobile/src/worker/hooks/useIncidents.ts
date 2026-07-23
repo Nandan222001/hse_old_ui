@@ -7,7 +7,7 @@ export function useIncidents() {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchIncidents = useCallback(async (params?: { type?: string; status?: string }) => {
+  const fetchIncidents = useCallback(async (params?: { type?: string; status?: string; mine?: boolean }) => {
     setLoading(true);
     try {
       const res = await incidentService.getIncidents(params);

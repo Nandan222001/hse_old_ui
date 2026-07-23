@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, RefreshControl,
@@ -8,6 +8,7 @@ import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
 import { useMySubmissions } from '../hooks/useMySubmissions';
+import { assignedTaskService, AssignedTaskListItem } from '../services/assignedTaskService';
 
 const CHECKLIST_LABELS: Record<string, string> = {
   worker_pre_shift: 'Pre-Shift Safety Check',
@@ -32,10 +33,18 @@ export default function TasksScreen({ navigation }: any) {
   } = useMySubmissions();
   const [search, setSearch] = useState('');
 
+  // Tasks the supervisor assigned to this worker (with a custom checklist to fill).
+  const [assignedTasks, setAssignedTasks] = useState<AssignedTaskListItem[]>([]);
+  const loadAssigned = useCallback(() => {
+    assignedTaskService.list().then(setAssignedTasks).catch(() => {});
+  }, []);
+  useEffect(() => { loadAssigned(); }, [loadAssigned]);
+
   const onRefresh = useCallback(() => {
     refetch();
     refetchSubs();
-  }, [refetch, refetchSubs]);
+    loadAssigned();
+  }, [refetch, refetchSubs, loadAssigned]);
 
   // Mock checklist details for custom UI presentation
   const getSubText = (title: string) => {
@@ -108,9 +117,6 @@ export default function TasksScreen({ navigation }: any) {
               onChangeText={setSearch}
             />
           </View>
-          <TouchableOpacity style={styles.newBtn} onPress={() => navigation.navigate('SafetyChecklist')}>
-            <Text style={styles.newBtnText}>+ New Task</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Filters */}
@@ -132,6 +138,55 @@ export default function TasksScreen({ navigation }: any) {
             <Text style={styles.clearAllText}>Clear all</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Tasks assigned by supervisor (with checklist to fill) */}
+        {assignedTasks.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Assigned by Supervisor</Text>
+              <Text style={styles.sectionCount}>{assignedTasks.length}</Text>
+            </View>
+            <View style={styles.assignedList}>
+              {assignedTasks.map((t) => {
+                const filled = t.my_status === 'filled';
+                const pc = getPriorityColor(t.priority);
+                return (
+                  <TouchableOpacity
+                    key={`at-${t.id}`}
+                    style={styles.assignedCard}
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate('AssignedTaskFill', { taskId: t.id })}
+                  >
+                    <View style={styles.assignedTop}>
+                      <Text style={styles.assignedTitle} numberOfLines={1}>{t.title}</Text>
+                      <View style={[styles.priorityBadge, { backgroundColor: pc.bg }]}>
+                        <Text style={[styles.priorityText, { color: pc.text }]}>{pc.label}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.assignedMeta}>
+                      <Icon name="user" size={12} color={Colors.textMuted} style={{ marginRight: 4 }} />
+                      <Text style={styles.metaText}>By {t.assigned_by_name}</Text>
+                      {!!t.location && (
+                        <>
+                          <Icon name="map-pin" size={12} color={Colors.textMuted} style={{ marginLeft: 10, marginRight: 4 }} />
+                          <Text style={styles.metaText} numberOfLines={1}>{t.location}</Text>
+                        </>
+                      )}
+                    </View>
+                    <View style={styles.assignedFooter}>
+                      <View style={[styles.statusPill, filled ? styles.statusFilled : styles.statusPending]}>
+                        <Text style={[styles.statusPillText, { color: filled ? '#2E7D32' : '#B7791F' }]}>
+                          {filled ? '✓ Filled' : 'Pending — tap to fill'}
+                        </Text>
+                      </View>
+                      <Icon name="chevron-right" size={16} color="#94A3B8" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         {/* My Submitted Checklists */}
         <View style={styles.sectionHeader}>
@@ -239,16 +294,8 @@ export default function TasksScreen({ navigation }: any) {
           </View>
         )}
 
-        <View style={{ height: 80 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
-
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('SafetyChecklist')}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
     </ScreenLayout>
   );
 }
@@ -405,6 +452,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
   },
+  assignedList: { gap: 10, marginBottom: 24 },
+  assignedCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#DBEAFE',
+  },
+  assignedTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  assignedTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: '#0F172A', marginRight: 8 },
+  assignedMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  assignedFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  statusPending: { backgroundColor: '#FEF3C7' },
+  statusFilled: { backgroundColor: '#E8F5E9' },
+  statusPillText: { fontSize: 12, fontWeight: '700' },
   submissionsList: {
     gap: 10,
     marginBottom: 24,

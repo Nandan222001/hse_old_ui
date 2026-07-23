@@ -9,6 +9,7 @@ from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -139,20 +140,20 @@ def worker_my_reports(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Worker sees only their own reported incidents."""
-    # Find employee ID for current user
-    reporter = (
-        db.query(Employee)
-        .filter(Employee.organisation_id == current_user.org_id)
-        .filter(Employee.full_name.ilike(f"%{current_user.username}%"))
-        .first()
-    )
-    if not reporter:
+    # Resolve the reporter's employee id via the users table (the same id that
+    # POST /worker/incidents stamps as reported_by). The old name-match lookup
+    # (full_name ILIKE username) never matched, so this always returned [].
+    reporter_emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id},
+    ).scalar()
+    if not reporter_emp_id:
         return []
 
     rows = (
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
-        .filter(Incident.reported_by == reporter.id)
+        .filter(Incident.reported_by == reporter_emp_id)
         .order_by(Incident.reported_at.desc())
         .offset(skip)
         .limit(limit)

@@ -38,6 +38,8 @@ import { SafetyObservationManagementScreen } from '../screens/SafetyObservationM
 import { InspectionManagementScreen } from '../screens/InspectionManagementScreen';
 import { AuditPreparationScreen } from '../screens/AuditPreparationScreen';
 import { CAPAManagementScreen } from '../screens/CAPAManagementScreen';
+import AssignTaskScreen from '../screens/AssignTaskScreen';
+import AddWorkerScreen from '../screens/AddWorkerScreen';
 import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
 import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
 import { RiskManagementScreen } from '../screens/RiskManagementScreen';
@@ -52,6 +54,7 @@ import { SiteMonitoringOverviewScreen } from '../screens/SiteMonitoringOverviewS
 // ==========================================
 import WorkerDashboardScreen from '../worker/screens/DashboardScreen';
 import WorkerTasksScreen from '../worker/screens/TasksScreen';
+import AssignedTaskFillScreen from '../worker/screens/AssignedTaskFillScreen';
 import WorkerPermitsScreen from '../worker/screens/PermitsScreen';
 import WorkerProfileScreen from '../worker/screens/ProfileScreen';
 import PerformTaskScreen from '../worker/screens/PerformTaskScreen';
@@ -88,6 +91,8 @@ function SupervisorOperationsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="OperationsHome" component={OperationsScreen} />
+      <Stack.Screen name="AssignTask" component={AssignTaskScreen} />
+      <Stack.Screen name="AddWorker" component={AddWorkerScreen} />
       <Stack.Screen name="TeamAttendance" component={TeamAttendanceScreen} />
       <Stack.Screen name="ShiftMonitoring" component={ShiftMonitoringScreen} />
       <Stack.Screen name="ToolboxTalk" component={ToolboxTalkScreen} />
@@ -304,6 +309,7 @@ export function AppNavigator() {
               <Stack.Screen name="Main" component={WorkerTabNavigator} />
               <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               <Stack.Screen name="PerformTask" component={PerformTaskScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="AssignedTaskFill" component={AssignedTaskFillScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="RaisePermit" component={RaisePermitScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />

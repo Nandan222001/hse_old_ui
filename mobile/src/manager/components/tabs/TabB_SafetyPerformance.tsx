@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { AlertTriangle, ShieldCheck, ClipboardList, Zap } from "lucide-react-native";
+import { AlertTriangle, ShieldCheck, ClipboardList, Zap, ListChecks, UserPlus } from "lucide-react-native";
 import type { ScreenProps } from "../types";
 
 export function TabB_SafetyPerformance({
@@ -62,7 +62,7 @@ export function TabB_SafetyPerformance({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionRow, { borderBottomWidth: 0 }]}
+          style={styles.actionRow}
           onPress={() => setCurrentScreen("compliance_approvals")}
         >
           <View style={[styles.iconBox, { backgroundColor: "#EFF6FF" }]}>
@@ -71,6 +71,34 @@ export function TabB_SafetyPerformance({
           <View style={styles.rowInfo}>
             <Text style={styles.rowTitle}>Compliance Sign-off</Text>
             <Text style={styles.rowDesc}>{pendingCapa} CAPA closures needing validation</Text>
+          </View>
+          <Zap size={16} color="#A0AEC0" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionRow}
+          onPress={() => setCurrentScreen("assigned_tasks")}
+        >
+          <View style={[styles.iconBox, { backgroundColor: "#E0F2F1" }]}>
+            <ListChecks size={20} color="#12B8A6" />
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowTitle}>Assigned Tasks</Text>
+            <Text style={styles.rowDesc}>Supervisor tasks — view responses & edit checklist</Text>
+          </View>
+          <Zap size={16} color="#A0AEC0" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionRow, { borderBottomWidth: 0 }]}
+          onPress={() => setCurrentScreen("add_supervisor")}
+        >
+          <View style={[styles.iconBox, { backgroundColor: "#EEF2FF" }]}>
+            <UserPlus size={20} color="#2563EB" />
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={styles.rowTitle}>Add Supervisor</Text>
+            <Text style={styles.rowDesc}>Create a supervisor account for your team</Text>
           </View>
           <Zap size={16} color="#A0AEC0" />
         </TouchableOpacity>
