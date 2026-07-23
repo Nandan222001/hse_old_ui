@@ -72,8 +72,11 @@ function formatDueDate(dateStr: string | null): string {
 
 function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold?: string }>) {
   const angle = Math.round((Math.max(0, Math.min(value, 100)) / 100) * 240);
+  const blueEnd = Math.min(angle, 140);
+  const cyanEnd = Math.min(angle, 205);
+  const yellowEnd = Math.min(angle, 240);
   const ringStyle = {
-    background: `conic-gradient(from 150deg, #4F62B8 0deg 140deg, #3AAFC9 140deg 205deg, #F1B435 205deg 240deg, #E5E7EB 240deg 360deg)`,
+    background: `conic-gradient(from 150deg, #4F62B8 0deg ${blueEnd}deg, #3AAFC9 ${blueEnd}deg ${cyanEnd}deg, #F1B435 ${cyanEnd}deg ${yellowEnd}deg, #E5E7EB ${yellowEnd}deg 360deg)`,
   };
 
   return (

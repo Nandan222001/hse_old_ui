@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, ChevronRight, Moon, Sun, LogOut, FileBarChart, Settings as SettingsIcon, BarChart3, History, Users, Database, Menu, AlertTriangle, Clock, X } from "lucide-react";
+import { Bell, ChevronDown, ChevronRight, Moon, Sun, LogOut, Settings as SettingsIcon, Menu, AlertTriangle, Clock, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
@@ -40,15 +40,11 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showReportsMenu, setShowReportsMenu] = useState(false);
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [notifItems, setNotifItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const menuRef = useRef<HTMLDivElement>(null);
-  const reportsMenuRef = useRef<HTMLDivElement>(null);
-  const settingsMenuRef = useRef<HTMLDivElement>(null);
   const notifMenuRef = useRef<HTMLDivElement>(null);
 
   const currentPage = breadcrumbMap[location.pathname] || "Dashboard";
@@ -91,8 +87,6 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowUserMenu(false);
-      if (reportsMenuRef.current && !reportsMenuRef.current.contains(e.target as Node)) setShowReportsMenu(false);
-      if (settingsMenuRef.current && !settingsMenuRef.current.contains(e.target as Node)) setShowSettingsMenu(false);
       if (notifMenuRef.current && !notifMenuRef.current.contains(e.target as Node)) setShowNotifMenu(false);
     }
     document.addEventListener("mousedown", handleClick);
@@ -131,63 +125,6 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
 
       {/* Right side */}
       <div className="ml-auto flex items-center gap-2 md:gap-3">
-
-        {/* Reports Dropdown */}
-        <div className="relative hidden lg:block" ref={reportsMenuRef}>
-          <button
-            onClick={() => setShowReportsMenu(!showReportsMenu)}
-            className="flex items-center gap-1.5 p-2 rounded-lg transition-colors hover:bg-[#F3F7FF] text-[13px] font-medium text-gray-700"
-            style={darkMode ? { color: '#F0F4F0' } : {}}
-          >
-            <FileBarChart className="w-[18px] h-[18px]" style={{ color: darkMode ? '#AFC4EE' : '#4A5568' }} />
-            Reports
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-          {showReportsMenu && (
-            <div
-              className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg border py-2 z-50"
-              style={{ background: darkMode ? '#111811' : '#ffffff', borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}
-            >
-              <button onClick={() => { navigate("/analytics"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
-                <BarChart3 className="w-4 h-4" /> Analytics
-              </button>
-              <button onClick={() => { navigate("/analytics?tab=custom"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
-                <FileBarChart className="w-4 h-4" /> Reports
-              </button>
-              <button onClick={() => { navigate("/compliance"); setShowReportsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
-                <History className="w-4 h-4" /> Audit Trail
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Settings Dropdown */}
-        <div className="relative hidden lg:block" ref={settingsMenuRef}>
-          <button
-            onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-            className="flex items-center gap-1.5 p-2 rounded-lg transition-colors hover:bg-[#F3F7FF] text-[13px] font-medium text-gray-700"
-            style={darkMode ? { color: '#F0F4F0' } : {}}
-          >
-            <SettingsIcon className="w-[18px] h-[18px]" style={{ color: darkMode ? '#AFC4EE' : '#4A5568' }} />
-            Settings
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-          {showSettingsMenu && (
-            <div
-              className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg border py-2 z-50"
-              style={{ background: darkMode ? '#111811' : '#ffffff', borderColor: darkMode ? '#1E2E1E' : '#E2E8E2' }}
-            >
-              <button onClick={() => { navigate("/users"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
-                <Users className="w-4 h-4" /> Handle Users
-              </button>
-              <button onClick={() => { navigate("/settings?tab=knowledge"); setShowSettingsMenu(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors hover:bg-gray-50 dark:hover:bg-[#1A241A]" style={{ color: darkMode ? '#F0F4F0' : '#4A5568' }}>
-                <Database className="w-4 h-4" /> Knowledge Base
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="hidden h-6 w-px mx-1 md:block" style={{ background: darkMode ? '#1E3663' : '#DBE7FF' }} />
 
         {/* Dark mode toggle */}
         <button
