@@ -11,6 +11,7 @@ from app.config.database import get_db
 from app.config.settings import get_settings
 from app.core.dependencies import get_current_user, CurrentUser
 from app.models.app_role import AppRole
+from app.models.employee import Employee
 from app.models.organisation import Organisation
 from app.models.organisation_invite import OrganisationInvite
 from app.models.user import User
@@ -25,15 +26,15 @@ logger = get_logger(__name__)
 _ALPHABET = string.ascii_letters + string.digits + "!@#$%"
 
 # Roles that org admin can assign (cannot create another admin or superadmin)
-INVITABLE_ROLES = {"safety_manager", "supervisor", "operator", "viewer"}
+INVITABLE_ROLES = {"safety_manager", "supervisor", "operator", "auditor", "viewer"}
 
 # Who can invite whom — mirrors the org hierarchy story: Admin invites the HSE
 # Manager (safety_manager); the HSE Manager then invites Supervisors (and can
 # also add operators/viewers directly). Supervisors don't invite via email —
 # they add Workers through the mobile app's /team/add-worker flow instead.
 INVITE_PERMISSIONS = {
-    "admin": {"safety_manager", "supervisor", "operator", "viewer"},
-    "safety_manager": {"supervisor", "operator", "viewer"},
+    "admin": {"safety_manager", "supervisor", "operator", "auditor", "viewer"},
+    "safety_manager": {"supervisor", "operator", "auditor", "viewer"},
 }
 
 
@@ -142,6 +143,19 @@ def invite_user(
     temp_password = _gen_password()
     password_hash = bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode()
 
+    # Create the linked HR/employee record too. Without it an invited user has no
+    # employees row, so they never show up in employee-based views — supervisors
+    # can't see or assign tasks to them, and /employees/me has nothing to return.
+    # This mirrors what /team/add-worker already does.
+    employee = Employee(
+        full_name=name,
+        organisation_id=org_id,
+        employment_type="Full-time",
+        active_status="Active",
+    )
+    db.add(employee)
+    db.flush()  # populate employee.id for the FK below
+
     user = User(
         username=username,
         full_name=name,
@@ -149,6 +163,7 @@ def invite_user(
         password_hash=password_hash,
         app_role_id=app_role.id,
         organisation_id=org_id,
+        employee_id=employee.id,
         is_active=True,
     )
     db.add(user)

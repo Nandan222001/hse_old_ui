@@ -1309,9 +1309,18 @@ def get_supervisor_shift_status(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     org = current_user.org_id
-    total = db.execute(text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o"), {"o": org}).scalar() or 0
+    # A supervisor's "team" = workers + supervisors of the same org only.
+    # Managers, auditors, admins and viewers have employee records too but are
+    # not part of the on-site field team, so they are excluded from these counts.
+    base = (
+        "FROM employees e "
+        "JOIN users u ON u.employee_id = e.id "
+        "JOIN app_roles ar ON ar.id = u.app_role_id "
+        "WHERE e.organisation_id = :o AND LOWER(ar.name) IN ('operator', 'supervisor')"
+    )
+    total = db.execute(text("SELECT COUNT(*) " + base), {"o": org}).scalar() or 0
     active = db.execute(
-        text("SELECT COUNT(*) FROM employees WHERE organisation_id=:o AND (active_status IS NULL OR active_status='Active')"),
+        text("SELECT COUNT(*) " + base + " AND (e.active_status IS NULL OR e.active_status='Active')"),
         {"o": org},
     ).scalar() or 0
     return {"total": total, "logged_in": active, "pending": max(0, total - active), "is_live": total > 0}

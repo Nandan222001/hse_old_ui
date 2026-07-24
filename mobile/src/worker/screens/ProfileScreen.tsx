@@ -9,7 +9,7 @@ import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useProfilePhoto } from '../hooks/useProfilePhoto';
 import { Toast, ToastKind } from '../components/feedback/Toast';
-import { authService } from '../services/authService';
+import { authService, EmployeeProfile } from '../services/authService';
 import { sosService } from '../services/sosService';
 
 export default function ProfileScreen({ navigation }: any) {
@@ -19,14 +19,18 @@ export default function ProfileScreen({ navigation }: any) {
 
   const { change: changePhoto, uploading } = useProfilePhoto();
   const [photo, setPhoto] = useState<string | null>(null);
+  const [profile, setProfile] = useState<EmployeeProfile | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: ToastKind } | null>(null);
 
   useEffect(() => {
     let alive = true;
+    // /employees/me is the authoritative record for the signed-in user. Use it for the
+    // whole header (name/role/department), not just the photo — relying only on the login
+    // `user` object showed a stale/placeholder identity ("Alex Safety") after re-login.
     authService
       .getMyEmployeeProfile()
-      .then(p => { if (alive) setPhoto(p.photo); })
-      .catch(() => { /* falls back to the placeholder avatar */ });
+      .then(p => { if (alive) { setPhoto(p.photo); setProfile(p); } })
+      .catch(() => { /* falls back to the login user / placeholder avatar */ });
     return () => { alive = false; };
   }, []);
 
@@ -41,11 +45,11 @@ export default function ProfileScreen({ navigation }: any) {
     }, !!photo);
   }, [changePhoto, photo]);
 
-  const name       = user?.name       || 'Alex Safety';
-  const empId      = user?.employee_id || '99402';
-  const role       = user?.role        || 'Senior Site Supervisor';
-  const site       = user?.site        || 'Site Alpha, Chicago';
-  const department = user?.department  || 'Infrastructure & Logistics';
+  const name       = profile?.full_name       || user?.name       || 'Worker';
+  const empId      = profile?.username         || user?.employee_id || '—';
+  const role       = profile?.role_name        || user?.role        || 'Worker';
+  const site       = user?.site                || 'Site';
+  const department = profile?.department_name  || user?.department  || '—';
 
   const handleSOS = () => {
     Alert.alert(

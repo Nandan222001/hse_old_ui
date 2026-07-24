@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { auditService } from '../services/auditService';
 
 interface ChecklistItem {
   id: number;
@@ -77,6 +78,8 @@ export function AuditChecklistScreen({ route, navigation }: any) {
     Alert.alert('Save Draft', 'Audit draft saved successfully.', [{ text: 'OK' }]);
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = () => {
     Alert.alert(
       'Submit Audit',
@@ -85,15 +88,34 @@ export function AuditChecklistScreen({ route, navigation }: any) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Submit',
-          onPress: () => {
-            if (audit) {
-              audit.status = 'completed';
+          onPress: async () => {
+            if (!audit?.id) {
+              Alert.alert('Error', 'This audit has no id — reopen it from Assigned Audits.');
+              return;
             }
-            Alert.alert(
-              'Success',
-              'Audit checklist submitted successfully!',
-              [{ text: 'OK', onPress: () => navigation.navigate('AssignedAudits') }]
-            );
+            setSubmitting(true);
+            try {
+              const res = await auditService.submit(
+                Number(audit.id),
+                items.map((i) => ({
+                  id: i.id,
+                  title: i.title,
+                  question: i.question,
+                  response: i.response,
+                  remarks: i.remarks,
+                  photo_attached: i.photoAttached,
+                })),
+              );
+              Alert.alert(
+                'Success',
+                `Audit submitted. Compliance score: ${res.compliance_score ?? '—'}%`,
+                [{ text: 'OK', onPress: () => navigation.navigate('AssignedAudits') }],
+              );
+            } catch (e: any) {
+              Alert.alert('Submit failed', e?.response?.data?.detail ?? 'Could not reach the server.');
+            } finally {
+              setSubmitting(false);
+            }
           },
         },
       ]

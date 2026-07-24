@@ -30,16 +30,25 @@ export const authService = {
     try {
       const res = await apiClient.post<LoginResponse>(ENDPOINTS.AUTH.LOGIN, apiPayload);
       const resData = res.data;
-      
-      // Ensure role property exists in user model
-      if (resData.user) {
-        if (!resData.user.role) {
-          resData.user.role =
-            role === 'supervisor' ? 'Supervisor'
-            : role === 'auditor' ? 'Auditor'
-            : role === 'manager' ? 'Manager'
-            : 'Worker';
-        }
+
+      // The backend returns the user as { user_id, username, full_name, role, ... },
+      // but the app's User shape needs { id, employee_id, name, role }. Without this
+      // mapping `user.name` is undefined and every profile screen shows its hardcoded
+      // placeholder ("Alex Safety") instead of the person who actually logged in.
+      const raw = resData.user as any;
+      if (raw) {
+        const defaultRole =
+          role === 'supervisor' ? 'Supervisor'
+          : role === 'auditor' ? 'Auditor'
+          : role === 'manager' ? 'Manager'
+          : 'Worker';
+        resData.user = {
+          ...raw,
+          id: String(raw.id ?? raw.user_id ?? ''),
+          employee_id: raw.employee_id ?? raw.username ?? '',
+          name: raw.name ?? raw.full_name ?? raw.username ?? defaultRole,
+          role: raw.role ?? defaultRole,
+        };
       }
 
       await TokenStorage.setTokens(resData.access_token, resData.refresh_token);

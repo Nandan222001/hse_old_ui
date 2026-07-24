@@ -7,10 +7,16 @@ export const API_BASE_URL =
 
 export const API_TIMEOUT = 15000;
 
+// Single source of truth with the shared session store (src/constants/config.ts).
+// The worker apiClient MUST read the same AsyncStorage entries that login writes,
+// otherwise `/employees/me` authenticates with a stale token from a previous
+// worker session and returns someone else's profile. Keeping these keys distinct
+// (the old worker_* keys) required error-prone mirroring on every session change
+// (login/changePassword/restoreSession) — sharing the keys removes that whole class of bug.
 export const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'worker_access_token',
-  REFRESH_TOKEN: 'worker_refresh_token',
-  USER: 'worker_user',
+  ACCESS_TOKEN: 'sup_access_token',
+  REFRESH_TOKEN: 'sup_refresh_token',
+  USER: 'sup_user',
 } as const;
 
 export const APP_CONFIG = {

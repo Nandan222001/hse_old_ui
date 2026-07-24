@@ -55,13 +55,22 @@ def assignable_workers(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    """Active employees in the org the supervisor can assign a task to."""
+    """Active *workers* in the org the supervisor can assign a task to.
+
+    Tasks are assigned to workers, so only employees whose login carries the
+    'operator' (worker) role are listed — managers, supervisors and auditors are
+    excluded even though they also have employee records.
+    """
     rows = db.execute(
         text(
             "SELECT e.id, e.full_name, d.department_name AS department "
-            "FROM employees e LEFT JOIN departments d ON e.department_id = d.id "
+            "FROM employees e "
+            "JOIN users u ON u.employee_id = e.id "
+            "JOIN app_roles ar ON ar.id = u.app_role_id "
+            "LEFT JOIN departments d ON e.department_id = d.id "
             "WHERE e.organisation_id = :org "
             "AND (e.active_status IS NULL OR e.active_status = 'Active') "
+            "AND LOWER(ar.name) = 'operator' "
             "ORDER BY e.full_name"
         ),
         {"org": current_user.org_id},

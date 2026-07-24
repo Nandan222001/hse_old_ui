@@ -12,6 +12,7 @@ import { LoadingScreen } from '../components';
 // 1. MANAGER SCREEN
 // ==========================================
 import { ManagerAppRoot } from '../manager/ManagerAppRoot';
+import { AuditorAppRoot } from '../auditor/AuditorAppRoot';
 
 // ==========================================
 // 2. SUPERVISOR SCREENS
@@ -277,6 +278,11 @@ export function AppNavigator() {
             // MANAGER NAVIGATION STACK
             // ==========================================
             <Stack.Screen name="ManagerRoot" component={ManagerAppRoot} />
+          ) : currentRole === 'auditor' ? (
+            // ==========================================
+            // AUDITOR NAVIGATION STACK
+            // ==========================================
+            <Stack.Screen name="AuditorRoot" component={AuditorAppRoot} />
           ) : currentRole === 'supervisor' ? (
             // ==========================================
             // SUPERVISOR NAVIGATION STACK

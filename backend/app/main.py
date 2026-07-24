@@ -43,6 +43,7 @@ from app.controllers import (
     risk_workflow as risk_workflow_controller,
     permit_workflow as permit_workflow_controller,
     hazard_register as hazard_register_controller,
+    audit as audit_controller,
 )
 
 settings = get_settings()
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     app.include_router(team_controller.router, prefix=prefix)
     app.include_router(incident_workflow_controller.router, prefix=prefix)
     app.include_router(settings_controller.router, prefix=prefix)
+    app.include_router(audit_controller.router, prefix=prefix)
     # Near miss / unsafe act / risk each get their own table and their own workflow.
     app.include_router(near_miss_workflow_controller.router, prefix=prefix)
     app.include_router(unsafe_act_workflow_controller.router, prefix=prefix)

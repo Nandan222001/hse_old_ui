@@ -8,6 +8,8 @@ Backend selection via EMAIL_BACKEND env var:
 
 import logging
 import smtplib
+import socket
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
@@ -15,6 +17,20 @@ from typing import Optional
 from app.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Transient failures worth retrying: DNS blips ("Name or service not known" =
+# socket.gaierror), dropped connections and timeouts. A single retry avoids the
+# invite email silently dropping when the host briefly can't reach smtp.gmail.com.
+_SMTP_RETRIABLE = (
+    socket.gaierror,
+    smtplib.SMTPServerDisconnected,
+    smtplib.SMTPConnectError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+_SMTP_MAX_ATTEMPTS = 3
+_SMTP_RETRY_DELAY_SEC = 2
 
 
 def _resolve_backend(s) -> str:
@@ -62,13 +78,13 @@ def _send_via_smtp(s, to_email: str, to_name: Optional[str], subject: str, html_
     from_email = s.smtp_from_email or s.sendgrid_from_email or "noreply@hse-platform.com"
     from_name  = s.smtp_from_name  or s.sendgrid_from_name  or "HSE Platform"
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{from_name} <{from_email}>"
-        msg["To"] = f"{to_name} <{to_email}>" if to_name else to_email
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{from_name} <{from_email}>"
+    msg["To"] = f"{to_name} <{to_email}>" if to_name else to_email
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
 
+    def _attempt() -> None:
         if s.smtp_use_ssl:
             server = smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, timeout=15)
         else:
@@ -77,19 +93,44 @@ def _send_via_smtp(s, to_email: str, to_name: Optional[str], subject: str, html_
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
+        try:
+            # smtp_user is the correct field name (maps to SMTP_USER env var)
+            username = s.smtp_user or s.smtp_username
+            if username and s.smtp_password:
+                server.login(username, s.smtp_password)
+            server.sendmail(from_email, [to_email], msg.as_string())
+        finally:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
-        # smtp_user is the correct field name (maps to SMTP_USER env var)
-        username = s.smtp_user or s.smtp_username
-        if username and s.smtp_password:
-            server.login(username, s.smtp_password)
-
-        server.sendmail(from_email, [to_email], msg.as_string())
-        server.quit()
-        logger.info("SMTP: sent to %s via %s:%s as <%s>", to_email, s.smtp_host, s.smtp_port, from_email)
-        return True
-    except Exception as exc:
-        logger.error("SMTP send failed to %s: %s", to_email, exc, exc_info=True)
-        return False
+    for attempt in range(1, _SMTP_MAX_ATTEMPTS + 1):
+        try:
+            _attempt()
+            logger.info(
+                "SMTP: sent to %s via %s:%s as <%s> (attempt %s)",
+                to_email, s.smtp_host, s.smtp_port, from_email, attempt,
+            )
+            return True
+        except _SMTP_RETRIABLE as exc:
+            if attempt < _SMTP_MAX_ATTEMPTS:
+                logger.warning(
+                    "SMTP transient error to %s (attempt %s/%s): %s — retrying in %ss",
+                    to_email, attempt, _SMTP_MAX_ATTEMPTS, exc, _SMTP_RETRY_DELAY_SEC,
+                )
+                time.sleep(_SMTP_RETRY_DELAY_SEC)
+                continue
+            logger.error(
+                "SMTP send failed to %s after %s attempts: %s",
+                to_email, _SMTP_MAX_ATTEMPTS, exc, exc_info=True,
+            )
+            return False
+        except Exception as exc:
+            # Non-transient (auth error, malformed message, etc.) — no point retrying.
+            logger.error("SMTP send failed to %s: %s", to_email, exc, exc_info=True)
+            return False
+    return False
 
 
 def send_email(

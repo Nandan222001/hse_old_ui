@@ -18,6 +18,7 @@ from app.models.near_miss import NearMiss
 from app.models.unsafe_act import UnsafeAct
 from app.models.risk_report import RiskReport
 from app.models.safety_walk import SafetyWalk
+from app.models.audit import Audit
 from app.models.capa_action import CapaAction
 from app.models.shift_schedule import ShiftSchedule
 from app.models.app_role import AppRole

@@ -55,11 +55,14 @@ interface OrgUser {
   created_at: string;
 }
 
+// value = backend app_role name; the mobile worker app authenticates the
+// "operator" role, so a "Worker" invite must keep value: "operator".
 const ORG_ROLES = [
   { value: "safety_manager", label: "HSE Manager" },
   { value: "supervisor",     label: "Supervisor" },
   { value: "operator",       label: "Worker" },
-  { value: "viewer",         label: "Auditor" },
+  { value: "auditor",        label: "Auditor" },
+  { value: "viewer",         label: "Viewer" },
 ];
 
 // Mirrors backend INVITE_PERMISSIONS in org_users.py: Admin invites the HSE
@@ -68,8 +71,8 @@ const ORG_ROLES = [
 // "safety_manager" -> "HSE Manager"), not the raw backend role string —
 // currentUser.role on the frontend is always the mapped display name.
 const INVITE_TARGETS_BY_ROLE: Record<string, string[]> = {
-  "admin": ["safety_manager", "supervisor", "operator", "viewer"],
-  "hse manager": ["supervisor", "operator", "viewer"],
+  "admin": ["safety_manager", "supervisor", "operator", "auditor", "viewer"],
+  "hse manager": ["supervisor", "operator", "auditor", "viewer"],
 };
 
 // ── Shared UI helpers ─────────────────────────────────────────────────────────

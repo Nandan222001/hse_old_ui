@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,86 +9,78 @@ import {
   SafeAreaView,
   TextInput,
   Image,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
+import { auditService, Audit as ApiAudit } from '../services/auditService';
 
 interface Audit {
-  id: string;
+  id: number;
   title: string;
   checklist_type: string;
   site: string;
   dept: string;
   dueDate: string;
   time: string;
-  status: 'overdue' | 'in_progress' | 'scheduled';
+  status: 'overdue' | 'in_progress' | 'scheduled' | 'completed';
   priority: 'High' | 'Med' | 'Low';
   progress?: number;
 }
 
-const MOCK_AUDITS: Audit[] = [
-  {
-    id: 'Audit #88219',
-    title: 'ISO 45001 Internal Audit',
-    checklist_type: 'Safety Management System',
-    site: 'Main Plant Alpha',
-    dept: 'Operations',
-    dueDate: 'Oct 12, 2023',
-    time: '09:00 AM',
-    status: 'overdue',
-    priority: 'High',
-  },
-  {
-    id: 'Audit #88220',
-    title: 'Monthly Fire Safety Inspection',
-    checklist_type: 'Compliance Check',
-    site: 'Logistics Hub',
-    dept: 'Warehousing',
-    dueDate: 'Oct 28, 2023',
-    time: '01:30 PM',
-    status: 'in_progress',
-    priority: 'Med',
-    progress: 65,
-  },
-  {
-    id: 'Audit #88221',
-    title: 'PPE Compliance Walkthrough',
-    checklist_type: 'Observational Audit',
-    site: 'South Refinery',
-    dept: 'Maintenance',
-    dueDate: 'Nov 05, 2023',
-    time: '04:00 PM',
-    status: 'scheduled',
-    priority: 'Low',
-  },
-  {
-    id: 'Audit #88222',
-    title: 'Hazardous Waste Audit',
-    checklist_type: 'Environmental Check',
-    site: 'Chemical Storage',
-    dept: 'Environment',
-    dueDate: 'Nov 12, 2023',
-    time: '10:00 AM',
-    status: 'scheduled',
-    priority: 'High',
-  },
-  {
-    id: 'Audit #88223',
-    title: 'Workshop Safety Verification',
-    checklist_type: 'Industrial Safety',
-    site: 'Heavy Fab Lab',
-    dept: 'Engineering',
-    dueDate: 'Nov 01, 2023',
-    time: '11:00 AM',
-    status: 'in_progress',
-    priority: 'Med',
-    progress: 20,
-  },
-];
+/** Map a backend audit record to the card shape this screen renders. */
+function toCard(a: ApiAudit): Audit {
+  const due = a.due_date ? new Date(a.due_date) : null;
+  const pr = (a.priority || 'Med') as 'High' | 'Med' | 'Low';
+  return {
+    id: a.id,
+    title: a.title,
+    checklist_type: a.checklist_type || 'Audit',
+    site: a.site_name || '—',
+    dept: a.department || '—',
+    dueDate: due ? due.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) : '—',
+    time: due ? due.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '',
+    status: (a.status as Audit['status']) || 'scheduled',
+    priority: ['High', 'Med', 'Low'].includes(pr) ? pr : 'Med',
+    progress: a.progress ?? undefined,
+  };
+}
 
 export function AssignedAuditsScreen({ navigation }: any) {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [audits, setAudits] = useState<Audit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const rows = await auditService.listAssigned();
+      setAudits(rows.map(toCard));
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Could not load audits.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', load);
+    load();
+    return unsub;
+  }, [navigation, load]);
+
+  const onRefresh = useCallback(() => { setRefreshing(true); load(); }, [load]);
+
+  const visibleAudits = audits.filter((a) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return [a.title, a.site, a.dept, a.checklist_type].some((f) => (f || '').toLowerCase().includes(q));
+  });
   
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -129,7 +121,11 @@ export function AssignedAuditsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#94A3B8" style={styles.searchIcon} />
@@ -175,8 +171,21 @@ export function AssignedAuditsScreen({ navigation }: any) {
         </View>
 
         {/* Audit Cards List */}
+        {loading && (
+          <View style={{ paddingVertical: 40 }}>
+            <ActivityIndicator color="#2563EB" />
+          </View>
+        )}
+        {!loading && error && (
+          <Text style={{ textAlign: 'center', color: '#EF4444', paddingVertical: 24, fontWeight: '600' }}>{error}</Text>
+        )}
+        {!loading && !error && visibleAudits.length === 0 && (
+          <Text style={{ textAlign: 'center', color: '#64748B', paddingVertical: 24, fontWeight: '600' }}>
+            No audits assigned yet.
+          </Text>
+        )}
         <View style={styles.cardsList}>
-          {MOCK_AUDITS.map((item) => {
+          {visibleAudits.map((item) => {
             const statusStyle = getStatusStyle(item.status);
             const priorityStyle = getPriorityStyle(item.priority);
             

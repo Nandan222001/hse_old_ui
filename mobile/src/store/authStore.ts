@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { authService } from '../services/authService';
 import { TokenStorage } from '../utils/storage';
+import { normalizeRole } from '../utils/roles';
 import type { AuthState, LoginRequest, ChangePasswordRequest } from '../types/auth.types';
 
 interface AuthStore extends AuthState {
@@ -29,11 +30,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     const roleToUse = selectedRole || 'supervisor';
     try {
       const res = await authService.login(data, roleToUse);
+      // The backend role is authoritative: a safety_manager must land in the
+      // manager app regardless of which tab was picked. Fall back to the picked
+      // role only when the backend doesn't return one.
+      const effectiveRole = normalizeRole(res.user?.role) || roleToUse;
+      await TokenStorage.setSelectedRole(effectiveRole);
       set({
         user: res.user,
         accessToken: res.access_token,
         isAuthenticated: true,
-        selectedRole: roleToUse,
+        selectedRole: effectiveRole,
         mustChangePassword: !!res.must_change_password,
         isLoading: false,
       });
@@ -79,8 +85,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const session = await authService.restoreSession();
       if (session) {
-        const storedRole = await TokenStorage.getSelectedRole() as 'manager' | 'supervisor' | 'worker' | 'auditor' | null;
-        const role = storedRole || (session.user.role?.toLowerCase() as any) || 'supervisor';
+        const storedRole = await TokenStorage.getSelectedRole();
+        // Normalise both the persisted pick and the backend role so a stored
+        // 'safety_manager'/'operator' resolves to a real mobile role instead of
+        // silently falling through to the worker stack.
+        const role = normalizeRole(storedRole) || normalizeRole(session.user.role) || 'supervisor';
         set({ user: session.user, accessToken: session.token, isAuthenticated: true, selectedRole: role });
       }
     } finally {
