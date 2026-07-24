@@ -1,5 +1,6 @@
 import { Navigate } from "react-router";
 import { useLocation } from "react-router";
+import { useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import type { ReactNode } from "react";
 import type { UiModuleLabel } from "../../context/AuthContext";
@@ -13,10 +14,20 @@ export function ProtectedRoute({
   requiredModule?: UiModuleLabel;
   hideForOnboardingScoped?: boolean;
 }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const location = useLocation();
 
-  if (!isAuthenticated) {
+  // Web is admin-only (see AuthContext.login) — but a session created before that
+  // gate existed, or restored from stale localStorage, can still carry a non-admin
+  // role. Sign those out rather than leaving the full dashboard reachable.
+  const isWebAllowedRole = Boolean(user?.isSuperAdmin) || user?.role === "Admin";
+  useEffect(() => {
+    if (isAuthenticated && !isWebAllowedRole) {
+      logout();
+    }
+  }, [isAuthenticated, isWebAllowedRole, logout]);
+
+  if (!isAuthenticated || !isWebAllowedRole) {
     return <Navigate to="/auth/login" replace />;
   }
 

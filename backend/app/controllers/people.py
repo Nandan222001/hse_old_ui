@@ -394,6 +394,12 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
 
     org_id = current_user.org_id
 
+    # Employees who already have a linked login (User.employee_id) are represented
+    # via user_result below — exclude them here so invited users don't show twice.
+    linked_employee_ids = {
+        row[0] for row in db.query(User.employee_id).filter(User.employee_id.isnot(None)).all()
+    }
+
     # Always fetch imported employees
     q = (
         db.query(Employee, Role, Department, Site)
@@ -403,6 +409,8 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
     )
     if org_id is not None:
         q = q.filter(Employee.organisation_id == org_id)
+    if linked_employee_ids:
+        q = q.filter(Employee.id.notin_(linked_employee_ids))
     rows = q.order_by(Employee.full_name.asc()).all()
 
     employee_result = [

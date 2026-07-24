@@ -27,7 +27,7 @@ class AppRolesSeeder(BaseSeeder):
             },
             {
                 "name":        "safety_manager",
-                "label":       "Safety Manager",
+                "label":       "HSE Manager",
                 "description": "Can create and approve permits, incidents, CAPA actions, and safety walks.",
                 "level":       60,
             },
@@ -39,9 +39,15 @@ class AppRolesSeeder(BaseSeeder):
             },
             {
                 "name":        "operator",
-                "label":       "Operator",
+                "label":       "Worker",
                 "description": "Can view assigned data and submit incident/near-miss reports.",
                 "level":       20,
+            },
+            {
+                "name":        "auditor",
+                "label":       "Auditor",
+                "description": "Can view assigned audits, run checklists, and submit compliance findings.",
+                "level":       30,
             },
             {
                 "name":        "viewer",

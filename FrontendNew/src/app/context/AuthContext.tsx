@@ -11,6 +11,7 @@ export type LoginResult =
   | "pending_approval"
   | "access_denied"
   | "network_error"
+  | "mobile_only"
   | "error";
 
 const ADMIN_EMAIL = import.meta.env.VITE_DEV_ADMIN_EMAIL ?? "";
@@ -769,9 +770,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!data?.access_token) return "error";
 
+      const backendRole = (data.user.role ?? "").toLowerCase();
+
+      // Web is admin-only — HSE Manager, Supervisor, Worker and Auditor accounts
+      // are meant for the mobile app, which covers all four of those roles.
+      if (backendRole !== "admin" && backendRole !== "superadmin") {
+        return "mobile_only";
+      }
+
       localStorage.setItem("hse_jwt_token", data.access_token);
 
-      const backendRole = (data.user.role ?? "").toLowerCase();
       const mappedRole = mapBackendRole(backendRole);
       const displayName = (data.user as { full_name?: string }).full_name || data.user.username;
 

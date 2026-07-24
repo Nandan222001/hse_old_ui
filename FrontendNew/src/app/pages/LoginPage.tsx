@@ -70,6 +70,8 @@ export function LoginPage() {
         setError("Network error. Check your connection and try again.");
       } else if (result === "access_denied") {
         setError("Access denied. Contact your administrator if you believe this is an error.");
+      } else if (result === "mobile_only") {
+        setError("This account is set up for the mobile app. Please sign in from the HSE Intelligence mobile app instead.");
       } else if (result === "invalid_credentials") {
         setError("Invalid email or password. Please try again.");
       } else {
