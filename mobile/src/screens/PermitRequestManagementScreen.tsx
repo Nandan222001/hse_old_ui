@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { permitWorkflowService } from '../services/permitWorkflowService';
+import { apiClient } from '../api/client';
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   requested:    { label: 'Awaiting your acknowledgement', color: '#F97316', bg: '#FFF7ED' },
@@ -15,6 +16,10 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
   const permit = route?.params?.permit;
   const [submitting, setSubmitting] = useState(false);
   const [supervisorNotes, setSupervisorNotes] = useState('');
+  const [workStartActual, setWorkStartActual] = useState('');
+  const [workEndActual, setWorkEndActual] = useState('');
+  const [deviationReported, setDeviationReported] = useState<'Yes' | 'No'>('No');
+  const [savingTimes, setSavingTimes] = useState(false);
 
   if (!permit) {
     return (
@@ -45,6 +50,26 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
       Alert.alert('Failed', e?.response?.data?.detail || 'Could not acknowledge this permit.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveActualTimes = async () => {
+    if (!workStartActual.trim() && !workEndActual.trim()) {
+      Alert.alert('Required', 'Enter at least the actual work start time.');
+      return;
+    }
+    try {
+      setSavingTimes(true);
+      await apiClient.put(`/permit-to-works/${permit.id}`, {
+        work_start_actual: workStartActual.trim() || undefined,
+        work_end_actual: workEndActual.trim() || undefined,
+        deviation_reported: deviationReported,
+      });
+      Alert.alert('Saved', 'Actual work times and deviation status recorded.');
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not save work times.');
+    } finally {
+      setSavingTimes(false);
     }
   };
 
@@ -109,6 +134,52 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
             No action needed — this permit has already moved past supervisor review.
           </Text>
         )}
+        {/* Actual work times — visible when permit is approved (active) */}
+        {ws === 'approved' && (
+          <View style={styles.timesCard}>
+            <Text style={styles.timesHeading}>Record Actual Work Times</Text>
+            <Text style={styles.timesLabel}>Actual Start (YYYY-MM-DD HH:MM)</Text>
+            <TextInput
+              style={styles.timesInput}
+              placeholder="e.g. 2026-07-26 08:30"
+              value={workStartActual}
+              onChangeText={setWorkStartActual}
+            />
+            <Text style={styles.timesLabel}>Actual End (YYYY-MM-DD HH:MM)</Text>
+            <TextInput
+              style={styles.timesInput}
+              placeholder="e.g. 2026-07-26 16:00"
+              value={workEndActual}
+              onChangeText={setWorkEndActual}
+            />
+            <Text style={styles.timesLabel}>Deviation Reported?</Text>
+            <View style={styles.devRow}>
+              <TouchableOpacity
+                style={[styles.devBtn, deviationReported === 'Yes' && styles.devBtnActive]}
+                onPress={() => setDeviationReported('Yes')}
+              >
+                <Text style={[styles.devBtnText, deviationReported === 'Yes' && styles.devBtnTextActive]}>Yes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.devBtn, deviationReported === 'No' && styles.devBtnActive]}
+                onPress={() => setDeviationReported('No')}
+              >
+                <Text style={[styles.devBtnText, deviationReported === 'No' && styles.devBtnTextActive]}>No</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={[styles.timesBtn, savingTimes && { opacity: 0.6 }]}
+              onPress={saveActualTimes}
+              disabled={savingTimes}
+            >
+              {savingTimes
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.timesBtnText}>Save Work Times</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        )}
+
         <Text style={styles.hint}>
           As Supervisor you acknowledge that you have reviewed this request. Final approval is done by the HSE Manager.
         </Text>
@@ -137,4 +208,15 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, color: '#94A3B8', marginTop: 16, lineHeight: 17, textAlign: 'center' },
   notesLabel: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6, marginTop: 4 },
   notesInput: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 10, padding: 10, fontSize: 13, color: '#2D3748', backgroundColor: '#FFFFFF', minHeight: 80, textAlignVertical: 'top', marginBottom: 12 },
+  timesCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
+  timesHeading: { fontSize: 14, fontWeight: '800', color: '#0B1C30', marginBottom: 12 },
+  timesLabel: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6, marginTop: 8 },
+  timesInput: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 10, padding: 10, fontSize: 13, color: '#2D3748', backgroundColor: '#F8FAFC', marginBottom: 4 },
+  devRow: { flexDirection: 'row', gap: 10, marginBottom: 14, marginTop: 4 },
+  devBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E0', alignItems: 'center', backgroundColor: '#FFFFFF' },
+  devBtnActive: { backgroundColor: '#004AC6', borderColor: '#004AC6' },
+  devBtnText: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  devBtnTextActive: { color: '#FFFFFF' },
+  timesBtn: { backgroundColor: '#004AC6', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+  timesBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
 });

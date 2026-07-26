@@ -7,13 +7,17 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
+import { useGPS } from '../hooks/useGPS';
 import apiClient from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
+import { hazardRegisterService, HazardRegisterItem } from '../../services/hazardRegisterService';
 
 interface Station { id: number; station_name: string; }
 
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
+  const { gpsLat, gpsLon, gpsStatus } = useGPS();
+
   const [incidentType, setIncidentType] = useState('Injury');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [location, setLocation] = useState('');
@@ -31,6 +35,12 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [hazardStillPresent, setHazardStillPresent] = useState<'Yes' | 'No'>('No');
   const [photos, setPhotos] = useState<string[]>([]);
 
+  // Hazard register picker
+  const [hazards, setHazards] = useState<HazardRegisterItem[]>([]);
+  const [hazardId, setHazardId] = useState<number | undefined>(undefined);
+  const [hazardName, setHazardName] = useState('');
+  const [hazardPickerVisible, setHazardPickerVisible] = useState(false);
+
   useEffect(() => {
     apiClient.get(ENDPOINTS.WORKING_STATIONS.LIST)
       .then((res: any) => {
@@ -42,7 +52,6 @@ export default function ReportIncidentScreen({ navigation }: any) {
         }
       })
       .catch(() => {
-        // Keep static fallback if API unreachable
         const fallback = [
           { id: 1, station_name: 'Heavy Assembly Station 1' },
           { id: 2, station_name: 'Welding Station 1' },
@@ -53,6 +62,9 @@ export default function ReportIncidentScreen({ navigation }: any) {
         setStations(fallback);
         if (!location) { setLocation(fallback[0].station_name); setLocationId(fallback[0].id); }
       });
+
+    // Load open hazards for the related-hazard picker
+    hazardRegisterService.list('open').then(h => setHazards(h)).catch(() => {});
   }, []);
 
   const handleAddPhoto = () => {
@@ -109,6 +121,9 @@ export default function ReportIncidentScreen({ navigation }: any) {
       time: new Date().toTimeString().split(' ')[0].substring(0, 5),
       location: location,
       location_station_id: locationId,
+      gps_latitude: gpsLat,
+      gps_longitude: gpsLon,
+      hazard_id: hazardId,
     } as any);
 
     if (ok) {
@@ -162,6 +177,34 @@ export default function ReportIncidentScreen({ navigation }: any) {
           <Text style={styles.dropdownValue}>{location || 'Select station...'}</Text>
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
+
+        {/* GPS Status */}
+        <View style={styles.gpsRow}>
+          <View style={[styles.gpsDot, {
+            backgroundColor: gpsStatus === 'ok' ? '#16A34A' : gpsStatus === 'unavailable' ? '#EF4444' : '#F97316',
+          }]} />
+          <Text style={styles.gpsText}>
+            {gpsStatus === 'ok'
+              ? `GPS: ${Number(gpsLat).toFixed(5)}, ${Number(gpsLon).toFixed(5)}`
+              : gpsStatus === 'unavailable'
+              ? 'GPS unavailable — location not recorded'
+              : 'Acquiring GPS…'}
+          </Text>
+        </View>
+
+        {/* Related Hazard (Optional) */}
+        <Text style={styles.inputLabel}>Related Hazard (Optional)</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setHazardPickerVisible(true)}>
+          <Text style={[styles.dropdownValue, !hazardId && { color: '#94A3B8' }]}>
+            {hazardName || 'Select a known hazard…'}
+          </Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
+        {!!hazardId && (
+          <TouchableOpacity onPress={() => { setHazardId(undefined); setHazardName(''); }} style={styles.clearHazardBtn}>
+            <Text style={styles.clearHazardText}>✕ Clear hazard link</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Description Input */}
         <Text style={styles.inputLabel}>Description</Text>
@@ -382,6 +425,58 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
             ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Hazard Picker Modal */}
+      <Modal
+        visible={hazardPickerVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setHazardPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setHazardPickerVisible(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select Related Hazard</Text>
+              <TouchableOpacity onPress={() => setHazardPickerVisible(false)}>
+                <Icon emoji="✕" style={styles.pickerCloseBtn} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {hazards.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#94A3B8', padding: 24 }}>No open hazards found.</Text>
+              ) : (
+                hazards.map(h => (
+                  <TouchableOpacity
+                    key={h.id}
+                    style={[styles.pickerItem, hazardId === h.id && styles.pickerItemActive]}
+                    onPress={() => {
+                      setHazardId(h.id);
+                      setHazardName(h.hazard_name || `Hazard #${h.id}`);
+                      setHazardPickerVisible(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pickerItemText, hazardId === h.id && styles.pickerItemTextActive]}>
+                        {h.hazard_name || `Hazard #${h.id}`}
+                      </Text>
+                      {!!h.severity && (
+                        <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>
+                          {h.severity} · {h.description ? h.description.slice(0, 50) : ''}
+                        </Text>
+                      )}
+                    </View>
+                    {hazardId === h.id && <Icon emoji="✓" style={styles.checkmarkIcon} />}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -787,5 +882,39 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '800',
     paddingHorizontal: 4,
+  },
+  gpsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: -12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  gpsDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  gpsText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
+    flex: 1,
+  },
+  clearHazardBtn: {
+    marginTop: -12,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  clearHazardText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '700',
   },
 });

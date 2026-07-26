@@ -19,6 +19,8 @@ export interface ReportIncidentRequest {
   location_station_id?: number;
   latitude?: number;
   longitude?: number;
+  gps_latitude?: string;
+  gps_longitude?: string;
   description: string;
   immediate_actions: string;
   severity: SeverityLevel;
@@ -29,6 +31,7 @@ export interface ReportIncidentRequest {
   hazard_still_present?: string;
   injured_body_part?: string;
   witnesses_json?: string[];
+  hazard_id?: number;
 }
 
 export interface ReportNearMissRequest {

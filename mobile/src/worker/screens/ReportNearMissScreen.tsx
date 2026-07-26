@@ -10,6 +10,7 @@ import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
 import { usePhotoCapture } from '../hooks/usePhotoCapture';
+import { useGPS } from '../hooks/useGPS';
 import { PotentialConsequence, NearMissCause } from '../types';
 import apiClient from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
@@ -36,6 +37,7 @@ interface Station { id: number; station_name: string; }
 export default function ReportNearMissScreen({ navigation }: any) {
   const { reportNearMiss, isLoading } = useIncidents();
   const { photoUris, attachments: photoAttachments, launch: launchPhoto, removePhoto } = usePhotoCapture();
+  const { gpsLat, gpsLon, gpsStatus } = useGPS();
 
   const [description, setDescription] = useState('');
   const [consequence, setConsequence] = useState('');
@@ -97,6 +99,8 @@ export default function ReportNearMissScreen({ navigation }: any) {
       hazard_still_present:     hazardStillPresent,
       preventative_suggestion:  suggestion.trim() || undefined,
       photos: photoAttachments.length > 0 ? photoAttachments : undefined,
+      gps_latitude:             gpsLat,
+      gps_longitude:            gpsLon,
     });
 
     if (ok) {
@@ -190,6 +194,18 @@ export default function ReportNearMissScreen({ navigation }: any) {
             <Text style={styles.locationTitle}>{location || 'Select station...'}</Text>
             <Text style={styles.locationSub}>Tap to change</Text>
           </TouchableOpacity>
+          <View style={styles.gpsRow}>
+            <View style={[styles.gpsDot, {
+              backgroundColor: gpsStatus === 'ok' ? '#16A34A' : gpsStatus === 'unavailable' ? '#EF4444' : '#F97316',
+            }]} />
+            <Text style={styles.gpsText}>
+              {gpsStatus === 'ok'
+                ? `GPS: ${Number(gpsLat).toFixed(5)}, ${Number(gpsLon).toFixed(5)}`
+                : gpsStatus === 'unavailable'
+                ? 'GPS unavailable'
+                : 'Acquiring GPS…'}
+            </Text>
+          </View>
         </FormSection>
 
         <FormSection label="Preventative Suggestion">
@@ -289,4 +305,12 @@ const styles = StyleSheet.create({
   pickerItemActive: { backgroundColor: '#EFF6FF', borderRadius: 8, paddingHorizontal: 8 },
   pickerItemText: { fontSize: 14, color: '#334155', fontWeight: '600' },
   pickerItemTextActive: { color: '#2563EB', fontWeight: '700' },
+  gpsRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F8FAFC', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+    marginTop: 8, borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  gpsDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  gpsText: { fontSize: 11, color: '#475569', fontWeight: '600', flex: 1 },
 });
