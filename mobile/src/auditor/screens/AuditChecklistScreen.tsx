@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   TextInput,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { auditService } from '../services/auditService';
@@ -52,7 +53,35 @@ const INITIAL_ITEMS: ChecklistItem[] = [
 
 export function AuditChecklistScreen({ route, navigation }: any) {
   const { audit } = route.params || {};
-  const [items, setItems] = useState<ChecklistItem[]>(INITIAL_ITEMS);
+  const [items, setItems] = useState<ChecklistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [meta, setMeta] = useState<{ title?: string; site_name?: string; checklist_type?: string }>({});
+
+  const load = useCallback(async () => {
+    if (!audit?.id) { setItems(INITIAL_ITEMS); setLoading(false); return; }
+    try {
+      const full = await auditService.get(Number(audit.id));
+      setMeta({ title: full.title, site_name: full.site_name ?? undefined, checklist_type: full.checklist_type ?? undefined });
+      const loaded = (full.findings || []).map((f, i) => ({
+        id: f.id ?? i + 1,
+        title: f.title || 'Checklist item',
+        question: f.question || '',
+        response: (f.response as ChecklistItem['response']) ?? null,
+        remarks: f.remarks || '',
+        photoAttached: !!f.photo_attached,
+      }));
+      setItems(loaded.length ? loaded : INITIAL_ITEMS);
+    } catch {
+      setItems(INITIAL_ITEMS);
+    } finally {
+      setLoading(false);
+    }
+  }, [audit?.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const answered = items.filter((i) => i.response).length;
+  const progressPct = items.length ? Math.round((answered / items.length) * 100) : 0;
 
   const handleResponse = (itemId: number, val: 'pass' | 'fail' | 'na') => {
     setItems((prev) =>
@@ -147,19 +176,21 @@ export function AuditChecklistScreen({ route, navigation }: any) {
         <View style={styles.topInfoCard}>
           <View style={styles.topInfoRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.auditTitle}>Weekly Facility Safety Audit</Text>
-              <Text style={styles.auditSubtitle}>Site ID: #442-T4 | Inspector: John Doe</Text>
+              <Text style={styles.auditTitle}>{meta.title || audit?.title || 'Audit Checklist'}</Text>
+              <Text style={styles.auditSubtitle}>
+                {(meta.site_name || audit?.site_name || '—')}{meta.checklist_type ? ` | ${meta.checklist_type}` : ''}
+              </Text>
             </View>
             <View style={styles.percentBox}>
-              <Text style={styles.percentText}>68%</Text>
+              <Text style={styles.percentText}>{progressPct}%</Text>
               <Text style={styles.percentSubText}>Complete</Text>
-              <Text style={styles.percentTasks}>17 of 25 tasks completed</Text>
+              <Text style={styles.percentTasks}>{answered} of {items.length} tasks completed</Text>
             </View>
           </View>
 
           {/* Progress Bar */}
           <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: '68%' }]} />
+            <View style={[styles.progressBarFill, { width: `${progressPct}%` }]} />
           </View>
         </View>
 
@@ -168,8 +199,10 @@ export function AuditChecklistScreen({ route, navigation }: any) {
           <View style={styles.sectionIcon}>
             <Ionicons name="compass" size={18} color="#FFFFFF" />
           </View>
-          <Text style={styles.sectionTitle}>Structural Integrity</Text>
+          <Text style={styles.sectionTitle}>{meta.checklist_type || 'Checklist Items'}</Text>
         </View>
+
+        {loading && <ActivityIndicator color="#2563EB" style={{ marginVertical: 30 }} />}
 
         {/* Checklist Cards */}
         {items.map((item) => {

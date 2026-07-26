@@ -26,6 +26,9 @@ class AuditCreate(BaseModel):
     scheduled_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: str = "Med"
+    # Checklist questions the auditor must answer. If omitted, a default template
+    # is seeded from the checklist_type so the mobile app always has items to show.
+    items: Optional[List[ChecklistItemIn]] = None
 
 
 class AuditSubmit(BaseModel):

@@ -92,18 +92,6 @@ export function OperationsScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() => navigation.navigate('AddWorker')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.gridIcon, { backgroundColor: '#EEF2FF' }]}>
-              <Ionicons name="person-add-outline" size={26} color="#004AC6" />
-            </View>
-            <Text style={styles.gridLabel}>Add Worker</Text>
-            <Text style={styles.gridDesc}>New team member</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.gridCard}
             onPress={() => navigation.navigate('TeamManagement')}
             activeOpacity={0.8}
           >

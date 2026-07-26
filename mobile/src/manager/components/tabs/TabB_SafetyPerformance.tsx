@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from "react-native";
-import { AlertTriangle, ShieldCheck, ClipboardList, Zap, ListChecks, UserPlus } from "lucide-react-native";
+import { AlertTriangle, ShieldCheck, ClipboardList, Zap, ListChecks } from "lucide-react-native";
 import type { ScreenProps } from "../types";
 
 export function TabB_SafetyPerformance({
@@ -76,7 +76,7 @@ export function TabB_SafetyPerformance({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.actionRow}
+          style={[styles.actionRow, { borderBottomWidth: 0 }]}
           onPress={() => setCurrentScreen("assigned_tasks")}
         >
           <View style={[styles.iconBox, { backgroundColor: "#E0F2F1" }]}>
@@ -85,20 +85,6 @@ export function TabB_SafetyPerformance({
           <View style={styles.rowInfo}>
             <Text style={styles.rowTitle}>Assigned Tasks</Text>
             <Text style={styles.rowDesc}>Supervisor tasks — view responses & edit checklist</Text>
-          </View>
-          <Zap size={16} color="#A0AEC0" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionRow, { borderBottomWidth: 0 }]}
-          onPress={() => setCurrentScreen("add_supervisor")}
-        >
-          <View style={[styles.iconBox, { backgroundColor: "#EEF2FF" }]}>
-            <UserPlus size={20} color="#2563EB" />
-          </View>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowTitle}>Add Supervisor</Text>
-            <Text style={styles.rowDesc}>Create a supervisor account for your team</Text>
           </View>
           <Zap size={16} color="#A0AEC0" />
         </TouchableOpacity>

@@ -25,7 +25,6 @@ import { LoginScreenView } from "./components/LoginScreen";
 import { InvestigationScreenView } from "./components/InvestigationScreen";
 import { AssignActionsScreenView } from "./components/AssignActionsScreen";
 import { AssignedTasksScreenView } from "./components/AssignedTasksScreen";
-import { AddSupervisorScreenView } from "./components/AddSupervisorScreen";
 import { MgrInvestigation } from "./components/MgrInvestigation";
 import { MgrAssignActions } from "./components/MgrAssignActions";
 import { ComplianceApprovalsView } from "./components/ComplianceApprovals";
@@ -37,7 +36,7 @@ export function ManagerAppRoot() {
 
   // Navigation & Layout States - Start with "app" directly instead of "login"
   const [currentScreen, setCurrentScreen] = useState<
-    "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks" | "add_supervisor"
+    "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks"
   >("app");
   const [layoutVersion] = useState<"A" | "B">("B");
   const [activeTab, setActiveTab] = useState<number>(0);
@@ -336,8 +335,6 @@ export function ManagerAppRoot() {
         return <MgrAssignActions {...sharedProps} />;
       case "assigned_tasks":
         return <AssignedTasksScreenView {...sharedProps} />;
-      case "add_supervisor":
-        return <AddSupervisorScreenView {...sharedProps} />;
       case "compliance_approvals":
         return <ComplianceApprovalsView {...sharedProps} />;
       case "permit_approvals":

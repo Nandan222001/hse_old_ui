@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
-import { Briefcase, Building2, IdCard, LogOut, UserPlus, ListChecks, ChevronRight } from 'lucide-react-native';
+import { Briefcase, Building2, IdCard, LogOut, ListChecks, ChevronRight } from 'lucide-react-native';
 import type { ScreenProps } from '../types';
 import { useAuth } from '../../../hooks/useAuth';
 import { Avatar } from '../../../components';
@@ -56,14 +56,6 @@ export function Tab_Profile({ setCurrentScreen, showToast }: ScreenProps) {
         {/* Management actions (manager-specific) */}
         <Text style={styles.sectionTitle}>Management</Text>
         <View style={styles.menu}>
-          <TouchableOpacity style={styles.actionRow} onPress={() => setCurrentScreen('add_supervisor')} activeOpacity={0.8}>
-            <View style={[styles.actionIcon, { backgroundColor: '#EFF6FF' }]}><UserPlus size={20} color="#2563EB" /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionTitle}>Add Supervisor</Text>
-              <Text style={styles.actionDesc}>Create a supervisor account for your team</Text>
-            </View>
-            <ChevronRight size={18} color="#A0AEC0" />
-          </TouchableOpacity>
           <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={() => setCurrentScreen('assigned_tasks')} activeOpacity={0.8}>
             <View style={[styles.actionIcon, { backgroundColor: '#E0F2F1' }]}><ListChecks size={20} color="#12B8A6" /></View>
             <View style={{ flex: 1 }}>

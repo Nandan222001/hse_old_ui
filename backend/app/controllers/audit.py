@@ -20,6 +20,39 @@ router = APIRouter(prefix="/audits", tags=["Audits"])
 AUDITOR_ROLES = {"auditor"}
 ASSIGNER_ROLES = {"manager", "hse manager", "admin", "superadmin", "safety_manager", "safety manager", "director"}
 
+# Default checklist questions seeded when a manager schedules an audit without
+# supplying its own items, so the auditor's mobile app always has real content.
+_GENERIC_TEMPLATE = [
+    {"title": "PPE Compliance", "question": "Are all personnel wearing the required PPE for this area?"},
+    {"title": "Housekeeping", "question": "Are walkways, exits and work areas clear of hazards and debris?"},
+    {"title": "Emergency Readiness", "question": "Are fire extinguishers, alarms and exits accessible and in date?"},
+    {"title": "Equipment Guarding", "question": "Are moving parts and machinery properly guarded?"},
+    {"title": "Documentation", "question": "Are permits, SOPs and inspection records available and current?"},
+]
+_TEMPLATES_BY_TYPE = {
+    "safety management system": [
+        {"title": "Policy & Objectives", "question": "Is the HSE policy documented, signed and communicated?"},
+        {"title": "Risk Assessments", "question": "Are current risk assessments in place for all key activities?"},
+        {"title": "Training Records", "question": "Are competency and induction records complete and up to date?"},
+        {"title": "Incident Management", "question": "Are incidents investigated with corrective actions closed out?"},
+        {"title": "Management Review", "question": "Has a management review been conducted within the period?"},
+    ],
+    "fire safety": [
+        {"title": "Extinguishers", "question": "Are extinguishers present, charged and inspected?"},
+        {"title": "Exit Routes", "question": "Are emergency exits unobstructed and clearly signed?"},
+        {"title": "Alarm System", "question": "Was the fire alarm tested and functional?"},
+        {"title": "Emergency Lighting", "question": "Is emergency lighting operational on all routes?"},
+    ],
+}
+
+
+def _template_for(checklist_type: str | None) -> list[dict]:
+    key = (checklist_type or "").strip().lower()
+    for k, items in _TEMPLATES_BY_TYPE.items():
+        if k in key:
+            return items
+    return _GENERIC_TEMPLATE
+
 
 def _role(user: CurrentUser) -> str:
     return (user.role or "").strip().lower()
@@ -83,6 +116,18 @@ def create_audit(
     """Manager/admin schedules an audit and assigns it to an auditor."""
     if _role(current_user) not in ASSIGNER_ROLES:
         raise HTTPException(status_code=403, detail=f"Role '{current_user.role}' cannot schedule audits")
+
+    # Seed the checklist: use supplied items, else a template for the checklist type.
+    if payload.items:
+        seed = [i.model_dump() for i in payload.items]
+    else:
+        seed = [{"title": t["title"], "question": t["question"]} for t in _template_for(payload.checklist_type)]
+    for idx, it in enumerate(seed, start=1):
+        it.setdefault("id", idx)
+        it.setdefault("response", None)
+        it.setdefault("remarks", "")
+        it.setdefault("photo_attached", False)
+
     a = Audit(
         organisation_id=current_user.org_id,
         title=payload.title,
@@ -96,6 +141,7 @@ def create_audit(
         status="scheduled",
         priority=payload.priority or "Med",
         progress=0,
+        findings_json=json.dumps(seed),
     )
     db.add(a)
     db.commit()

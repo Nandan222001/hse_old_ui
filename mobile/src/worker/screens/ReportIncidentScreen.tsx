@@ -98,16 +98,6 @@ export default function ReportIncidentScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Step Indicator */}
-      <View style={styles.stepIndicatorRow}>
-        <View style={styles.segmentsContainer}>
-          <View style={[styles.segment, styles.segmentActive]} />
-          <View style={styles.segment} />
-          <View style={styles.segment} />
-        </View>
-        <Text style={styles.stepText}>Step 1/3</Text>
-      </View>
-
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Incident Details</Text>
         <Text style={styles.sectionSub}>Provide the initial classification and description.</Text>
