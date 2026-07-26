@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
 import { MapPin, AlertTriangle, Zap, Wrench } from 'lucide-react-native';
 import type { ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
+import { hazardRegisterService, HazardRegisterItem } from '../../../services/hazardRegisterService';
 
 function cellColor(v: number, max: number) {
   if (max <= 0) return '#DBEAFE';
@@ -19,6 +20,8 @@ export function MgrRisk(_: ScreenProps) {
   const [zones, setZones] = useState<{ zone: string; value: number }[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hazards, setHazards] = useState<HazardRegisterItem[]>([]);
+  const [reviewing, setReviewing] = useState<number | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -26,8 +29,21 @@ export function MgrRisk(_: ScreenProps) {
       .then((r: any) => { setZones(r.data?.zone_risk ?? []); setTasks(r.data?.task_rows ?? []); })
       .catch(() => { setZones([]); setTasks([]); })
       .finally(() => setLoading(false));
+    hazardRegisterService.list('open').then(h => setHazards(h)).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  const handleReview = async (id: number, status: 'under_review' | 'controlled') => {
+    setReviewing(id);
+    try {
+      await hazardRegisterService.review(id, { register_status: status, review_notes: 'Reviewed by HSE Manager' });
+      setHazards(prev => prev.filter(h => h.id !== id));
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not update hazard.');
+    } finally {
+      setReviewing(null);
+    }
+  };
 
   const max = Math.max(1, ...zones.map((z) => z.value));
   // Cell width adapts to how many zones exist so it never looks like a broken grid.
@@ -102,6 +118,42 @@ export function MgrRisk(_: ScreenProps) {
           )}
         </>
       )}
+      {/* Hazard Register */}
+      <Text style={[styles.section, { marginTop: 8 }]}>Open Hazards</Text>
+      {hazards.length === 0 ? (
+        <Text style={styles.empty}>No open hazards in register.</Text>
+      ) : (
+        hazards.slice(0, 6).map(h => (
+          <View key={h.id} style={styles.hazCard}>
+            <View style={styles.hazHeader}>
+              <Text style={styles.hazName} numberOfLines={1}>{h.hazard_name || `Hazard #${h.id}`}</Text>
+              <View style={[styles.hazSevBadge, { backgroundColor: h.severity === 'high' || h.severity === 'critical' ? '#FEE2E2' : '#FFEDD5' }]}>
+                <Text style={[styles.hazSevText, { color: h.severity === 'high' || h.severity === 'critical' ? '#DC2626' : '#F97316' }]}>
+                  {(h.severity || 'medium').toUpperCase()}
+                </Text>
+              </View>
+            </View>
+            {!!h.description && <Text style={styles.hazMeta} numberOfLines={2}>{h.description}</Text>}
+            <View style={styles.hazBtns}>
+              <TouchableOpacity
+                style={[styles.hazBtn, { opacity: reviewing === h.id ? 0.6 : 1 }]}
+                onPress={() => handleReview(h.id, 'under_review')}
+                disabled={reviewing === h.id}
+              >
+                <Text style={styles.hazBtnText}>Under Review</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.hazBtn, styles.hazBtnControl, { opacity: reviewing === h.id ? 0.6 : 1 }]}
+                onPress={() => handleReview(h.id, 'controlled')}
+                disabled={reviewing === h.id}
+              >
+                <Text style={styles.hazBtnText}>Controlled</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))
+      )}
+
       <View style={{ height: 24 }} />
     </ScrollView>
   );
@@ -139,4 +191,14 @@ const styles = StyleSheet.create({
   actSub: { fontSize: 12, color: '#737686', marginTop: 2 },
   actTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
   actTagText: { fontSize: 10, fontWeight: '800' },
+  hazCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#EEF2F7' },
+  hazHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  hazName: { fontSize: 13, fontWeight: '700', color: '#1E293B', flex: 1, marginRight: 8 },
+  hazSevBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
+  hazSevText: { fontSize: 10, fontWeight: '800' },
+  hazMeta: { fontSize: 11, color: '#737686', marginBottom: 10 },
+  hazBtns: { flexDirection: 'row', gap: 8 },
+  hazBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#2563EB' },
+  hazBtnControl: { backgroundColor: '#16A34A' },
+  hazBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 });

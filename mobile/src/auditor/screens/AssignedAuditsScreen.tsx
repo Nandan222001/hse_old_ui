@@ -11,6 +11,7 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
@@ -54,12 +55,22 @@ export function AssignedAuditsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [permits, setPermits] = useState<any[]>([]);
+  const [hazards, setHazards] = useState<any[]>([]);
+  const [verifying, setVerifying] = useState<number | null>(null);
+  const [hVerifying, setHVerifying] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const rows = await auditService.listAssigned();
+      const [rows, permitsData, hazardsData] = await Promise.all([
+        auditService.listAssigned(),
+        auditService.listPermitsToVerify().catch(() => []),
+        auditService.listHazardsToVerify().catch(() => []),
+      ]);
       setAudits(rows.map(toCard));
+      setPermits(permitsData);
+      setHazards(hazardsData);
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Could not load audits.');
     } finally {
@@ -67,6 +78,30 @@ export function AssignedAuditsScreen({ navigation }: any) {
       setRefreshing(false);
     }
   }, []);
+
+  const handleVerifyPermit = async (permitId: number, result: string) => {
+    setVerifying(permitId);
+    try {
+      await auditService.verifyPermit(permitId, result);
+      setPermits(prev => prev.filter(p => p.id !== permitId));
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not verify permit.');
+    } finally {
+      setVerifying(null);
+    }
+  };
+
+  const handleVerifyHazard = async (hazardId: number) => {
+    setHVerifying(hazardId);
+    try {
+      await auditService.verifyHazard(hazardId);
+      setHazards(prev => prev.filter(h => h.id !== hazardId));
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not verify hazard.');
+    } finally {
+      setHVerifying(null);
+    }
+  };
 
   useEffect(() => {
     const unsub = navigation.addListener('focus', load);
@@ -278,6 +313,68 @@ export function AssignedAuditsScreen({ navigation }: any) {
             );
           })}
         </View>
+
+        {/* Permit Verification */}
+        {permits.length > 0 && (
+          <View style={styles.verifySection}>
+            <Text style={styles.verifyTitle}>Permit Verification ({permits.length})</Text>
+            {permits.map(p => (
+              <View key={p.id} style={styles.verifyCard}>
+                <Text style={styles.verifyName}>{p.permit_ref || `PTW-${p.id}`}</Text>
+                <Text style={styles.verifyMeta} numberOfLines={1}>{p.work_description || 'Work permit'}</Text>
+                <View style={styles.verifyBtnRow}>
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, styles.verifyValid]}
+                    onPress={() => handleVerifyPermit(p.id, 'valid')}
+                    disabled={verifying === p.id}
+                  >
+                    <Text style={styles.verifyBtnText}>Valid</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, styles.verifyWarn]}
+                    onPress={() => handleVerifyPermit(p.id, 'not_displayed')}
+                    disabled={verifying === p.id}
+                  >
+                    <Text style={styles.verifyBtnText}>Not Displayed</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, styles.verifyInvalid]}
+                    onPress={() => handleVerifyPermit(p.id, 'invalid')}
+                    disabled={verifying === p.id}
+                  >
+                    <Text style={styles.verifyBtnText}>Invalid</Text>
+                  </TouchableOpacity>
+                </View>
+                {verifying === p.id && <ActivityIndicator size="small" color="#2563EB" style={{ marginTop: 8 }} />}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Hazard Verification */}
+        {hazards.length > 0 && (
+          <View style={styles.verifySection}>
+            <Text style={styles.verifyTitle}>Hazard Verification ({hazards.length})</Text>
+            {hazards.map(h => (
+              <View key={h.id} style={styles.verifyCard}>
+                <Text style={styles.verifyName}>{h.hazard_name || `Hazard #${h.id}`}</Text>
+                <Text style={styles.verifyMeta} numberOfLines={1}>
+                  {[h.severity, h.description].filter(Boolean).join(' · ')}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.verifyBtn, styles.verifyValid, { alignSelf: 'flex-start' }]}
+                  onPress={() => handleVerifyHazard(h.id)}
+                  disabled={hVerifying === h.id}
+                >
+                  {hVerifying === h.id
+                    ? <ActivityIndicator size="small" color="#FFFFFF" />
+                    : <Text style={styles.verifyBtnText}>Mark Verified</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* AI Smart Schedule Card */}
         <View style={styles.aiCard}>
@@ -621,6 +718,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  verifySection: { marginBottom: 20 },
+  verifyTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A', marginBottom: 10 },
+  verifyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+  },
+  verifyName: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 2 },
+  verifyMeta: { fontSize: 12, color: '#64748B', marginBottom: 10 },
+  verifyBtnRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  verifyBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+  verifyValid: { backgroundColor: '#16A34A' },
+  verifyWarn: { backgroundColor: '#F97316' },
+  verifyInvalid: { backgroundColor: '#EF4444' },
+  verifyBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   fab: {
     position: 'absolute',
     bottom: 24,

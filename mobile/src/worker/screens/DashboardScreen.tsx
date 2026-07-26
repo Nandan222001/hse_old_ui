@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView, View, Text, TouchableOpacity,
-  StyleSheet, RefreshControl, ActivityIndicator, Image,
+  StyleSheet, RefreshControl, ActivityIndicator, Image, Alert,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Icon } from '../components/display/Icon';
@@ -38,6 +38,43 @@ export default function DashboardScreen({ navigation }: any) {
       .catch(() => {});
   }, []);
   useEffect(() => { loadActivity(); }, [loadActivity]);
+
+  // Shift check-in
+  const [shiftPatterns, setShiftPatterns] = useState<any[]>([]);
+  const [todayShift, setTodayShift] = useState<any | null>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+
+  useEffect(() => {
+    apiClient.get('/shift-schedules/patterns')
+      .then((res: any) => {
+        const patterns = Array.isArray(res.data) ? res.data : [];
+        setShiftPatterns(patterns);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleShiftCheckIn = async () => {
+    const pattern = shiftPatterns[0];
+    if (!pattern) return;
+    setCheckingIn(true);
+    try {
+      const empId = parseInt(user?.id || '0');
+      const now = new Date();
+      await apiClient.post('/shift-schedules/', {
+        employee_id: empId,
+        shift_date: now.toISOString().slice(0, 10),
+        shift_type: pattern.shift_name,
+        shift_start: pattern.start_time,
+        shift_end: pattern.end_time,
+      });
+      setTodayShift(pattern);
+      Alert.alert('Checked In', `You are checked in for the ${pattern.shift_name} shift.`);
+    } catch (e: any) {
+      Alert.alert('Check-In Failed', e?.response?.data?.detail || 'Could not check in.');
+    } finally {
+      setCheckingIn(false);
+    }
+  };
 
   // Featured Toolbox Talk — first available training program.
   const [featured, setFeatured] = useState<any | null>(null);
@@ -160,6 +197,28 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={{ color: risk.color, fontWeight: '800' }}>{risk.label} Risk</Text>. Stay safe today.
           </Text>
         </View>
+
+        {/* Shift Check-In Card */}
+        {shiftPatterns.length > 0 && (
+          <TouchableOpacity
+            style={[styles.shiftCard, todayShift && styles.shiftCardChecked]}
+            onPress={handleShiftCheckIn}
+            disabled={checkingIn || !!todayShift}
+            activeOpacity={0.85}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.shiftTitle}>
+                {todayShift ? `✓ Checked In: ${todayShift.shift_name}` : 'Tap to Check In'}
+              </Text>
+              <Text style={styles.shiftSub}>
+                {shiftPatterns[0]?.shift_name || 'Day Shift'}
+                {shiftPatterns[0]?.start_time ? ` · ${shiftPatterns[0].start_time}` : ''}
+                {shiftPatterns[0]?.end_time ? ` – ${shiftPatterns[0].end_time}` : ''}
+              </Text>
+            </View>
+            {checkingIn && <ActivityIndicator size="small" color="#FFFFFF" />}
+          </TouchableOpacity>
+        )}
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -732,5 +791,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '500',
     marginTop: -2,
+  },
+  shiftCard: {
+    backgroundColor: '#1E40AF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#1E40AF',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  shiftCardChecked: {
+    backgroundColor: '#16A34A',
+  },
+  shiftTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  shiftSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
   },
 });

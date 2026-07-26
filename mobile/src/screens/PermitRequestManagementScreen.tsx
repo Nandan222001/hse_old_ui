@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { permitWorkflowService } from '../services/permitWorkflowService';
@@ -14,6 +14,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
 export function PermitRequestManagementScreen({ navigation, route }: any) {
   const permit = route?.params?.permit;
   const [submitting, setSubmitting] = useState(false);
+  const [supervisorNotes, setSupervisorNotes] = useState('');
 
   if (!permit) {
     return (
@@ -36,7 +37,7 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
   const acknowledge = async () => {
     try {
       setSubmitting(true);
-      await permitWorkflowService.acknowledge(Number(permit.id));
+      await permitWorkflowService.acknowledge(Number(permit.id), supervisorNotes.trim() || undefined);
       Alert.alert('Acknowledged', 'Permit acknowledged and forwarded to the Manager for approval.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -71,7 +72,23 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
           {!!permit.permit_type && (
             <View style={styles.row}><Ionicons name="document-text-outline" size={15} color="#737686" /><Text style={styles.meta}>{permit.permit_type}</Text></View>
           )}
+          {!!permit.number_of_workers && (
+            <View style={styles.row}><Ionicons name="people-outline" size={15} color="#737686" /><Text style={styles.meta}>{permit.number_of_workers} workers on site</Text></View>
+          )}
         </View>
+
+        {canAcknowledge && (
+          <>
+            <Text style={styles.notesLabel}>Supervisor Notes (Optional)</Text>
+            <TextInput
+              style={styles.notesInput}
+              placeholder="Add notes before forwarding to Manager..."
+              multiline
+              value={supervisorNotes}
+              onChangeText={setSupervisorNotes}
+            />
+          </>
+        )}
 
         {canAcknowledge ? (
           <TouchableOpacity
@@ -118,4 +135,6 @@ const styles = StyleSheet.create({
   ackBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
   doneNote: { textAlign: 'center', color: '#64748B', fontSize: 13, paddingVertical: 12 },
   hint: { fontSize: 12, color: '#94A3B8', marginTop: 16, lineHeight: 17, textAlign: 'center' },
+  notesLabel: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6, marginTop: 4 },
+  notesInput: { borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 10, padding: 10, fontSize: 13, color: '#2D3748', backgroundColor: '#FFFFFF', minHeight: 80, textAlignVertical: 'top', marginBottom: 12 },
 });

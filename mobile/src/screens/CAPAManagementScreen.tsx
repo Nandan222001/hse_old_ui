@@ -24,6 +24,9 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   const [capaDesc, setCapaDesc] = useState('');
   const [capaAssigneeId, setCapaAssigneeId] = useState('15');
   const [capaDueDate, setCapaDueDate] = useState('2026-07-31');
+  const [daysAway, setDaysAway] = useState('0');
+  const [regulatoryNotified, setRegulatoryNotified] = useState(false);
+  const [supervisorSignature, setSupervisorSignature] = useState('');
   const [aiDrafting, setAiDrafting] = useState(false);
 
   // Static mock fallback task list if no incidentId is passed
@@ -116,7 +119,9 @@ export function CAPAManagementScreen({ route, navigation }: any) {
       immediate_actions_taken: immediateActions,
       root_cause_category: 'Equipment Failure',
       severity_classification: 'First Aid',
-      days_away: 0,
+      days_away: parseInt(daysAway) || 0,
+      regulatory_notified: regulatoryNotified,
+      supervisor_signature: supervisorSignature.trim() || undefined,
       capa_description: capaDesc,
       capa_responsible_person_id: parseInt(capaAssigneeId) || 15,
       capa_due_date: capaDueDate,
@@ -288,6 +293,28 @@ export function CAPAManagementScreen({ route, navigation }: any) {
               <Text style={styles.label}>CAPA Due Date (YYYY-MM-DD)</Text>
               <TextInput style={styles.input} value={capaDueDate} onChangeText={setCapaDueDate} />
 
+              <Text style={styles.label}>Days Away from Work (0 if none)</Text>
+              <TextInput style={styles.input} value={daysAway} onChangeText={setDaysAway} keyboardType="numeric" />
+
+              <Text style={styles.label}>Regulatory Authority Notified?</Text>
+              <View style={styles.toggleRow}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, regulatoryNotified && styles.toggleActive]}
+                  onPress={() => setRegulatoryNotified(true)}
+                >
+                  <Text style={[styles.toggleText, regulatoryNotified && styles.toggleTextActive]}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, !regulatoryNotified && styles.toggleActive]}
+                  onPress={() => setRegulatoryNotified(false)}
+                >
+                  <Text style={[styles.toggleText, !regulatoryNotified && styles.toggleTextActive]}>No</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Supervisor Signature</Text>
+              <TextInput style={styles.input} placeholder="Type full name as signature" value={supervisorSignature} onChangeText={setSupervisorSignature} />
+
               <TouchableOpacity style={styles.submitBtn} onPress={handleSubmitInvestigation} disabled={submitting}>
                 {submitting ? (
                   <ActivityIndicator size="small" color="#FFF" />
@@ -347,5 +374,10 @@ const styles = StyleSheet.create({
   photosWrapper: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 8 },
   photosTitle: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6 },
   photosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  photoTag: { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, color: '#334155', fontWeight: '600' }
+  photoTag: { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, color: '#334155', fontWeight: '600' },
+  toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  toggleBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E0', borderRadius: 8, padding: 10, alignItems: 'center' },
+  toggleActive: { backgroundColor: '#10B981', borderColor: '#10B981' },
+  toggleText: { fontSize: 14, fontWeight: '700', color: '#4A5568' },
+  toggleTextActive: { color: '#FFFFFF' },
 });

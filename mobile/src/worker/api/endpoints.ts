@@ -70,6 +70,8 @@ export const ENDPOINTS = {
   // Shift schedule: worker check-in / check-out and history.
   SHIFT_SCHEDULE: {
     LIST: '/shift-schedules/',
+    PATTERNS: '/shift-schedules/patterns',
+    CREATE: '/shift-schedules/',
   },
 
   // Checklists
