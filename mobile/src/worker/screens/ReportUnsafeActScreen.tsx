@@ -44,7 +44,11 @@ export default function ReportUnsafeActScreen({ navigation }: any) {
       location:               zone,
       department,
       photos: photoAttachments.length > 0 ? photoAttachments : undefined,
-    });
+      // Map to backend UnsafeActReport schema fields
+      act_type:                 category,
+      description:              details.trim(),
+      corrective_advice_given:  intervention ? 'Verbal intervention performed' : undefined,
+    } as any);
 
     if (ok) {
       Alert.alert('Observation Submitted', 'Your unsafe act observation has been recorded.', [

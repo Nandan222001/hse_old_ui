@@ -10,6 +10,14 @@ export interface ReportRiskRequest {
   severity?: string;
   /** Likelihood: Rare | Unlikely | Possible | Likely */
   probability?: string;
+  /** Station name or free-text location where the hazard was observed */
+  location?: string;
+  /** ID of the working station if known */
+  location_station_id?: number;
+  /** Whether the hazard is still present on site */
+  hazard_still_present?: boolean;
+  /** Suggested mitigation / existing controls */
+  existing_controls?: string;
 }
 
 /**
@@ -45,6 +53,10 @@ export const hazardService = {
       likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
       consequence: CONSEQUENCE[key],
       severity: WORKFLOW_SEVERITY[key] ?? 'medium',
+      location: payload.location,
+      location_station_id: payload.location_station_id,
+      hazard_still_present: payload.hazard_still_present ? 'Yes' : 'No',
+      existing_controls: payload.existing_controls,
     });
     return true;
   },

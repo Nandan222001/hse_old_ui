@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
@@ -7,19 +7,53 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
+import apiClient from '../api/client';
+import { ENDPOINTS } from '../api/endpoints';
+
+interface Station { id: number; station_name: string; }
 
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
   const [incidentType, setIncidentType] = useState('Injury');
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [location, setLocation] = useState('Heavy Assembly Station 1');
+  const [location, setLocation] = useState('');
+  const [locationId, setLocationId] = useState<number | undefined>(undefined);
   const [locationPickerVisible, setLocationPickerVisible] = useState(false);
+  const [stations, setStations] = useState<Station[]>([]);
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<number>(3);
   const [reason, setReason] = useState('');
   const [anyoneInjured, setAnyoneInjured] = useState<'Yes' | 'No'>('No');
   const [injuredPersonName, setInjuredPersonName] = useState('');
+  const [injuredBodyPart, setInjuredBodyPart] = useState('');
+  const [numberOfPersons, setNumberOfPersons] = useState('1');
+  const [controlFailure, setControlFailure] = useState<'Yes' | 'No'>('No');
+  const [hazardStillPresent, setHazardStillPresent] = useState<'Yes' | 'No'>('No');
   const [photos, setPhotos] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiClient.get(ENDPOINTS.WORKING_STATIONS.LIST)
+      .then((res: any) => {
+        const rows: Station[] = Array.isArray(res.data) ? res.data : (res.data?.items ?? []);
+        setStations(rows);
+        if (rows.length > 0 && !location) {
+          setLocation(rows[0].station_name);
+          setLocationId(rows[0].id);
+        }
+      })
+      .catch(() => {
+        // Keep static fallback if API unreachable
+        const fallback = [
+          { id: 1, station_name: 'Heavy Assembly Station 1' },
+          { id: 2, station_name: 'Welding Station 1' },
+          { id: 3, station_name: 'Testing Station 1' },
+          { id: 4, station_name: 'Quality Inspection Station 1' },
+          { id: 5, station_name: 'Maintenance Station 1' },
+        ];
+        setStations(fallback);
+        if (!location) { setLocation(fallback[0].station_name); setLocationId(fallback[0].id); }
+      });
+  }, []);
 
   const handleAddPhoto = () => {
     const mockPhotoNames = [
@@ -51,7 +85,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
       Alert.alert('Required', 'Please enter the name of the injured person.');
       return;
     }
-    
+
     const severityMap: Record<number, string> = {
       1: 'low',
       2: 'medium',
@@ -64,14 +98,17 @@ export default function ReportIncidentScreen({ navigation }: any) {
       incident_type: incidentType.toLowerCase() as any,
       severity: (severityMap[severity] || 'medium') as any,
       description: description.trim(),
-      reason: reason.trim(),
+      immediate_actions: reason.trim(),
       anyone_injured: anyoneInjured,
       injured_person_name: anyoneInjured === 'Yes' ? injuredPersonName.trim() : '',
-      mockPhotos: photos,
+      injured_body_part: anyoneInjured === 'Yes' && injuredBodyPart.trim() ? injuredBodyPart.trim() : undefined,
+      number_persons_involved: parseInt(numberOfPersons, 10) || 1,
+      control_failure: controlFailure,
+      hazard_still_present: hazardStillPresent,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0].substring(0, 5),
       location: location,
-      immediate_actions: 'Area secured',
+      location_station_id: locationId,
     } as any);
 
     if (ok) {
@@ -122,7 +159,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
         {/* Location Dropdown */}
         <Text style={styles.inputLabel}>Location / Station</Text>
         <TouchableOpacity style={styles.dropdown} onPress={() => setLocationPickerVisible(true)}>
-          <Text style={styles.dropdownValue}>{location}</Text>
+          <Text style={styles.dropdownValue}>{location || 'Select station...'}</Text>
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
 
@@ -176,6 +213,19 @@ export default function ReportIncidentScreen({ navigation }: any) {
           />
         </View>
 
+        {/* Number of persons */}
+        <Text style={styles.inputLabel}>Number of Persons Involved</Text>
+        <View style={[styles.inputContainer, { marginBottom: 20 }]}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="1"
+            placeholderTextColor="#94A3B8"
+            keyboardType="numeric"
+            value={numberOfPersons}
+            onChangeText={setNumberOfPersons}
+          />
+        </View>
+
         {/* Was anyone injured toggle */}
         <Text style={styles.inputLabel}>Was anyone injured?</Text>
         <View style={styles.toggleGroup}>
@@ -193,7 +243,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Injured Person Name */}
+        {/* Injured Person Name & Body Part */}
         {anyoneInjured === 'Yes' && (
           <View>
             <Text style={styles.inputLabel}>Injured Person Name</Text>
@@ -206,8 +256,52 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 onChangeText={setInjuredPersonName}
               />
             </View>
+            <Text style={styles.inputLabel}>Body Part Injured</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Right hand, Lower back..."
+                placeholderTextColor="#94A3B8"
+                value={injuredBodyPart}
+                onChangeText={setInjuredBodyPart}
+              />
+            </View>
           </View>
         )}
+
+        {/* Control Failure */}
+        <Text style={styles.inputLabel}>Did a safety control fail?</Text>
+        <View style={styles.toggleGroup}>
+          <TouchableOpacity
+            style={[styles.toggleOption, controlFailure === 'Yes' && styles.toggleOptionActive]}
+            onPress={() => setControlFailure('Yes')}
+          >
+            <Text style={[styles.toggleOptionText, controlFailure === 'Yes' && styles.toggleOptionTextActive]}>Yes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleOption, controlFailure === 'No' && styles.toggleOptionActive]}
+            onPress={() => setControlFailure('No')}
+          >
+            <Text style={[styles.toggleOptionText, controlFailure === 'No' && styles.toggleOptionTextActive]}>No</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Hazard Still Present */}
+        <Text style={styles.inputLabel}>Is the hazard still present?</Text>
+        <View style={styles.toggleGroup}>
+          <TouchableOpacity
+            style={[styles.toggleOption, hazardStillPresent === 'Yes' && styles.toggleOptionActive]}
+            onPress={() => setHazardStillPresent('Yes')}
+          >
+            <Text style={[styles.toggleOptionText, hazardStillPresent === 'Yes' && styles.toggleOptionTextActive]}>Yes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleOption, hazardStillPresent === 'No' && styles.toggleOptionActive]}
+            onPress={() => setHazardStillPresent('No')}
+          >
+            <Text style={[styles.toggleOptionText, hazardStillPresent === 'No' && styles.toggleOptionTextActive]}>No</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Photos Upload Section */}
         <Text style={styles.inputLabel}>Photos / Evidence</Text>
@@ -216,7 +310,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
             <Icon name="camera" size={15} color="#2563EB" style={styles.photoAddIcon} />
             <Text style={styles.photoAddText}>Add Evidence Photo</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.photoWrapper}>
             {photos.map((item, idx) => (
               <View key={idx} style={styles.photoTag}>
@@ -251,16 +345,16 @@ export default function ReportIncidentScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Sheet Picker Modal */}
+      {/* Incident Type Picker Modal */}
       <Modal
         visible={pickerVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setPickerVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setPickerVisible(false)}
         >
           <View style={styles.pickerContainer}>
@@ -270,7 +364,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 <Icon emoji="✕" style={styles.pickerCloseBtn} />
               </TouchableOpacity>
             </View>
-            
+
             {['Injury', 'Spill', 'Fire', 'Equipment Damage', 'Near Miss'].map((type) => (
               <TouchableOpacity
                 key={type}
@@ -299,9 +393,9 @@ export default function ReportIncidentScreen({ navigation }: any) {
         animationType="slide"
         onRequestClose={() => setLocationPickerVisible(false)}
       >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
           onPress={() => setLocationPickerVisible(false)}
         >
           <View style={styles.pickerContainer}>
@@ -311,24 +405,27 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 <Icon emoji="✕" style={styles.pickerCloseBtn} />
               </TouchableOpacity>
             </View>
-            
-            {['Heavy Assembly Station 1', 'Welding Station 1', 'Testing Station 1', 'Quality Inspection Station 1', 'Maintenance Station 1'].map((loc) => (
-              <TouchableOpacity
-                key={loc}
-                style={[styles.pickerItem, location === loc && styles.pickerItemActive]}
-                onPress={() => {
-                  setLocation(loc);
-                  setLocationPickerVisible(false);
-                }}
-              >
-                <Text style={[styles.pickerItemText, location === loc && styles.pickerItemTextActive]}>
-                  {loc}
-                </Text>
-                {location === loc && (
-                  <Icon emoji="✓" style={styles.checkmarkIcon} />
-                )}
-              </TouchableOpacity>
-            ))}
+
+            <ScrollView style={{ maxHeight: 300 }}>
+              {stations.map((s) => (
+                <TouchableOpacity
+                  key={s.id}
+                  style={[styles.pickerItem, location === s.station_name && styles.pickerItemActive]}
+                  onPress={() => {
+                    setLocation(s.station_name);
+                    setLocationId(s.id);
+                    setLocationPickerVisible(false);
+                  }}
+                >
+                  <Text style={[styles.pickerItemText, location === s.station_name && styles.pickerItemTextActive]}>
+                    {s.station_name}
+                  </Text>
+                  {location === s.station_name && (
+                    <Icon emoji="✓" style={styles.checkmarkIcon} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>

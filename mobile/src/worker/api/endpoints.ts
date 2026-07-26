@@ -62,6 +62,16 @@ export const ENDPOINTS = {
     CATEGORIES: '/hazard-categorys',
   },
 
+  // Reference data: list of working stations in the org for location pickers.
+  WORKING_STATIONS: {
+    LIST: '/working-stations/',
+  },
+
+  // Shift schedule: worker check-in / check-out and history.
+  SHIFT_SCHEDULE: {
+    LIST: '/shift-schedules/',
+  },
+
   // Checklists
   CHECKLISTS: {
     LIST: '/worker/checklists',

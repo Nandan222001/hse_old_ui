@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -53,6 +53,26 @@ const INITIAL_ITEMS: ChecklistItem[] = [
 export function AuditChecklistScreen({ route, navigation }: any) {
   const { audit } = route.params || {};
   const [items, setItems] = useState<ChecklistItem[]>(INITIAL_ITEMS);
+
+  // Load findings from the API when the audit has a real id
+  useEffect(() => {
+    if (!audit?.id) return;
+    auditService.get(Number(audit.id))
+      .then((a) => {
+        if (a.findings && a.findings.length > 0) {
+          const mapped: ChecklistItem[] = a.findings.map((f, idx) => ({
+            id: f.id ?? idx + 1,
+            title: f.title ?? `Item ${idx + 1}`,
+            question: f.question ?? '',
+            response: (f.response as ChecklistItem['response']) ?? null,
+            remarks: f.remarks ?? '',
+            photoAttached: f.photo_attached ?? false,
+          }));
+          setItems(mapped);
+        }
+      })
+      .catch(() => { /* keep static INITIAL_ITEMS on error */ });
+  }, [audit?.id]);
 
   const handleResponse = (itemId: number, val: 'pass' | 'fail' | 'na') => {
     setItems((prev) =>

@@ -16,12 +16,19 @@ export interface ReportIncidentRequest {
   date: string;
   time: string;
   location: string;
+  location_station_id?: number;
   latitude?: number;
   longitude?: number;
   description: string;
   immediate_actions: string;
   severity: SeverityLevel;
   photos?: PhotoAttachment[];
+  // Additional fields captured on-site
+  number_persons_involved?: number;
+  control_failure?: string;
+  hazard_still_present?: string;
+  injured_body_part?: string;
+  witnesses_json?: string[];
 }
 
 export interface ReportNearMissRequest {
@@ -29,8 +36,16 @@ export interface ReportNearMissRequest {
   potential_consequence: PotentialConsequence;
   causes: NearMissCause[];
   location: string;
+  location_station_id?: number;
   preventative_suggestion?: string;
   photos?: PhotoAttachment[];
+  // Additional fields that map to backend NearMissReport schema
+  underlying_cause?: string;
+  control_failure?: string;
+  hazard_still_present?: string;
+  witnesses?: string[];
+  gps_latitude?: string;
+  gps_longitude?: string;
 }
 
 export interface ReportUnsafeActRequest {

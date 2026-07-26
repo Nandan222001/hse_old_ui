@@ -84,6 +84,9 @@ export default function ReportRiskScreen({ navigation }: any) {
         hazard_name: description.trim(),
         severity,
         probability,
+        location: location.trim() || undefined,
+        hazard_still_present: stillPresent,
+        existing_controls: mitigation.trim() || undefined,
       });
       Alert.alert(
         'Hazard Reported',

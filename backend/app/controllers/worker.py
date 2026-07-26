@@ -370,16 +370,25 @@ def report_incident(
     ).mappings().first()
     loc_id = loc_row["id"] if loc_row else 1
 
-    # Save to incidents table
+    # Allow caller to pass location_station_id directly (preferred) or resolve by name
+    loc_id_override = data.get("location_station_id")
+    if loc_id_override:
+        loc_id = int(loc_id_override)
+
+    # Save to incidents table (all fields the app collects)
     db.execute(
         text("""
             INSERT INTO incidents (
                 organisation_id, report_date, incident_date_time, location_station_id, incident_type,
-                severity, description, immediate_cause, anyone_injured, injured_person_name,
+                severity, description, immediate_cause, immediate_actions_taken,
+                anyone_injured, injured_person_name, injured_body_part,
+                number_persons_involved, control_failure, hazard_still_present,
                 evidence_json, investigation_status, reported_by, workflow_status
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
-                :severity, :description, :immediate_cause, :anyone_injured, :injured_person_name,
+                :severity, :description, :immediate_cause, :immediate_actions_taken,
+                :anyone_injured, :injured_person_name, :injured_body_part,
+                :number_persons_involved, :control_failure, :hazard_still_present,
                 :evidence_json, :investigation_status, :reported_by, :workflow_status
             )
         """),
@@ -391,9 +400,14 @@ def report_incident(
             "incident_type": data.get("incident_type", "injury"),
             "severity": data.get("severity", "medium"),
             "description": data.get("description", ""),
-            "immediate_cause": data.get("reason", ""),
+            "immediate_cause": data.get("reason", data.get("immediate_actions", "")),
+            "immediate_actions_taken": data.get("immediate_actions", data.get("reason", "")),
             "anyone_injured": data.get("anyone_injured", "No"),
             "injured_person_name": data.get("injured_person_name", None),
+            "injured_body_part": data.get("injured_body_part", None),
+            "number_persons_involved": data.get("number_persons_involved", 1),
+            "control_failure": data.get("control_failure", "No"),
+            "hazard_still_present": data.get("hazard_still_present", "No"),
             "evidence_json": json.dumps(data.get("photos", [])),
             "investigation_status": "open",
             "reported_by": emp_id,
