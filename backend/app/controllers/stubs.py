@@ -5,7 +5,7 @@ showing API errors.
 """
 from io import BytesIO
 from typing import Any, List, Dict, Tuple, Set, Optional
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -1301,6 +1301,267 @@ def get_supervisor_dashboard(
         "active_permits": active_permits,
         "pending_permits": pending_permits,
     }
+
+
+@router.get("/supervisor/team/unconfirmed-shifts")
+def list_unconfirmed_shifts(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> list:
+    """Worker-logged shifts that no supervisor has signed off yet."""
+    rows = db.execute(
+        text("""
+            SELECT s.id, s.shift_date, s.shift_type, s.actual_hours_worked,
+                   e.full_name, ws.station_name
+            FROM shift_schedule s
+            LEFT JOIN employees e ON e.id = s.employee_id
+            LEFT JOIN working_stations ws ON ws.id = s.station_id
+            WHERE s.organisation_id = :org_id AND s.supervisor_id IS NULL
+            ORDER BY s.shift_date DESC, s.id DESC
+            LIMIT :limit
+        """),
+        {"org_id": current_user.org_id, "limit": limit},
+    ).mappings().all()
+
+    return [
+        {
+            "id": r["id"],
+            "shift_date": str(r["shift_date"]) if r["shift_date"] else None,
+            "shift_type": r["shift_type"],
+            "actual_hours_worked": float(r["actual_hours_worked"]) if r["actual_hours_worked"] is not None else None,
+            "employee_name": r["full_name"],
+            "station_name": r["station_name"],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/supervisor/team/shifts/{shift_id}/confirm")
+def confirm_shift(
+    shift_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """
+    Supervisor signs off a worker's logged hours — this is what stamps `supervisor_id`
+    on the shift row and drives the worker's "Shift Confirmed" notification.
+    """
+    supervisor_emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    result = db.execute(
+        text("""
+            UPDATE shift_schedule SET supervisor_id = :sup_id
+            WHERE id = :id AND organisation_id = :org_id
+        """),
+        {"sup_id": supervisor_emp_id, "id": shift_id, "org_id": current_user.org_id},
+    )
+    db.commit()
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    return {"success": True, "data": {"id": shift_id, "confirmed": True}}
+
+
+@router.get("/supervisor/my-kpis")
+def get_supervisor_kpis(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """
+    The spec's "Values Supervisor Gets" panel: zone injury/near-miss rates, the
+    permits and CAPAs this supervisor owns, safety-walk quality, team man-hours and
+    the investigations queue.
+    """
+    org = current_user.org_id
+    emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+    p = {"org_id": org, "emp_id": emp_id}
+
+    # Zone rates use the same formulas as the org-wide engine, scoped to this team.
+    man_hours = float(db.execute(
+        text("""SELECT COALESCE(SUM(actual_hours_worked), 0) FROM shift_schedule
+                WHERE organisation_id = :org_id
+                  AND (:emp_id IS NULL OR supervisor_id = :emp_id OR supervisor_id IS NULL)"""),
+        p,
+    ).scalar() or 0)
+
+    injuries = db.execute(
+        text("""SELECT COUNT(*) FROM incidents
+                WHERE organisation_id = :org_id AND LOWER(COALESCE(incident_type,'')) = 'injury'"""),
+        {"org_id": org},
+    ).scalar() or 0
+
+    near_misses = db.execute(
+        text("SELECT COUNT(*) FROM near_misses WHERE organisation_id = :org_id"), {"org_id": org}
+    ).scalar() or 0
+
+    zone_trir = round(injuries * 200000 / man_hours, 2) if man_hours else 0.0
+    near_miss_ratio = round(near_misses / injuries, 1) if injuries else 0.0
+
+    open_permits = db.execute(
+        text("""SELECT COUNT(*) FROM permits_to_work
+                WHERE organisation_id = :org_id AND status = 'Active'
+                  AND (:emp_id IS NULL OR acknowledged_by = :emp_id OR issued_by = :emp_id)"""),
+        p,
+    ).scalar() or 0
+
+    pending_capa = db.execute(
+        text("""SELECT COUNT(*) FROM capa_actions
+                WHERE organisation_id = :org_id AND status IN ('Open', 'In Progress')"""),
+        {"org_id": org},
+    ).scalar() or 0
+
+    walk = db.execute(
+        text("""SELECT COUNT(*) AS total,
+                       SUM(CASE WHEN follow_up_required = 'Yes' THEN 1 ELSE 0 END) AS follow_ups,
+                       AVG(compliance_rating) AS avg_rating,
+                       COALESCE(SUM(critical_issues), 0) AS critical
+                FROM safety_walks
+                WHERE organisation_id = :org_id
+                  AND (:emp_id IS NULL OR inspector_id = :emp_id OR inspector_id IS NULL)"""),
+        p,
+    ).mappings().first()
+
+    walk_total = walk["total"] or 0
+    follow_up_rate = round(float(walk["follow_ups"] or 0) / walk_total * 100, 1) if walk_total else 0.0
+
+    investigations = db.execute(
+        text("""SELECT COUNT(*) FROM incidents
+                WHERE organisation_id = :org_id
+                  AND (investigation_status IS NULL
+                       OR LOWER(investigation_status) IN ('open', 'in progress'))"""),
+        {"org_id": org},
+    ).scalar() or 0
+
+    return {
+        "zone_trir": zone_trir,
+        "near_miss_ratio": near_miss_ratio,
+        "open_permits": open_permits,
+        "pending_capa": pending_capa,
+        "walk_follow_up_rate": follow_up_rate,
+        "walk_avg_rating": round(float(walk["avg_rating"]), 1) if walk["avg_rating"] is not None else None,
+        "walk_critical_issues": int(walk["critical"] or 0),
+        "team_man_hours": round(man_hours, 1),
+        "investigations_queue": investigations,
+    }
+
+
+@router.get("/supervisor/reports/safety-walks")
+def list_supervisor_safety_walks(
+    limit: int = 40,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> list:
+    """Safety walks for this org, newest first, with the station name resolved."""
+    rows = db.execute(
+        text("""
+            SELECT sw.id, sw.inspection_date_time, sw.inspection_type, sw.issues_found,
+                   sw.critical_issues, sw.housekeeping_rating, sw.compliance_rating,
+                   sw.follow_up_required, ws.station_name
+            FROM safety_walks sw
+            LEFT JOIN working_stations ws ON ws.id = sw.location_station_id
+            WHERE sw.organisation_id = :org_id
+            ORDER BY sw.inspection_date_time DESC, sw.id DESC
+            LIMIT :limit
+        """),
+        {"org_id": current_user.org_id, "limit": limit},
+    ).mappings().all()
+
+    return [
+        {
+            "id": r["id"],
+            "inspection_date_time": r["inspection_date_time"].isoformat() if r["inspection_date_time"] else None,
+            "inspection_type": r["inspection_type"],
+            "issues_found": r["issues_found"],
+            "critical_issues": r["critical_issues"],
+            "housekeeping_rating": r["housekeeping_rating"],
+            "compliance_rating": r["compliance_rating"],
+            "follow_up_required": r["follow_up_required"],
+            "station_name": r["station_name"],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/supervisor/reports/safety-walks")
+def create_supervisor_safety_walk(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """
+    Records a safety walk inspection. Feeds Walk Compliance %, Follow-Up Rate and
+    Avg Compliance Rating — none of which had a write path before.
+
+    inspector_id is taken from the session rather than the request body so a
+    supervisor never has to know their own employee id.
+    """
+    from datetime import datetime
+
+    data = payload.get("data", payload)
+
+    inspector_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    def _rating(key: str):
+        """Ratings are 1-5; anything outside that is dropped rather than skewing averages."""
+        try:
+            val = int(data.get(key))
+        except (TypeError, ValueError):
+            return None
+        return val if 1 <= val <= 5 else None
+
+    def _count(key: str) -> int:
+        try:
+            return max(0, int(data.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    raw_dt = data.get("inspection_date_time")
+    inspection_dt = datetime.now()
+    if raw_dt:
+        try:
+            inspection_dt = datetime.fromisoformat(str(raw_dt).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            pass
+
+    follow_up = "Yes" if str(data.get("follow_up_required", "")).strip().lower() in ("yes", "true", "1") else "No"
+
+    result = db.execute(
+        text("""
+            INSERT INTO safety_walks (
+                organisation_id, inspection_date_time, location_station_id, inspector_id,
+                inspection_type, issues_found, critical_issues,
+                housekeeping_rating, compliance_rating, follow_up_required
+            ) VALUES (
+                :org_id, :inspection_date_time, :location_station_id, :inspector_id,
+                :inspection_type, :issues_found, :critical_issues,
+                :housekeeping_rating, :compliance_rating, :follow_up_required
+            )
+        """),
+        {
+            "org_id": current_user.org_id,
+            "inspection_date_time": inspection_dt,
+            "location_station_id": data.get("location_station_id") or None,
+            "inspector_id": inspector_id,
+            "inspection_type": data.get("inspection_type") or "Routine",
+            "issues_found": _count("issues_found"),
+            "critical_issues": _count("critical_issues"),
+            "housekeeping_rating": _rating("housekeeping_rating"),
+            "compliance_rating": _rating("compliance_rating"),
+            "follow_up_required": follow_up,
+        },
+    )
+    new_id = result.lastrowid
+    db.commit()
+
+    return {"success": True, "data": {"id": new_id}}
 
 
 @router.get("/supervisor/team/shift-status")

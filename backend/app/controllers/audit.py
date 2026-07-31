@@ -77,7 +77,7 @@ def _to_response(a: Audit) -> AuditResponse:
     return AuditResponse(
         id=a.id, organisation_id=a.organisation_id, title=a.title,
         checklist_type=a.checklist_type, site_id=a.site_id, site_name=a.site_name,
-        department=a.department, auditor_id=a.auditor_id, scheduled_date=a.scheduled_date,
+        department=a.department, shift=a.shift, auditor_id=a.auditor_id, scheduled_date=a.scheduled_date,
         due_date=a.due_date, status=a.status, priority=a.priority, progress=a.progress,
         compliance_score=a.compliance_score, findings=findings, submitted_at=a.submitted_at,
     )
@@ -135,6 +135,7 @@ def create_audit(
         site_id=payload.site_id,
         site_name=payload.site_name,
         department=payload.department,
+        shift=payload.shift,
         auditor_id=payload.auditor_id,
         scheduled_date=payload.scheduled_date,
         due_date=payload.due_date,
@@ -166,6 +167,8 @@ def submit_audit(
     score = payload.compliance_score if payload.compliance_score is not None else _derive_score(payload.items)
     a.findings_json = json.dumps([i.model_dump() for i in payload.items])
     a.compliance_score = score
+    if payload.shift:
+        a.shift = payload.shift
     a.status = "completed"
     a.progress = 100
     a.submitted_at = datetime.utcnow()

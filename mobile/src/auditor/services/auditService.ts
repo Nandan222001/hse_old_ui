@@ -37,8 +37,14 @@ export const auditService = {
   },
 
   /** Submit completed checklist. compliance_score is derived server-side if omitted. */
-  async submit(id: number, items: AuditChecklistItem[], compliance_score?: number): Promise<Audit> {
-    const { data } = await apiClient.post<Audit>(`/audits/${id}/submit`, { items, compliance_score });
+  /** `shift` is a spec field on checklist submission — which shift was walked. */
+  async submit(
+    id: number,
+    items: AuditChecklistItem[],
+    compliance_score?: number,
+    shift?: string,
+  ): Promise<Audit> {
+    const { data } = await apiClient.post<Audit>(`/audits/${id}/submit`, { items, compliance_score, shift });
     return data;
   },
 };

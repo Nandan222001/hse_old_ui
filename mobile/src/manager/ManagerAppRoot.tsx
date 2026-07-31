@@ -28,6 +28,9 @@ import { AssignedTasksScreenView } from "./components/AssignedTasksScreen";
 import { MgrInvestigation } from "./components/MgrInvestigation";
 import { MgrAssignActions } from "./components/MgrAssignActions";
 import { ComplianceApprovalsView } from "./components/ComplianceApprovals";
+import type { ManagerScreen } from "./components/types";
+import { HazardRegisterScreen } from "./components/HazardRegisterScreen";
+import { PolicyManagementScreen } from "./components/PolicyManagementScreen";
 import { PermitApprovalsView } from "./components/PermitApprovals";
 import { AppContainerView } from "./components/AppContainer";
 
@@ -35,9 +38,7 @@ export function ManagerAppRoot() {
   const { logout } = useAuth();
 
   // Navigation & Layout States - Start with "app" directly instead of "login"
-  const [currentScreen, setCurrentScreen] = useState<
-    "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks"
-  >("app");
+  const [currentScreen, setCurrentScreen] = useState<ManagerScreen>("app");
   const [layoutVersion] = useState<"A" | "B">("B");
   const [activeTab, setActiveTab] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -337,6 +338,10 @@ export function ManagerAppRoot() {
         return <AssignedTasksScreenView {...sharedProps} />;
       case "compliance_approvals":
         return <ComplianceApprovalsView {...sharedProps} />;
+      case "hazard_register":
+        return <HazardRegisterScreen {...sharedProps} />;
+      case "policy_management":
+        return <PolicyManagementScreen {...sharedProps} />;
       case "permit_approvals":
         return <PermitApprovalsView {...sharedProps} />;
       case "app":

@@ -14,7 +14,15 @@ def _build_row(payload: NearMissReport, data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "potential_consequence": data.get("potential_consequence"),
         "underlying_cause": data.get("underlying_cause"),
+        "hazard_id": data.get("hazard_id"),
+        # Both are enum('Yes','No') in MySQL, so normalise before writing.
+        "control_failure": _yes_no(data.get("control_failure")),
+        "capa_escalation": _yes_no(data.get("capa_escalation")),
     }
+
+
+def _yes_no(value: Any) -> str:
+    return "Yes" if str(value or "").strip().lower() in ("yes", "true", "1") else "No"
 
 
 router = build_workflow_router(
@@ -24,7 +32,10 @@ router = build_workflow_router(
     tag="Near Miss Workflow",
     create_schema=NearMissReport,
     build_row=_build_row,
-    detail_fields=["potential_consequence", "underlying_cause", "hazard_id"],
+    detail_fields=[
+        "potential_consequence", "underlying_cause", "hazard_id",
+        "control_failure", "capa_escalation",
+    ],
     # near_misses names its timestamp column event_date_time
     observed_at_field="event_date_time",
 )

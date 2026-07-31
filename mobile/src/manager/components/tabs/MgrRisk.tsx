@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity,
 } from 'react-native';
-import { MapPin, AlertTriangle, Zap, Wrench } from 'lucide-react-native';
+import { MapPin, AlertTriangle, Zap, Wrench, ShieldAlert, FileText, ChevronRight } from 'lucide-react-native';
 import type { ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
 
@@ -15,7 +15,7 @@ function cellColor(v: number, max: number) {
   return '#E2E8F0';
 }
 
-export function MgrRisk(_: ScreenProps) {
+export function MgrRisk({ setCurrentScreen }: ScreenProps) {
   const [zones, setZones] = useState<{ zone: string; value: number }[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,20 @@ export function MgrRisk(_: ScreenProps) {
       <View style={styles.subRow}>
         <Text style={styles.sub}>Live Site Overview</Text>
         <View style={styles.locRow}><MapPin size={13} color="#0B3D91" /><Text style={styles.loc}>Site Zones</Text></View>
+      </View>
+
+      {/* Manager-owned registers */}
+      <View style={styles.navRow}>
+        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('hazard_register')}>
+          <ShieldAlert size={18} color="#0B3D91" />
+          <Text style={styles.navText}>Hazard Register</Text>
+          <ChevronRight size={16} color="#94A3B8" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('policy_management')}>
+          <FileText size={18} color="#0B3D91" />
+          <Text style={styles.navText}>Policies</Text>
+          <ChevronRight size={16} color="#94A3B8" />
+        </TouchableOpacity>
       </View>
 
       {/* Heatmap grid */}
@@ -108,6 +122,13 @@ export function MgrRisk(_: ScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  navRow: { gap: 10, marginBottom: 18 },
+  navCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  navText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#0B3D91' },
   scroll: { padding: 20, paddingBottom: 30 },
   title: { fontSize: 22, fontWeight: '800', color: '#0B3D91', marginBottom: 4 },
   subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },

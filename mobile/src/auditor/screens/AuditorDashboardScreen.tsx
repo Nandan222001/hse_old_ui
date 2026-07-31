@@ -70,6 +70,14 @@ export function AuditorDashboardScreen({ navigation }: any) {
               <Action label="Assigned Audits" icon="list-outline" onPress={() => navigation.navigate('Audits')} />
               <Action label="Audit Calendar" icon="calendar-outline" onPress={() => navigation.navigate('AuditCalendar')} />
             </View>
+            <View style={styles.actionsRow}>
+              <Action label="Verifications" icon="shield-checkmark-outline" onPress={() => navigation.navigate('Verifications')} />
+              <Action label="Audit Trail" icon="time-outline" onPress={() => navigation.navigate('AuditTrail')} />
+            </View>
+            <View style={styles.actionsRow}>
+              <Action label="Close-Out Review" icon="clipboard-outline" onPress={() => navigation.navigate('CloseOutReview')} />
+              <View style={{ flex: 1 }} />
+            </View>
 
             <Text style={styles.section}>Recent Audits</Text>
             {audits.slice(0, 4).map((a) => (

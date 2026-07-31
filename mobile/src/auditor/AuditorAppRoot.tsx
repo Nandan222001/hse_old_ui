@@ -12,6 +12,9 @@ import { AuditorProfileScreen } from './screens/AuditorProfileScreen';
 import { AuditDetailScreen } from './screens/AuditDetailScreen';
 import { AuditChecklistScreen } from './screens/AuditChecklistScreen';
 import { AuditCalendarScreen } from './screens/AuditCalendarScreen';
+import { VerificationsScreen } from './screens/VerificationsScreen';
+import { AuditTrailScreen } from './screens/AuditTrailScreen';
+import { CloseOutReviewScreen } from './screens/CloseOutReviewScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
 
 const Stack = createStackNavigator();
@@ -68,6 +71,9 @@ export function AuditorAppRoot() {
       <Stack.Screen name="AuditDetail" component={AuditDetailScreen} />
       <Stack.Screen name="AuditChecklist" component={AuditChecklistScreen} />
       <Stack.Screen name="AuditCalendar" component={AuditCalendarScreen} />
+      <Stack.Screen name="Verifications" component={VerificationsScreen} />
+      <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />
+      <Stack.Screen name="CloseOutReview" component={CloseOutReviewScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
     </Stack.Navigator>
   );

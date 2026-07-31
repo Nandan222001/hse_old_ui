@@ -1,8 +1,20 @@
 import type { Incident, Permit, Complaint, Capa, Audit } from "../data/mockData";
 
+/** Every screen the manager shell can render. Keep in sync with ManagerAppRoot's switch. */
+export type ManagerScreen =
+  | "login"
+  | "app"
+  | "investigation"
+  | "assign_actions"
+  | "compliance_approvals"
+  | "permit_approvals"
+  | "assigned_tasks"
+  | "hazard_register"
+  | "policy_management";
+
 export interface ScreenProps {
-  currentScreen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks";
-  setCurrentScreen: (screen: "login" | "app" | "investigation" | "assign_actions" | "compliance_approvals" | "permit_approvals" | "assigned_tasks") => void;
+  currentScreen: ManagerScreen;
+  setCurrentScreen: (screen: ManagerScreen) => void;
   layoutVersion: "A" | "B";
   activeTab: number;
   setActiveTab: (tab: number) => void;

@@ -1,6 +1,19 @@
-export type IncidentType = 'injury' | 'spill' | 'fire' | 'equipment_damage' | 'near_miss';
-export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
+/**
+ * Values here are the literal strings the KPI engine matches on
+ * (backend/app/controllers/dashboard.py) — do not "tidy" them into slugs.
+ * `Injury` gates the recordable count; `Lost Time` gates LTIFR/LTISR/DART.
+ */
+export type IncidentType =
+  | 'Injury'
+  | 'Dangerous Occurrence'
+  | 'Property Damage'
+  | 'Environmental';
+
+export type SeverityLevel = 'Minor' | 'Moderate' | 'Severe' | 'Lost Time' | 'Fatal';
+
 export type IncidentStatus = 'submitted' | 'under_review' | 'investigating' | 'closed';
+
+export type YesNo = 'Yes' | 'No';
 
 export type PotentialConsequence = 'minor_injury' | 'lost_time_injury' | 'property_damage' | 'environmental_impact';
 export type NearMissCause = 'slippery_floor' | 'missing_guard' | 'distraction' | 'poor_lighting' | 'other';
@@ -12,15 +25,24 @@ export interface PhotoAttachment {
 }
 
 export interface ReportIncidentRequest {
+  incident_date_time: string;
+  location_station_id: number;
   incident_type: IncidentType;
-  date: string;
-  time: string;
-  location: string;
-  latitude?: number;
-  longitude?: number;
-  description: string;
-  immediate_actions: string;
   severity: SeverityLevel;
+  description: string;
+  immediate_cause?: string;
+  number_persons_involved?: number;
+  anyone_injured: YesNo;
+  injured_person_name?: string;
+  injured_body_part?: string;
+  hazard_id?: number;
+  permit_active?: YesNo;
+  control_failure?: YesNo;
+  hazard_still_present?: YesNo;
+  immediate_actions_taken?: string;
+  witnesses?: string[];
+  gps_latitude?: number;
+  gps_longitude?: number;
   photos?: PhotoAttachment[];
 }
 

@@ -98,6 +98,21 @@ export const permitWorkflowService = {
     return data ?? [];
   },
 
+  /**
+   * Close-out at end of work. `deviationReported` is required because it is the only
+   * source for LOTO Compliance % and Permit Deviation Rate.
+   */
+  async close(id: number, payload: {
+    deviation_reported: 'Yes' | 'No';
+    incident_occurred?: 'Yes' | 'No';
+    work_start_actual?: string;
+    work_end_actual?: string;
+    supervisor_notes?: string;
+  }): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.CLOSE(id), payload);
+    return data;
+  },
+
   // ── Auditor ─────────────────────────────────────────────────────────────────
   async auditList(): Promise<PermitListItem[]> {
     const { data } = await apiClient.get(PERMIT_WORKFLOW.AUDIT_LIST);

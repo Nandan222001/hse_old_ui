@@ -105,6 +105,7 @@ export const PERMIT_WORKFLOW = {
   // Auditor
   AUDIT_LIST: '/permit-workflow/audit-list',
   VERIFY: (id: string | number) => `/permit-workflow/${id}/verify`,
+  CLOSE: (id: string | number) => `/permit-workflow/${id}/close`,
   // Shared
   STATS: '/permit-workflow/stats/summary',
   DETAIL: (id: string | number) => `/permit-workflow/${id}`,

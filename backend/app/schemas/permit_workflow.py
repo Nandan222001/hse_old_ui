@@ -51,6 +51,20 @@ class PermitVerify(BaseModel):
     verification_notes: Optional[str] = None
 
 
+class PermitClose(BaseModel):
+    """
+    Supervisor closing out a permit. `deviation_reported` is the sole input to the
+    LOTO Compliance % and Permit Deviation Rate KPIs, so it is required rather than
+    defaulted — a silent "No" would quietly inflate compliance.
+    """
+
+    deviation_reported: str = Field(..., description="Yes | No")
+    incident_occurred: str = Field("No", description="Yes | No")
+    work_start_actual: Optional[datetime] = None
+    work_end_actual: Optional[datetime] = None
+    supervisor_notes: Optional[str] = None
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # RESPONSES
 # ══════════════════════════════════════════════════════════════════════════════

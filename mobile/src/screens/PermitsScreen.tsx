@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
@@ -34,24 +34,52 @@ export function PermitsScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        // Supervisor sees permits awaiting review + the active ones on site.
-        const [pending, active] = await Promise.all([
-          permitWorkflowService.pendingReview(),
-          permitWorkflowService.active(),
-        ]);
-        setPermits([...pending, ...active].map(toDisplayPermit));
-      } catch {
-        setPermits([]);
-      } finally {
-        setLoading(false);
-      }
+  // ── Close-out ────────────────────────────────────────────────────────────
+  const [closing, setClosing] = useState<Permit | null>(null);
+  const [deviation, setDeviation] = useState<'Yes' | 'No'>('No');
+  const [incidentOccurred, setIncidentOccurred] = useState<'Yes' | 'No'>('No');
+  const [closeNotes, setCloseNotes] = useState('');
+  const [savingClose, setSavingClose] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Supervisor sees permits awaiting review + the active ones on site.
+      const [pending, active] = await Promise.all([
+        permitWorkflowService.pendingReview(),
+        permitWorkflowService.active(),
+      ]);
+      setPermits([...pending, ...active].map(toDisplayPermit));
+    } catch {
+      setPermits([]);
+    } finally {
+      setLoading(false);
     }
-    loadData();
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const submitClose = async () => {
+    if (!closing) return;
+    setSavingClose(true);
+    try {
+      await permitWorkflowService.close(Number(closing.id), {
+        deviation_reported: deviation,
+        incident_occurred: incidentOccurred,
+        work_end_actual: new Date().toISOString(),
+        supervisor_notes: closeNotes.trim() || undefined,
+      });
+      setClosing(null);
+      setDeviation('No');
+      setIncidentOccurred('No');
+      setCloseNotes('');
+      loadData();
+    } catch (e: any) {
+      Alert.alert('Close Failed', e?.response?.data?.detail || 'Could not close this permit.');
+    } finally {
+      setSavingClose(false);
+    }
+  };
 
   const permitsList = permits.filter((p) =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -169,18 +197,121 @@ export function PermitsScreen({ navigation }: Props) {
                     <Ionicons name="time-outline" size={13} color={statusColor} />
                     <Text style={[styles.timeText, { color: statusColor }]}>{p.validity_end ?? 'No Expiry'}</Text>
                   </View>
-                  <Ionicons name="arrow-forward" size={16} color={Colors.textLight} />
+                  {isApproved ? (
+                    <TouchableOpacity
+                      style={styles.closeOutBtn}
+                      onPress={() => setClosing(p)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.closeOutBtnText}>Close Out</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Ionicons name="arrow-forward" size={16} color={Colors.textLight} />
+                  )}
                 </View>
               </TouchableOpacity>
             );
           })}
         </View>
       </ScrollView>
+
+      <Modal visible={closing != null} transparent animationType="slide" onRequestClose={() => setClosing(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Close Out Permit</Text>
+              <TouchableOpacity onPress={() => setClosing(null)}>
+                <Ionicons name="close" size={22} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.sheetSub}>{closing?.title}</Text>
+
+            <Text style={styles.fieldLabel}>WAS THERE ANY DEVIATION FROM THE PERMIT?</Text>
+            <View style={styles.pillRow}>
+              {(['No', 'Yes'] as const).map(v => (
+                <TouchableOpacity
+                  key={v}
+                  style={[styles.pill, deviation === v && styles.pillActive]}
+                  onPress={() => setDeviation(v)}
+                >
+                  <Text style={[styles.pillText, deviation === v && styles.pillTextActive]}>{v}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.hintText}>
+              Drives LOTO Compliance % and Permit Deviation Rate.
+            </Text>
+
+            <Text style={styles.fieldLabel}>DID AN INCIDENT OCCUR DURING THIS WORK?</Text>
+            <View style={styles.pillRow}>
+              {(['No', 'Yes'] as const).map(v => (
+                <TouchableOpacity
+                  key={v}
+                  style={[styles.pill, incidentOccurred === v && styles.pillActive]}
+                  onPress={() => setIncidentOccurred(v)}
+                >
+                  <Text style={[styles.pillText, incidentOccurred === v && styles.pillTextActive]}>{v}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>SUPERVISOR NOTES</Text>
+            <TextInput
+              style={styles.notesInput}
+              placeholder="Anything worth recording about this close-out..."
+              placeholderTextColor={Colors.textLight}
+              multiline
+              value={closeNotes}
+              onChangeText={setCloseNotes}
+            />
+
+            <TouchableOpacity style={styles.confirmCloseBtn} onPress={submitClose} disabled={savingClose}>
+              {savingClose
+                ? <ActivityIndicator color="#FFFFFF" />
+                : <Text style={styles.confirmCloseText}>Close Permit</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  closeOutBtn: {
+    backgroundColor: '#0B3D91', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
+  },
+  closeOutBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 32,
+  },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: '#0B1C30' },
+  sheetSub: { fontSize: 13, color: Colors.textMuted, marginTop: 4 },
+  fieldLabel: {
+    fontSize: 11, fontWeight: '800', color: Colors.textMuted,
+    letterSpacing: 0.6, marginTop: 20, marginBottom: 8,
+  },
+  pillRow: { flexDirection: 'row', gap: 10 },
+  pill: {
+    flex: 1, height: 44, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pillActive: { backgroundColor: '#0B3D91', borderColor: '#0B3D91' },
+  pillText: { fontSize: 14, fontWeight: '700', color: '#0B1C30' },
+  pillTextActive: { color: '#FFFFFF' },
+  hintText: { fontSize: 11, color: Colors.textLight, marginTop: 6 },
+  notesInput: {
+    borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12,
+    padding: 12, minHeight: 72, fontSize: 14, color: '#0B1C30', textAlignVertical: 'top',
+  },
+  confirmCloseBtn: {
+    backgroundColor: '#0B3D91', borderRadius: 12, height: 50,
+    alignItems: 'center', justifyContent: 'center', marginTop: 24,
+  },
+  confirmCloseText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   root: {
     flex: 1,
     backgroundColor: '#F8F9FF',

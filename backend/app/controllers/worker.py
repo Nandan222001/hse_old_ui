@@ -343,6 +343,246 @@ def acknowledge_permit(
     return {"success": True, "data": {"id": id, "status": "active"}}
 
 
+@router.get("/my-kpis")
+def get_my_kpis(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """
+    The spec's "Values Worker Gets" panel — everything scoped to the signed-in
+    worker, not the org. Counts are for the current calendar month so the numbers
+    reset with each reporting period.
+    """
+    emp_id = _employee_id(db, current_user)
+    if not emp_id:
+        today = date.today()
+        return {
+            "success": True,
+            "data": {
+                "my_incidents": 0, "my_near_misses": 0, "hours_logged_month": 0.0,
+                "my_open_capa": 0, "incident_feed": [],
+                "period_month": today.month, "period_year": today.year,
+                "period_label": today.strftime("%B %Y"),
+            },
+        }
+
+    # Anchor "this period" on the latest month this worker actually has data for,
+    # not on today. With a historical dataset (org 4 ends Dec-2025) a today-anchored
+    # month is always empty — the same reason dashboard.py anchors on the data window.
+    anchor = db.execute(
+        text("""
+            SELECT MAX(d) FROM (
+                SELECT MAX(shift_date) AS d FROM shift_schedule
+                 WHERE organisation_id = :org_id AND employee_id = :emp_id
+                UNION ALL
+                SELECT MAX(incident_date_time) FROM incidents
+                 WHERE organisation_id = :org_id AND reported_by = :emp_id
+                UNION ALL
+                SELECT MAX(event_date_time) FROM near_misses
+                 WHERE organisation_id = :org_id AND reported_by = :emp_id
+            ) AS x
+        """),
+        {"org_id": current_user.org_id, "emp_id": emp_id},
+    ).scalar()
+
+    period = anchor.date() if hasattr(anchor, "date") else (anchor or date.today())
+    params = {
+        "org_id": current_user.org_id,
+        "emp_id": emp_id,
+        "month": period.month,
+        "year": period.year,
+    }
+
+    my_incidents = db.execute(
+        text("""SELECT COUNT(*) FROM incidents
+                WHERE organisation_id = :org_id AND reported_by = :emp_id
+                  AND MONTH(incident_date_time) = :month AND YEAR(incident_date_time) = :year"""),
+        params,
+    ).scalar() or 0
+
+    my_near_misses = db.execute(
+        text("""SELECT COUNT(*) FROM near_misses
+                WHERE organisation_id = :org_id AND reported_by = :emp_id
+                  AND MONTH(event_date_time) = :month AND YEAR(event_date_time) = :year"""),
+        params,
+    ).scalar() or 0
+
+    hours = db.execute(
+        text("""SELECT COALESCE(SUM(actual_hours_worked), 0) FROM shift_schedule
+                WHERE organisation_id = :org_id AND employee_id = :emp_id
+                  AND MONTH(shift_date) = :month AND YEAR(shift_date) = :year"""),
+        params,
+    ).scalar() or 0
+
+    my_open_capa = db.execute(
+        text("""SELECT COUNT(*) FROM capa_actions
+                WHERE organisation_id = :org_id AND responsible_person_id = :emp_id
+                  AND status <> 'Completed'"""),
+        {"org_id": current_user.org_id, "emp_id": emp_id},
+    ).scalar() or 0
+
+    # Status feed for the incidents this worker raised, newest first.
+    feed_rows = db.execute(
+        text("""SELECT id, incident_type, workflow_status, acknowledged_at,
+                       investigation_status, incident_date_time
+                FROM incidents
+                WHERE organisation_id = :org_id AND reported_by = :emp_id
+                ORDER BY incident_date_time DESC LIMIT 10"""),
+        {"org_id": current_user.org_id, "emp_id": emp_id},
+    ).mappings().all()
+
+    return {
+        "success": True,
+        "data": {
+            "my_incidents": my_incidents,
+            "my_near_misses": my_near_misses,
+            "hours_logged_month": float(hours),
+            "my_open_capa": my_open_capa,
+            # The month these counts cover — the anchor is data-driven, so it is
+            # often not the current calendar month. The UI labels the panel with it
+            # instead of letting "Your Month" imply today.
+            "period_month": period.month,
+            "period_year": period.year,
+            "period_label": period.strftime("%B %Y"),
+            "incident_feed": [
+                {
+                    "id": r["id"],
+                    "reference": f"INC-{r['id']}",
+                    "incident_type": r["incident_type"],
+                    "workflow_status": r["workflow_status"],
+                    "acknowledged": r["acknowledged_at"] is not None,
+                    "investigation_complete": str(r["investigation_status"] or "").lower() == "completed",
+                    "occurred_at": r["incident_date_time"].isoformat() if r["incident_date_time"] else None,
+                }
+                for r in feed_rows
+            ],
+        },
+    }
+
+
+# ─── Shift Check-In Endpoints ─────────────────────────────────────────────────
+
+@router.get("/shift/my-shifts")
+def list_my_shifts(
+    limit: int = 30,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """Recent shift records for the signed-in worker, newest first."""
+    emp_id = _employee_id(db, current_user)
+    if not emp_id:
+        return {"success": True, "data": []}
+
+    rows = db.execute(
+        text("""
+            SELECT s.id, s.shift_date, s.shift_type, s.shift_start, s.shift_end,
+                   s.actual_hours_worked, s.station_id, s.supervisor_id,
+                   ws.station_name
+            FROM shift_schedule s
+            LEFT JOIN working_stations ws ON ws.id = s.station_id
+            WHERE s.organisation_id = :org_id AND s.employee_id = :emp_id
+            ORDER BY s.shift_date DESC, s.id DESC
+            LIMIT :limit
+        """),
+        {"org_id": current_user.org_id, "emp_id": emp_id, "limit": limit}
+    ).mappings().all()
+
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": r["id"],
+                "shift_date": str(r["shift_date"]) if r["shift_date"] else None,
+                "shift_type": r["shift_type"],
+                "shift_start": str(r["shift_start"]) if r["shift_start"] else None,
+                "shift_end": str(r["shift_end"]) if r["shift_end"] else None,
+                "actual_hours_worked": float(r["actual_hours_worked"]) if r["actual_hours_worked"] is not None else None,
+                "station_id": r["station_id"],
+                "station_name": r["station_name"],
+                "confirmed": r["supervisor_id"] is not None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/shift/check-in")
+def shift_check_in(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    """
+    Logs the hours a worker actually worked. This is the man-hours denominator for
+    TRIR / LTIFR / LTISR / DART / FAR — without it those rates have nothing to divide by.
+
+    Re-checking in for a date the worker already logged updates that row instead of
+    creating a duplicate, so hours can be corrected at end of shift.
+    """
+    data = payload.get("data", payload)
+
+    emp_id = _employee_id(db, current_user)
+    if not emp_id:
+        raise HTTPException(status_code=400, detail="No employee record is linked to this account")
+
+    shift_date = data.get("shift_date") or date.today().isoformat()
+    try:
+        hours = float(data.get("actual_hours_worked"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="actual_hours_worked is required and must be a number")
+    if hours <= 0 or hours > 24:
+        raise HTTPException(status_code=400, detail="actual_hours_worked must be between 0 and 24")
+
+    params = {
+        "org_id": current_user.org_id,
+        "emp_id": emp_id,
+        "shift_date": shift_date,
+        "shift_type": data.get("shift_type") or "Morning",
+        "shift_start": data.get("shift_start") or None,
+        "shift_end": data.get("shift_end") or None,
+        "hours": hours,
+        "station_id": data.get("station_id") or None,
+    }
+
+    existing = db.execute(
+        text("""
+            SELECT id FROM shift_schedule
+            WHERE organisation_id = :org_id AND employee_id = :emp_id AND shift_date = :shift_date
+        """),
+        {"org_id": current_user.org_id, "emp_id": emp_id, "shift_date": shift_date}
+    ).mappings().first()
+
+    if existing:
+        params["id"] = existing["id"]
+        db.execute(
+            text("""
+                UPDATE shift_schedule
+                SET shift_type = :shift_type, shift_start = :shift_start, shift_end = :shift_end,
+                    actual_hours_worked = :hours, station_id = :station_id
+                WHERE id = :id
+            """),
+            params
+        )
+        shift_id = existing["id"]
+    else:
+        db.execute(
+            text("""
+                INSERT INTO shift_schedule (
+                    organisation_id, employee_id, shift_date, shift_type,
+                    shift_start, shift_end, actual_hours_worked, station_id
+                ) VALUES (
+                    :org_id, :emp_id, :shift_date, :shift_type,
+                    :shift_start, :shift_end, :hours, :station_id
+                )
+            """),
+            params
+        )
+        shift_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+
+    db.commit()
+    return {"success": True, "data": {"id": shift_id, "shift_date": shift_date, "actual_hours_worked": hours}}
+
+
 # ─── Incidents Endpoints ──────────────────────────────────────────────────────
 
 @router.post("/incidents")
@@ -362,47 +602,84 @@ def report_incident(
     emp_id = user_row["employee_id"] if user_row else None
     
     import json
-    # Resolve working station id by name
-    loc_name = data.get("location", "Heavy Assembly Station 1")
-    loc_row = db.execute(
-        text("SELECT id FROM working_stations WHERE station_name = :name AND organisation_id = :org_id"),
-        {"name": loc_name, "org_id": current_user.org_id}
-    ).mappings().first()
-    loc_id = loc_row["id"] if loc_row else 1
+
+    # Resolve working station: prefer an explicit FK, fall back to name lookup so
+    # older clients that only send a station name keep working.
+    loc_id = data.get("location_station_id")
+    if not loc_id:
+        loc_name = data.get("location", "Heavy Assembly Station 1")
+        loc_row = db.execute(
+            text("SELECT id FROM working_stations WHERE station_name = :name AND organisation_id = :org_id"),
+            {"name": loc_name, "org_id": current_user.org_id}
+        ).mappings().first()
+        loc_id = loc_row["id"] if loc_row else 1
+
+    # incident_date_time is what every rate KPI buckets on, so honour the value the
+    # reporter picked instead of stamping "now".
+    incident_dt = datetime.now()
+    raw_dt = data.get("incident_date_time")
+    if raw_dt:
+        try:
+            incident_dt = datetime.fromisoformat(str(raw_dt).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            pass
+
+    def _yes_no(key: str, default: str = "No") -> str:
+        val = str(data.get(key, default) or default).strip().lower()
+        return "Yes" if val in ("yes", "true", "1") else "No"
 
     # Save to incidents table
     db.execute(
         text("""
             INSERT INTO incidents (
                 organisation_id, report_date, incident_date_time, location_station_id, incident_type,
-                severity, description, immediate_cause, anyone_injured, injured_person_name,
-                evidence_json, investigation_status, reported_by, workflow_status
+                severity, description, immediate_cause, number_persons_involved, anyone_injured,
+                injured_person_name, injured_body_part, hazard_id, permit_active, control_failure,
+                hazard_still_present, immediate_actions_taken, witnesses_json, evidence_json,
+                gps_latitude, gps_longitude, investigation_status, reported_by, workflow_status,
+                reported_at
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
-                :severity, :description, :immediate_cause, :anyone_injured, :injured_person_name,
-                :evidence_json, :investigation_status, :reported_by, :workflow_status
+                :severity, :description, :immediate_cause, :number_persons_involved, :anyone_injured,
+                :injured_person_name, :injured_body_part, :hazard_id, :permit_active, :control_failure,
+                :hazard_still_present, :immediate_actions_taken, :witnesses_json, :evidence_json,
+                :gps_latitude, :gps_longitude, :investigation_status, :reported_by, :workflow_status,
+                :reported_at
             )
         """),
         {
             "org_id": current_user.org_id,
-            "report_date": date.today(),
-            "incident_date_time": datetime.now(),
+            "report_date": incident_dt.date(),
+            "incident_date_time": incident_dt,
             "loc_id": loc_id,
-            "incident_type": data.get("incident_type", "injury"),
-            "severity": data.get("severity", "medium"),
+            "incident_type": data.get("incident_type", "Injury"),
+            "severity": data.get("severity", "Minor"),
             "description": data.get("description", ""),
-            "immediate_cause": data.get("reason", ""),
-            "anyone_injured": data.get("anyone_injured", "No"),
-            "injured_person_name": data.get("injured_person_name", None),
-            "evidence_json": json.dumps(data.get("photos", [])),
+            "immediate_cause": data.get("immediate_cause", data.get("reason", "")),
+            "number_persons_involved": data.get("number_persons_involved") or None,
+            "anyone_injured": _yes_no("anyone_injured"),
+            "injured_person_name": data.get("injured_person_name") or None,
+            "injured_body_part": data.get("injured_body_part") or None,
+            "hazard_id": data.get("hazard_id") or None,
+            "permit_active": _yes_no("permit_active"),
+            "control_failure": _yes_no("control_failure"),
+            "hazard_still_present": _yes_no("hazard_still_present"),
+            "immediate_actions_taken": data.get("immediate_actions_taken") or None,
+            "witnesses_json": json.dumps(data.get("witnesses", [])),
+            "evidence_json": json.dumps(data.get("photos") or data.get("mockPhotos") or []),
+            "gps_latitude": data.get("gps_latitude"),
+            "gps_longitude": data.get("gps_longitude"),
             "investigation_status": "open",
             "reported_by": emp_id,
-            "workflow_status": "reported"
+            "workflow_status": "reported",
+            "reported_at": datetime.now(),
         }
     )
-    db.commit()
+    # Read the id before committing — after a commit the SELECT can land on a
+    # different pooled connection and return an unrelated LAST_INSERT_ID().
     new_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
-    
+    db.commit()
+
     return {"success": True, "data": {"id": str(new_id), "status": "submitted"}}
 
 

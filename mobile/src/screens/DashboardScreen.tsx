@@ -6,6 +6,7 @@ import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboard } from '../hooks/useDashboard';
 import { permitService } from '../services/permitService';
+import { apiClient } from '../api/client';
 import { Avatar } from '../components';
 
 const PERMIT_STATUS_COLOR: Record<string, string> = {
@@ -21,6 +22,14 @@ export function DashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { stats, alerts, shiftStatus, isLoading, refresh } = useDashboard();
 
+  // "Values Supervisor Gets" — zone rates and the queues this supervisor owns.
+  const [zoneKpis, setZoneKpis] = useState<any | null>(null);
+  const loadZoneKpis = useCallback(() => {
+    apiClient.get('/supervisor/my-kpis')
+      .then((r: any) => setZoneKpis(r.data ?? null))
+      .catch(() => {});
+  }, []);
+
   // Real permits for the "Active Permits" section.
   const [permits, setPermits] = useState<any[]>([]);
   const loadPermits = useCallback(() => {
@@ -30,10 +39,12 @@ export function DashboardScreen({ navigation }: Props) {
   useEffect(() => {
     refresh();
     loadPermits();
+    loadZoneKpis();
 
     const unsubscribe = navigation.addListener('focus', () => {
       refresh();
       loadPermits();
+      loadZoneKpis();
     });
 
     const interval = setInterval(() => {
@@ -133,6 +144,19 @@ export function DashboardScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
+        {/* Zone KPIs — the supervisor's own area, not the whole org */}
+        <Text style={styles.sectionTitle}>Your Zone</Text>
+        <View style={styles.zoneGrid}>
+          <ZoneTile label="Zone TRIR" value={zoneKpis?.zone_trir} />
+          <ZoneTile label="Near Miss Ratio" value={zoneKpis?.near_miss_ratio} />
+          <ZoneTile label="Open Permits" value={zoneKpis?.open_permits} />
+          <ZoneTile label="Pending CAPAs" value={zoneKpis?.pending_capa} />
+          <ZoneTile label="Walk Follow-Up" value={zoneKpis?.walk_follow_up_rate} suffix="%" />
+          <ZoneTile label="Avg Walk Rating" value={zoneKpis?.walk_avg_rating} suffix="/5" />
+          <ZoneTile label="Team Man-Hours" value={zoneKpis?.team_man_hours} />
+          <ZoneTile label="Investigations" value={zoneKpis?.investigations_queue} />
+        </View>
+
         {/* Quick Actions Title */}
         <Text style={styles.sectionTitle}>Quick Management Actions</Text>
 
@@ -169,6 +193,17 @@ export function DashboardScreen({ navigation }: Props) {
               <Ionicons name="checkbox-outline" size={24} color="#16A34A" />
             </View>
             <Text style={styles.gridLabel}>Site Inspections</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('ShiftConfirmation')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="time-outline" size={24} color="#2563EB" />
+            </View>
+            <Text style={styles.gridLabel}>Confirm Shift Hours</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -308,7 +343,24 @@ export function DashboardScreen({ navigation }: Props) {
   );
 }
 
+function ZoneTile({ label, value, suffix = '' }: { label: string; value?: number | null; suffix?: string }) {
+  return (
+    <View style={styles.zoneTile}>
+      <Text style={styles.zoneVal}>{value == null ? '—' : `${value}${suffix}`}</Text>
+      <Text style={styles.zoneLbl}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  zoneGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  zoneTile: {
+    flexGrow: 1, flexBasis: '45%', minWidth: 140,
+    backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0',
+    paddingVertical: 14, paddingHorizontal: 14,
+  },
+  zoneVal: { fontSize: 19, fontWeight: '800', color: '#004AC6' },
+  zoneLbl: { fontSize: 11, fontWeight: '700', color: '#737686', marginTop: 4 },
   root: {
     flex: 1,
     backgroundColor: '#F8F9FF',

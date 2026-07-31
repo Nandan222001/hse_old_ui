@@ -26,6 +26,27 @@ export default function DashboardScreen({ navigation }: any) {
       .catch(() => {});
   }, []);
 
+  // "Values Worker Gets" — this worker's own numbers for one month. The backend
+  // anchors that month on the worker's latest data, so it is not always the
+  // current calendar month; period_label says which month is on screen.
+  const [myKpis, setMyKpis] = useState<{
+    my_incidents: number; my_near_misses: number;
+    hours_logged_month: number; my_open_capa: number;
+    period_label?: string;
+  } | null>(null);
+  const loadMyKpis = useCallback(() => {
+    apiClient
+      .get('worker/my-kpis')
+      // The client interceptor already unwrapped { success, data }.
+      .then((res: any) => setMyKpis(res?.data ?? null))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadMyKpis(); }, [loadMyKpis]);
+
+  // Hours come back as a float (195.5); drop the ".0" but keep a real half-shift.
+  const fmtHours = (h?: number) =>
+    typeof h === 'number' ? (Number.isInteger(h) ? String(h) : h.toFixed(1)) : '—';
+
   // Recent Activity feed — real worker notifications (latest 3).
   const [activity, setActivity] = useState<any[]>([]);
   const loadActivity = useCallback(() => {
@@ -77,7 +98,14 @@ export default function DashboardScreen({ navigation }: any) {
     }
   };
 
-  const onRefresh = useCallback(() => { refetch(); loadActivity(); }, [refetch, loadActivity]);
+  const onRefresh = useCallback(
+    () => { refetch(); loadActivity(); loadMyKpis(); },
+    [refetch, loadActivity, loadMyKpis],
+  );
+
+  // Coming back from Shift Check-In (or any reporting screen) must show the new
+  // numbers — without this the dashboard keeps the figures it loaded at mount.
+  useEffect(() => navigation.addListener('focus', onRefresh), [navigation, onRefresh]);
 
   const total     = shiftSummary?.total_tasks     ?? 5;
   const completed = shiftSummary?.completed_tasks ?? 0;
@@ -188,6 +216,36 @@ export default function DashboardScreen({ navigation }: any) {
             <Icon name="award" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Training</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ShiftCheckIn')}>
+            <Icon name="clock" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Shift Check-In</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Your month — personal figures, not site-wide */}
+        <View style={styles.myKpiHeader}>
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Your Month</Text>
+          {!!myKpis?.period_label && (
+            <Text style={styles.myKpiPeriod}>{myKpis.period_label}</Text>
+          )}
+        </View>
+        <View style={styles.myKpiRow}>
+          <View style={styles.myKpiCard}>
+            <Text style={styles.myKpiVal}>{fmtHours(myKpis?.hours_logged_month)}</Text>
+            <Text style={styles.myKpiLbl}>Hours Logged</Text>
+          </View>
+          <View style={styles.myKpiCard}>
+            <Text style={styles.myKpiVal}>{myKpis?.my_incidents ?? '—'}</Text>
+            <Text style={styles.myKpiLbl}>My Incidents</Text>
+          </View>
+          <View style={styles.myKpiCard}>
+            <Text style={styles.myKpiVal}>{myKpis?.my_near_misses ?? '—'}</Text>
+            <Text style={styles.myKpiLbl}>My Near Misses</Text>
+          </View>
+          <View style={styles.myKpiCard}>
+            <Text style={styles.myKpiVal}>{myKpis?.my_open_capa ?? '—'}</Text>
+            <Text style={styles.myKpiLbl}>Open CAPAs</Text>
+          </View>
         </View>
 
         {/* Stats Section */}
@@ -341,6 +399,19 @@ export default function DashboardScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  myKpiHeader: {
+    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
+    marginBottom: 12, marginTop: 4,
+  },
+  myKpiPeriod: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  myKpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  myKpiCard: {
+    flexGrow: 1, flexBasis: '45%', minWidth: 140,
+    backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0',
+    paddingVertical: 14, paddingHorizontal: 14,
+  },
+  myKpiVal: { fontSize: 22, fontWeight: '800', color: '#2563EB' },
+  myKpiLbl: { fontSize: 11, fontWeight: '700', color: '#64748B', marginTop: 4 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

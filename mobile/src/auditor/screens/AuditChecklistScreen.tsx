@@ -108,6 +108,8 @@ export function AuditChecklistScreen({ route, navigation }: any) {
   };
 
   const [submitting, setSubmitting] = useState(false);
+  // Spec field: which shift this checklist was walked on.
+  const [shift, setShift] = useState<'Morning' | 'Afternoon' | 'Night'>('Morning');
 
   const handleSubmit = () => {
     Alert.alert(
@@ -134,6 +136,8 @@ export function AuditChecklistScreen({ route, navigation }: any) {
                   remarks: i.remarks,
                   photo_attached: i.photoAttached,
                 })),
+                undefined,
+                shift,
               );
               Alert.alert(
                 'Success',
@@ -199,6 +203,21 @@ export function AuditChecklistScreen({ route, navigation }: any) {
           <View style={styles.sectionIcon}>
             <Ionicons name="compass" size={18} color="#FFFFFF" />
           </View>
+          <View style={styles.shiftRow}>
+            <Text style={styles.shiftLabel}>SHIFT</Text>
+            <View style={styles.shiftPills}>
+              {(['Morning', 'Afternoon', 'Night'] as const).map((sft) => (
+                <TouchableOpacity
+                  key={sft}
+                  style={[styles.shiftPill, shift === sft && styles.shiftPillActive]}
+                  onPress={() => setShift(sft)}
+                >
+                  <Text style={[styles.shiftPillText, shift === sft && styles.shiftPillTextActive]}>{sft}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           <Text style={styles.sectionTitle}>{meta.checklist_type || 'Checklist Items'}</Text>
         </View>
 
@@ -318,6 +337,16 @@ export function AuditChecklistScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  shiftRow: { marginBottom: 16 },
+  shiftLabel: { fontSize: 11, fontWeight: '800', color: '#737686', letterSpacing: 0.6, marginBottom: 8 },
+  shiftPills: { flexDirection: 'row', gap: 8 },
+  shiftPill: {
+    flex: 1, height: 38, borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
+  },
+  shiftPillActive: { backgroundColor: '#004AC6', borderColor: '#004AC6' },
+  shiftPillText: { fontSize: 12, fontWeight: '700', color: '#0B1C30' },
+  shiftPillTextActive: { color: '#FFFFFF' },
   root: {
     flex: 1,
     backgroundColor: '#F8FAFC',

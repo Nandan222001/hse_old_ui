@@ -30,6 +30,9 @@ class WorkerReportBase(BaseModel):
 class NearMissReport(WorkerReportBase):
     potential_consequence: Optional[str] = None
     underlying_cause: Optional[str] = None
+    hazard_id: Optional[int] = None
+    control_failure: Optional[str] = None
+    capa_escalation: Optional[str] = None
 
 
 class UnsafeActReport(WorkerReportBase):

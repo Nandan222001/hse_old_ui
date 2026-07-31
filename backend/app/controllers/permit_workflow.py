@@ -39,6 +39,7 @@ from app.schemas.permit_workflow import (
     PermitListItem,
     PermitReject,
     PermitRequest,
+    PermitClose,
     PermitVerify,
     PermitWorkflowResponse,
 )
@@ -346,6 +347,40 @@ def auditor_verify(
     row.verification_result = payload.verification_result
     if payload.verification_notes is not None:
         row.verification_notes = payload.verification_notes
+    db.commit()
+    db.refresh(row)
+    return _respond(row)
+
+
+@router.post("/{permit_id}/close", response_model=PermitWorkflowResponse)
+def supervisor_close(
+    permit_id: int,
+    payload: PermitClose,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Closes out a permit at end of work. Sets status='Closed', which is what the
+    PTW Compliance Rate counts as "properly closed", and records whether the work
+    deviated from the permit (drives LOTO Compliance % and Permit Deviation Rate).
+    """
+    require_role(current_user.role, SUPERVISOR_ROLES | MANAGER_ROLES, "close permits")
+    row = _get(db, permit_id, current_user.org_id)
+
+    def _yes_no(value: str) -> str:
+        return "Yes" if str(value or "").strip().lower() in ("yes", "true", "1") else "No"
+
+    row.status = "Closed"
+    row.workflow_status = "closed"
+    row.deviation_reported = _yes_no(payload.deviation_reported)
+    row.incident_occurred = _yes_no(payload.incident_occurred)
+    row.work_start_actual = payload.work_start_actual or row.work_start_actual
+    # Falling back to "now" means a closed permit always has an end time for the
+    # duration analytics, even if the supervisor did not type one in.
+    row.work_end_actual = payload.work_end_actual or row.work_end_actual or datetime.now()
+    if payload.supervisor_notes is not None:
+        row.supervisor_notes = payload.supervisor_notes
+
     db.commit()
     db.refresh(row)
     return _respond(row)
