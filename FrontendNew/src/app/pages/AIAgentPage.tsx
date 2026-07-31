@@ -150,10 +150,18 @@ export function AIAgentPage() {
       // The backend injects a fresh, real data snapshot on every call (see
       // app/controllers/ai.py:_build_project_briefing) — the question is sent as-is.
       const nextHistory: ChatMessage[] = [...conversationHistory, { role: 'user', content: question }];
-      const reply = await chatWithAIAgent(question, conversationHistory);
+      let streamStarted = false;
+      const reply = await chatWithAIAgent(question, conversationHistory, (_delta, fullSoFar) => {
+        // First chunk: replace the "..." bubble with a live-updating one.
+        setMessages(prev => {
+          const withoutLoading = streamStarted ? prev.slice(0, -1) : prev.filter(m => !m.loading);
+          return [...withoutLoading, { role: 'ai', content: fullSoFar }];
+        });
+        streamStarted = true;
+      });
       setConversationHistory([...nextHistory, { role: 'assistant', content: reply }]);
       setMessages(prev => [
-        ...prev.filter(m => !m.loading),
+        ...(streamStarted ? prev.slice(0, -1) : prev.filter(m => !m.loading)),
         {
           role: 'ai',
           content: reply,

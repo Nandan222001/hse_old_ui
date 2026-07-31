@@ -43,7 +43,9 @@ def run_migrations():
     cursor.execute("SELECT filename FROM _migrations")
     applied = {row[0] for row in cursor.fetchall()}
 
-    sql_files = sorted(MIGRATIONS_DIR.glob("[0-9]*.sql"))
+    sql_files = sorted(
+        f for f in MIGRATIONS_DIR.glob("[0-9]*.sql") if "_ROLLBACK" not in f.name
+    )
 
     for sql_file in sql_files:
         if sql_file.name in applied:

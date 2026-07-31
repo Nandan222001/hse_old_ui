@@ -24,6 +24,7 @@ from app.schemas.incident_workflow import (
     SupervisorEscalate,
     ManagerApproveInvestigation,
     ManagerCloseIncident,
+    CapaComplete,
     IncidentWorkflowResponse,
     IncidentListItem,
 )
@@ -552,4 +553,74 @@ def workflow_stats(
         "pending_approval": counts.get("pending_approval", 0),
         "closed": counts.get("closed", 0),
         "total": sum(counts.values()),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CAPA — mobile completion
+# CAPA actions are auto-created above when a supervisor's investigation includes
+# a capa_description, but nothing else in the app ever moves them past "Open".
+# The website's CAPA Closure Rate can only change through this endpoint.
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/capa/my-actions")
+def my_capa_actions(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """CAPA actions assigned to the current user (or all open ones for a supervisor/manager)."""
+    emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    q = db.query(CapaAction).filter(CapaAction.organisation_id == current_user.org_id)
+    if _role_matches(current_user.role, ALL_ELEVATED_ROLES):
+        q = q.filter(CapaAction.status != "Completed")
+    else:
+        q = q.filter(CapaAction.responsible_person_id == emp_id, CapaAction.status != "Completed")
+    rows = q.order_by(CapaAction.id.desc()).limit(100).all()
+    return [
+        {
+            "id": c.id,
+            "incident_id": c.incident_id,
+            "action_type": c.action_type,
+            "description": c.description,
+            "responsible_person_id": c.responsible_person_id,
+            "due_date": c.due_date.isoformat() if c.due_date else None,
+            "status": c.status,
+        }
+        for c in rows
+    ]
+
+
+@router.post("/capa/{capa_id}/complete")
+def complete_capa_action(
+    capa_id: int,
+    payload: CapaComplete,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Marks a CAPA action done — the responsible person, or a supervisor/manager, may close it."""
+    capa = db.query(CapaAction).filter(
+        CapaAction.id == capa_id, CapaAction.organisation_id == current_user.org_id
+    ).first()
+    if not capa:
+        raise HTTPException(status_code=404, detail="CAPA action not found")
+
+    emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+    is_owner = emp_id is not None and capa.responsible_person_id == emp_id
+    if not is_owner and not _role_matches(current_user.role, ALL_ELEVATED_ROLES):
+        raise HTTPException(status_code=403, detail="Not authorized to close this CAPA action")
+
+    capa.status = "Completed"
+    if payload.effectiveness_rating is not None:
+        capa.effectiveness_rating = payload.effectiveness_rating
+    db.commit()
+    db.refresh(capa)
+    return {
+        "id": capa.id,
+        "status": capa.status,
+        "effectiveness_rating": capa.effectiveness_rating,
     }

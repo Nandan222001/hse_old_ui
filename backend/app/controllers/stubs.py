@@ -1587,6 +1587,76 @@ def get_supervisor_shift_status(
     return {"total": total, "logged_in": active, "pending": max(0, total - active), "is_live": total > 0}
 
 
+@router.post("/supervisor/team/log-hours")
+def log_supervisor_team_hours(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Supervisor logs actual hours worked by their team for a shift date.
+
+    This is the only mobile write path into shift_schedule.actual_hours_worked,
+    which the web dashboard's TRIR/LTIFR/DART/FAR formulas divide by (man-hours).
+    Without it those metrics are stuck at 0 no matter how much other field data
+    (incidents, near-misses) comes in from mobile.
+    """
+    if (current_user.role or "").lower() != "supervisor":
+        raise HTTPException(status_code=403, detail="Only a Supervisor can log shift hours")
+
+    d = payload.get("data", payload)
+    shift_date = d.get("date")
+    if not shift_date:
+        raise HTTPException(status_code=400, detail="date is required")
+    default_hours = float(d.get("hours", 8))
+    entries = d.get("entries")  # optional [{employee_id, hours}] to override per worker
+
+    supervisor_emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    if entries:
+        targets = [(int(e["employee_id"]), float(e.get("hours", default_hours))) for e in entries]
+    else:
+        rows = db.execute(
+            text(
+                "SELECT e.id FROM employees e "
+                "JOIN users u ON u.employee_id = e.id "
+                "JOIN app_roles ar ON ar.id = u.app_role_id "
+                "WHERE e.organisation_id = :org AND LOWER(ar.name) = 'operator' "
+                "AND e.manager_id = :mgr AND (e.active_status IS NULL OR e.active_status = 'Active')"
+            ),
+            {"org": current_user.org_id, "mgr": supervisor_emp_id},
+        ).all()
+        targets = [(r[0], default_hours) for r in rows]
+
+    if not targets:
+        raise HTTPException(status_code=400, detail="No active team members to log hours for")
+
+    logged = 0
+    for emp_id, hours in targets:
+        existing = db.execute(
+            text("SELECT id FROM shift_schedule WHERE employee_id = :e AND shift_date = :d"),
+            {"e": emp_id, "d": shift_date},
+        ).scalar()
+        if existing:
+            db.execute(
+                text("UPDATE shift_schedule SET actual_hours_worked = :h, supervisor_id = :sup WHERE id = :id"),
+                {"h": hours, "sup": supervisor_emp_id, "id": existing},
+            )
+        else:
+            db.execute(
+                text(
+                    "INSERT INTO shift_schedule (organisation_id, employee_id, shift_date, "
+                    "actual_hours_worked, supervisor_id) VALUES (:org, :e, :d, :h, :sup)"
+                ),
+                {"org": current_user.org_id, "e": emp_id, "d": shift_date, "h": hours, "sup": supervisor_emp_id},
+            )
+        logged += 1
+
+    db.commit()
+    return {"success": True, "data": {"date": shift_date, "employees_logged": logged}}
+
+
 @router.get("/supervisor/permits")
 def get_supervisor_permits(
     db: Session = Depends(get_db),

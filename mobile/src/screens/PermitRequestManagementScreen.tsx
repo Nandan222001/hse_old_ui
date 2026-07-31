@@ -32,6 +32,7 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
   const ws = String(permit.workflow_status || 'requested').toLowerCase();
   const meta = STATUS_META[ws] || STATUS_META.requested;
   const canAcknowledge = ws === 'requested';
+  const canClose = ws === 'approved';
 
   const acknowledge = async () => {
     try {
@@ -42,6 +43,20 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
       ]);
     } catch (e: any) {
       Alert.alert('Failed', e?.response?.data?.detail || 'Could not acknowledge this permit.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const closePermit = async () => {
+    try {
+      setSubmitting(true);
+      await permitWorkflowService.close(Number(permit.id), 'Work completed, permit closed from mobile.');
+      Alert.alert('Permit Closed', 'This permit has been marked complete and closed out.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
+      Alert.alert('Failed', e?.response?.data?.detail || 'Could not close this permit.');
     } finally {
       setSubmitting(false);
     }
@@ -84,6 +99,20 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
               <>
                 <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
                 <Text style={styles.ackBtnText}>Acknowledge &amp; Forward to Manager</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : canClose ? (
+          <TouchableOpacity
+            style={[styles.ackBtn, submitting && { opacity: 0.6 }]}
+            onPress={closePermit}
+            disabled={submitting}
+            activeOpacity={0.85}
+          >
+            {submitting ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Ionicons name="checkmark-done-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.ackBtnText}>Close Permit — Work Complete</Text>
               </>
             )}
           </TouchableOpacity>

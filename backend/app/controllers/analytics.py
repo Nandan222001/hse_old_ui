@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.models.audit import Audit
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
 from app.models.hazard import Hazard
@@ -927,10 +928,24 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         if distinct_hazard_categories else 0
     )
 
+    # Blends the legacy SafetyWalk.compliance_rating (0-5, web/Excel-imported) with
+    # the mobile Auditor app's submitted Audit.compliance_score (already 0-100) —
+    # the only source mobile ever writes to. See dashboard.py's leading-indicators
+    # for the same formula.
     avg_compliance = _org_filter(
         db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id
     ).scalar()
-    audit_readiness_pct = round(float(avg_compliance) / 5 * 100) if avg_compliance else 0
+    avg_audit_compliance = (
+        _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
+        .filter(Audit.compliance_score.isnot(None))
+        .scalar()
+    )
+    readiness_components = []
+    if avg_compliance is not None:
+        readiness_components.append(float(avg_compliance) / 5 * 100)
+    if avg_audit_compliance is not None:
+        readiness_components.append(float(avg_audit_compliance))
+    audit_readiness_pct = round(sum(readiness_components) / len(readiness_components)) if readiness_components else 0
 
     compliance_score = round((permit_compliance_pct + legal_register_pct + audit_readiness_pct) / 3)
     compliance_label = "Excellent" if compliance_score >= 85 else ("Good" if compliance_score >= 70 else "Needs Improvement")

@@ -19,6 +19,7 @@ export const ENDPOINTS = {
     SUBMIT_TOOLBOX: '/supervisor/team/toolbox-talk/submit',
     ATTENDANCE: '/supervisor/team/attendance',
     FORCE_IN: (id: string) => `/supervisor/team/members/${id}/force-in`,
+    LOG_HOURS: '/supervisor/team/log-hours',
   },
   COMPLIANCE: {
     METRICS: '/supervisor/compliance/metrics',
@@ -44,6 +45,8 @@ export const ENDPOINTS = {
     APPROVE: (id: string) => `/incident-workflow/${id}/approve-investigation`,
     CLOSE: (id: string) => `/incident-workflow/${id}/close`,
     DETAIL: (id: string) => `/incident-workflow/${id}`,
+    CAPA_MY_ACTIONS: '/incident-workflow/capa/my-actions',
+    CAPA_COMPLETE: (id: string | number) => `/incident-workflow/capa/${id}/complete`,
   },
 } as const;
 
@@ -102,6 +105,7 @@ export const PERMIT_WORKFLOW = {
   APPROVE: (id: string | number) => `/permit-workflow/${id}/approve`,
   REJECT: (id: string | number) => `/permit-workflow/${id}/reject`,
   ACTIVE: '/permit-workflow/active',
+  CLOSE: (id: string | number) => `/permit-workflow/${id}/close`,
   // Auditor
   AUDIT_LIST: '/permit-workflow/audit-list',
   VERIFY: (id: string | number) => `/permit-workflow/${id}/verify`,

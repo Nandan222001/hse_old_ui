@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { incidentWorkflowService } from '../services/incidentWorkflowService';
+import { incidentWorkflowService, type CapaAction } from '../services/incidentWorkflowService';
 import { Colors } from '../theme/colors';
 
 export function CAPAManagementScreen({ route, navigation }: any) {
@@ -12,6 +12,11 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   const [incident, setIncident] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Open CAPA actions (list view, no incidentId)
+  const [capaActions, setCapaActions] = useState<CapaAction[]>([]);
+  const [capaLoading, setCapaLoading] = useState(false);
+  const [completingId, setCompletingId] = useState<number | null>(null);
 
   // Form inputs
   const [why1, setWhy1] = useState('');
@@ -26,17 +31,32 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   const [capaDueDate, setCapaDueDate] = useState('2026-07-31');
   const [aiDrafting, setAiDrafting] = useState(false);
 
-  // Static mock fallback task list if no incidentId is passed
-  const staticTasks = [
-    { id: '1', action: 'Install guardrails on scaffolding Platform 3', priority: 'High', deadline: 'Today, 18:00' },
-    { id: '2', action: 'Replace faulty gas sensor in Terminal Tank Farm', priority: 'High', deadline: 'Tomorrow' }
-  ];
-
   useEffect(() => {
     if (incidentId) {
       fetchIncidentDetails();
+    } else {
+      fetchCapaActions();
     }
   }, [incidentId]);
+
+  const fetchCapaActions = () => {
+    setCapaLoading(true);
+    incidentWorkflowService.getMyCapaActions()
+      .then(setCapaActions)
+      .catch(() => setCapaActions([]))
+      .finally(() => setCapaLoading(false));
+  };
+
+  const handleCompleteCapa = (capaId: number) => {
+    setCompletingId(capaId);
+    incidentWorkflowService.completeCapaAction(capaId)
+      .then(() => {
+        setCapaActions((prev) => prev.filter((c) => c.id !== capaId));
+        Alert.alert('Closed', 'Corrective action marked complete.');
+      })
+      .catch(() => Alert.alert('Failed', 'Could not close this action — please try again.'))
+      .finally(() => setCompletingId(null));
+  };
 
   const fetchIncidentDetails = async () => {
     setLoading(true);
@@ -137,7 +157,8 @@ export function CAPAManagementScreen({ route, navigation }: any) {
     }
   };
 
-  // If no incidentId, render standard static list (Figma view)
+  // If no incidentId, list this user's open CAPA actions with a way to close them out.
+  // The website's CAPA Closure Rate can only move through this "Mark Complete" action.
   if (!incidentId) {
     return (
       <SafeAreaView style={styles.root}>
@@ -148,17 +169,39 @@ export function CAPAManagementScreen({ route, navigation }: any) {
           <Text style={styles.headerTitle}>Corrective Actions (CAPA)</Text>
         </View>
         <ScrollView contentContainerStyle={styles.scroll}>
-          {staticTasks.map(t => (
-            <View key={t.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.title}>{t.action}</Text>
-                <View style={styles.pBadge}>
-                  <Text style={styles.pBadgeText}>{t.priority}</Text>
+          {capaLoading ? (
+            <ActivityIndicator color={Colors.primary} style={{ marginTop: 30 }} />
+          ) : capaActions.length === 0 ? (
+            <Text style={styles.sub}>No open corrective actions right now.</Text>
+          ) : (
+            capaActions.map((c) => (
+              <View key={c.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.title}>{c.description || c.action_type || `CAPA-${c.id}`}</Text>
+                  {c.due_date && (
+                    <View style={styles.pBadge}>
+                      <Text style={styles.pBadgeText}>{c.due_date}</Text>
+                    </View>
+                  )}
                 </View>
+                {c.incident_id != null && <Text style={styles.sub}>From incident INC-{c.incident_id}</Text>}
+                <TouchableOpacity
+                  style={[styles.submitBtn, { marginTop: 10 }, completingId === c.id && { opacity: 0.6 }]}
+                  onPress={() => handleCompleteCapa(c.id)}
+                  disabled={completingId === c.id}
+                >
+                  {completingId === c.id ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.submitBtnText}>Mark Complete</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sub}>Deadline: {t.deadline}</Text>
-            </View>
-          ))}
+            ))
+          )}
         </ScrollView>
       </SafeAreaView>
     );

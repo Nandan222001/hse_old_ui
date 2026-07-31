@@ -16,6 +16,15 @@ export function SessionManagementScreen({ navigation }: any) {
     Alert.alert('Shift Session', `Action "${act}" triggered successfully.`);
   };
 
+  const handleEndShift = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    teamService.logHours(today)
+      .then(({ employees_logged }) => {
+        Alert.alert('Shift Ended', `Logged 8h for ${employees_logged} team member${employees_logged === 1 ? '' : 's'}.`);
+      })
+      .catch(() => Alert.alert('Shift Ended', 'Could not log team hours — please try again.'));
+  };
+
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.header}>
@@ -45,7 +54,7 @@ export function SessionManagementScreen({ navigation }: any) {
           <Text style={styles.btnText}>Pause Shift (Start Break)</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.btn, styles.critBtn]} onPress={() => handleAction('End Shift')}>
+        <TouchableOpacity style={[styles.btn, styles.critBtn]} onPress={handleEndShift}>
           <Text style={[styles.btnText, styles.critBtnText]}>End Active Shift Session</Text>
         </TouchableOpacity>
       </ScrollView>

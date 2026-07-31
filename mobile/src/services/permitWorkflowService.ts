@@ -97,6 +97,10 @@ export const permitWorkflowService = {
     const { data } = await apiClient.get(PERMIT_WORKFLOW.ACTIVE);
     return data ?? [];
   },
+  async close(id: number, notes?: string): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.CLOSE(id), { notes });
+    return data;
+  },
 
   /**
    * Close-out at end of work. `deviationReported` is required because it is the only

@@ -87,6 +87,13 @@ class ManagerCloseIncident(BaseModel):
     communicated_to_teams: str = Field(default="No", description="Yes | No")
 
 
+# ── Supervisor/Manager: Complete a CAPA action ────────────────────────────────
+
+class CapaComplete(BaseModel):
+    """Marks a corrective action as done. effectiveness_rating is 1-5."""
+    effectiveness_rating: Optional[int] = None
+
+
 # ── Response Schemas ──────────────────────────────────────────────────────────
 
 class IncidentWorkflowResponse(BaseModel):

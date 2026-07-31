@@ -12,6 +12,7 @@ from app.models.employee import Employee
 from app.models.hazard import Hazard
 from app.models.hazard_category import HazardCategory
 from app.models.incident import Incident
+from app.models.audit import Audit
 from app.models.near_miss import NearMiss
 from app.models.permit_to_work import PermitToWork
 from app.models.permit_type import PermitType
@@ -157,6 +158,9 @@ def get_leading_indicators(
     latest_walk_dt = _org_filter(
         db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id
     ).scalar()
+    latest_audit_dt = _org_filter(
+        db.query(func.max(Audit.submitted_at)), Audit, org_id
+    ).filter(Audit.submitted_at.isnot(None)).scalar()
 
     # If user passed explicit date window, respect it; otherwise anchor on data
     if start_date or end_date:
@@ -300,8 +304,14 @@ def get_leading_indicators(
                 contractor_risk.contractor_violations, contractor_risk.has_contractors)
 
     # ── Audit Readiness Score ───────────────────────────────────────────────
-    # Anchor on latest walk date so historical data is not missed
-    latest_walk_anchor = latest_walk_dt.date() if latest_walk_dt else data_window_end
+    # Blends two sources on a common 0-100 scale: the legacy web/Excel-imported
+    # SafetyWalk.compliance_rating (0-5), and the mobile Auditor app's submitted
+    # Audit.compliance_score (already 0-100) — the only source mobile ever writes to.
+    # Anchor on whichever of the two has the more recent activity.
+    latest_readiness_dt = max(
+        (d for d in (latest_walk_dt, latest_audit_dt) if d is not None), default=None
+    )
+    latest_walk_anchor = latest_readiness_dt.date() if latest_readiness_dt else data_window_end
     if data_window_start:
         walk_window_start = data_window_start
         walk_window_end = data_window_end
@@ -316,8 +326,26 @@ def get_leading_indicators(
         .filter(func.date(SafetyWalk.inspection_date_time) <= walk_window_end)
         .scalar()
     )
+    avg_compliance_audit = (
+        _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
+        .filter(Audit.compliance_score.isnot(None))
+        .filter(Audit.submitted_at.isnot(None))
+        .filter(func.date(Audit.submitted_at) >= walk_window_start)
+        .filter(func.date(Audit.submitted_at) <= walk_window_end)
+        .scalar()
+    )
     average_compliance = _safe_round(avg_compliance_walk)
-    audit_readiness_score = _safe_round((average_compliance / 5) * 100) if average_compliance else 0.0
+
+    readiness_components = []
+    if avg_compliance_walk is not None:
+        readiness_components.append((float(avg_compliance_walk) / 5) * 100)
+    if avg_compliance_audit is not None:
+        readiness_components.append(float(avg_compliance_audit))
+
+    audit_readiness_score = (
+        _safe_round(sum(readiness_components) / len(readiness_components))
+        if readiness_components else 0.0
+    )
     audit_readiness_label = "Ready" if audit_readiness_score >= 80 else ("Needs Attention" if audit_readiness_score >= 60 else "Not Ready")
 
     return {

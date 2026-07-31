@@ -36,6 +36,7 @@ from app.models.permit_to_work import PermitToWork
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
     PermitApprove,
+    PermitClose,
     PermitListItem,
     PermitReject,
     PermitRequest,

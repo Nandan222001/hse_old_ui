@@ -66,4 +66,26 @@ export const incidentWorkflowService = {
     const { data } = await apiClient.get(ENDPOINTS.INCIDENT_WORKFLOW.DETAIL(incidentId));
     return data;
   },
+
+  async getMyCapaActions(): Promise<CapaAction[]> {
+    const { data } = await apiClient.get(ENDPOINTS.INCIDENT_WORKFLOW.CAPA_MY_ACTIONS);
+    return data ?? [];
+  },
+
+  async completeCapaAction(capaId: number, effectivenessRating?: number): Promise<CapaAction> {
+    const { data } = await apiClient.post(ENDPOINTS.INCIDENT_WORKFLOW.CAPA_COMPLETE(capaId), {
+      effectiveness_rating: effectivenessRating,
+    });
+    return data;
+  },
 };
+
+export interface CapaAction {
+  id: number;
+  incident_id: number | null;
+  action_type: string | null;
+  description: string | null;
+  responsible_person_id: number | null;
+  due_date: string | null;
+  status: string | null;
+}
