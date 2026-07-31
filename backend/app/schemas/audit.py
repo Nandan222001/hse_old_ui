@@ -22,15 +22,21 @@ class AuditCreate(BaseModel):
     site_id: Optional[int] = None
     site_name: Optional[str] = None
     department: Optional[str] = None
+    shift: Optional[str] = None          # Morning | Afternoon | Night
     auditor_id: Optional[int] = None
     scheduled_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: str = "Med"
+    # Checklist questions the auditor must answer. If omitted, a default template
+    # is seeded from the checklist_type so the mobile app always has items to show.
+    items: Optional[List[ChecklistItemIn]] = None
 
 
 class AuditSubmit(BaseModel):
     """Auditor submits the completed checklist. compliance_score is derived if omitted."""
     items: List[ChecklistItemIn] = Field(default_factory=list)
+    # Spec's "Shift" field — which shift the checklist was walked on.
+    shift: Optional[str] = None
     compliance_score: Optional[int] = None
     notes: Optional[str] = None
 
@@ -43,6 +49,7 @@ class AuditResponse(BaseModel):
     site_id: Optional[int] = None
     site_name: Optional[str] = None
     department: Optional[str] = None
+    shift: Optional[str] = None
     auditor_id: Optional[int] = None
     scheduled_date: Optional[datetime] = None
     due_date: Optional[datetime] = None

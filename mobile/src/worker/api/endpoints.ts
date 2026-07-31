@@ -60,6 +60,18 @@ export const ENDPOINTS = {
   // Hazard catalog (reference data), NOT worker risk reports — those go to RISK above.
   HAZARDS: {
     CATEGORIES: '/hazard-categorys',
+    LIST: '/hazards/',
+  },
+
+  // Reference data used to resolve foreign keys on report forms.
+  LOOKUPS: {
+    WORKING_STATIONS: '/working-stations/',
+  },
+
+  // Shift check-in — writes the man-hours that every rate KPI divides by.
+  SHIFTS: {
+    MY_SHIFTS: '/worker/shift/my-shifts',
+    CHECK_IN: '/worker/shift/check-in',
   },
 
   // Checklists

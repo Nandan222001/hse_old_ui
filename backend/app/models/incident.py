@@ -65,3 +65,7 @@ class Incident(Base):
     immediate_actions_taken = Column(Text, nullable=True)
     supervisor_signature = Column(String(255), nullable=True)
     severity_classification = Column(String(50), nullable=True)  # LTI | MTI | First Aid | Near Miss
+    # Auditor close-out review — mirrors the same trio on permits_to_work and hazards.
+    auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    auditor_verified_at = Column(DateTime, nullable=True)
+    verification_notes = Column(Text, nullable=True)

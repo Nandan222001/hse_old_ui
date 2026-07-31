@@ -33,15 +33,10 @@ export function TeamManagementScreen({ navigation }: any) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
       >
-        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('AddWorker')} activeOpacity={0.85}>
-          <Ionicons name="person-add-outline" size={18} color="#004AC6" />
-          <Text style={styles.addBtnText}>Add Worker</Text>
-        </TouchableOpacity>
-
         {loading && members.length === 0 ? (
           <ActivityIndicator color="#004AC6" style={{ marginTop: 30 }} />
         ) : members.length === 0 ? (
-          <Text style={styles.empty}>No workers in your team yet. Tap “Add Worker” to add one.</Text>
+          <Text style={styles.empty}>No workers in your team yet.</Text>
         ) : (
           members.map((w) => (
             <View key={w.id} style={styles.card}>

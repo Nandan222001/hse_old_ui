@@ -26,6 +26,7 @@ import PermitsScreen from '../screens/PermitsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import SafetyTrainingDetailScreen from '../screens/SafetyTrainingDetailScreen';
 import AISafetyAssistantScreen from '../screens/AISafetyAssistantScreen';
+import ShiftCheckInScreen from '../screens/ShiftCheckInScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -143,6 +144,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="ShiftCheckIn" component={ShiftCheckInScreen} options={{ presentation: 'card' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

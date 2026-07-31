@@ -17,6 +17,7 @@ const PRIORITIES = [
 
 interface Queued {
   description: string; priority: string; due: string; assigneeId: number; assigneeName: string;
+  rootCause?: string;
 }
 
 export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast }: ScreenProps) {
@@ -25,6 +26,7 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
   const [desc, setDesc] = useState('');
   const [priority, setPriority] = useState('Critical');
   const [due, setDue] = useState('');
+  const [rootCause, setRootCause] = useState('');
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [assigneeName, setAssigneeName] = useState('');
   const [search, setSearch] = useState('');
@@ -44,8 +46,8 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
   const queueAction = () => {
     if (!desc.trim()) return Alert.alert('Missing', 'Enter an action description.');
     if (!assigneeId) return Alert.alert('Missing', 'Select an assignee.');
-    setQueue((p) => [...p, { description: desc.trim(), priority, due: due.trim(), assigneeId, assigneeName }]);
-    setDesc(''); setDue(''); setAssigneeId(null); setAssigneeName(''); setSearch(''); setPriority('Critical'); setCompliance(false);
+    setQueue((p) => [...p, { description: desc.trim(), priority, due: due.trim(), assigneeId, assigneeName, rootCause: rootCause.trim() }]);
+    setDesc(''); setDue(''); setAssigneeId(null); setAssigneeName(''); setSearch(''); setPriority('Critical'); setCompliance(false); setRootCause('');
   };
 
   const finalize = async () => {
@@ -59,6 +61,8 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
           responsible_person_id: q.assigneeId,
           due_date: q.due || undefined,
           status: 'Open',
+          // Which root cause this action closes out — drives CAPA-to-cause traceability.
+          root_cause_addressed: q.rootCause || inc.root_cause || undefined,
           incident_id: inc.id && /^\d+$/.test(String(inc.id)) ? Number(inc.id) : undefined,
         });
       }
@@ -101,6 +105,10 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
             <Text style={styles.label}>Action Description</Text>
             <TextInput style={styles.textarea} placeholder="Describe the specific corrective measure..."
               placeholderTextColor="#94A3B8" value={desc} onChangeText={setDesc} multiline />
+
+            <Text style={styles.label}>Root Cause Addressed</Text>
+            <TextInput style={styles.input} placeholder="Which root cause does this action close out?"
+              placeholderTextColor="#94A3B8" value={rootCause} onChangeText={setRootCause} />
 
             <Text style={styles.label}>Priority Level</Text>
             <View style={styles.prioRow}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
@@ -7,19 +7,76 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
+import { useGeoTag } from '../hooks/useGeoTag';
+import { lookupService, WorkingStation, HazardOption } from '../services/lookupService';
+import type { IncidentType, SeverityLevel, YesNo } from '../types';
+
+const INCIDENT_TYPES: IncidentType[] = [
+  'Injury',
+  'Dangerous Occurrence',
+  'Property Damage',
+  'Environmental',
+];
+
+/** Ordered least → most severe; "Lost Time" and "Fatal" are what drive LTIFR/LTISR/DART/FAR. */
+const SEVERITIES: SeverityLevel[] = ['Minor', 'Moderate', 'Severe', 'Lost Time', 'Fatal'];
 
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
-  const [incidentType, setIncidentType] = useState('Injury');
+  const { geo } = useGeoTag();
+
+  const [incidentType, setIncidentType] = useState<IncidentType>('Injury');
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [location, setLocation] = useState('Heavy Assembly Station 1');
+
+  const [stations, setStations] = useState<WorkingStation[]>([]);
+  const [stationId, setStationId] = useState<number | null>(null);
   const [locationPickerVisible, setLocationPickerVisible] = useState(false);
+
+  const [hazards, setHazards] = useState<HazardOption[]>([]);
+  const [hazardId, setHazardId] = useState<number | null>(null);
+  const [hazardPickerVisible, setHazardPickerVisible] = useState(false);
+
+  const [incidentDateTime, setIncidentDateTime] = useState<Date>(new Date());
   const [description, setDescription] = useState('');
-  const [severity, setSeverity] = useState<number>(3);
+  const [severity, setSeverity] = useState<SeverityLevel>('Minor');
   const [reason, setReason] = useState('');
-  const [anyoneInjured, setAnyoneInjured] = useState<'Yes' | 'No'>('No');
+  const [personsInvolved, setPersonsInvolved] = useState('');
+  const [anyoneInjured, setAnyoneInjured] = useState<YesNo>('No');
   const [injuredPersonName, setInjuredPersonName] = useState('');
+  const [injuredBodyPart, setInjuredBodyPart] = useState('');
+  const [permitActive, setPermitActive] = useState<YesNo>('No');
+  const [controlFailure, setControlFailure] = useState<YesNo>('No');
+  const [hazardStillPresent, setHazardStillPresent] = useState<YesNo>('No');
+  const [immediateActions, setImmediateActions] = useState('');
+  const [witnessDraft, setWitnessDraft] = useState('');
+  const [witnesses, setWitnesses] = useState<string[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
+
+  useEffect(() => {
+    lookupService.workingStations()
+      .then(rows => {
+        setStations(rows);
+        setStationId(prev => prev ?? rows[0]?.id ?? null);
+      })
+      .catch(() => setStations([]));
+    lookupService.hazards().then(setHazards).catch(() => setHazards([]));
+  }, []);
+
+  const stationName = useMemo(
+    () => stations.find(s => s.id === stationId)?.station_name ?? 'Select a station',
+    [stations, stationId],
+  );
+  const hazardName = useMemo(
+    () => hazards.find(h => h.id === hazardId)?.hazard_name ?? 'None',
+    [hazards, hazardId],
+  );
+
+  const addWitness = () => {
+    const name = witnessDraft.trim();
+    if (!name) return;
+    setWitnesses(prev => [...prev, name]);
+    setWitnessDraft('');
+  };
 
   const handleAddPhoto = () => {
     const mockPhotoNames = [
@@ -51,27 +108,30 @@ export default function ReportIncidentScreen({ navigation }: any) {
       Alert.alert('Required', 'Please enter the name of the injured person.');
       return;
     }
-    
-    const severityMap: Record<number, string> = {
-      1: 'low',
-      2: 'medium',
-      3: 'medium',
-      4: 'high',
-      5: 'critical',
-    };
+    if (!stationId) {
+      Alert.alert('Required', 'Please select the location / working station.');
+      return;
+    }
 
     const ok = await reportIncident({
-      incident_type: incidentType.toLowerCase() as any,
-      severity: (severityMap[severity] || 'medium') as any,
+      incident_date_time: incidentDateTime.toISOString(),
+      location_station_id: stationId,
+      incident_type: incidentType,
+      severity,
       description: description.trim(),
-      reason: reason.trim(),
+      immediate_cause: reason.trim(),
+      number_persons_involved: personsInvolved ? Number(personsInvolved) : undefined,
       anyone_injured: anyoneInjured,
-      injured_person_name: anyoneInjured === 'Yes' ? injuredPersonName.trim() : '',
+      injured_person_name: anyoneInjured === 'Yes' ? injuredPersonName.trim() : undefined,
+      injured_body_part: anyoneInjured === 'Yes' ? injuredBodyPart.trim() || undefined : undefined,
+      hazard_id: hazardId ?? undefined,
+      permit_active: permitActive,
+      control_failure: controlFailure,
+      hazard_still_present: hazardStillPresent,
+      immediate_actions_taken: immediateActions.trim() || undefined,
+      witnesses,
+      ...geo,
       mockPhotos: photos,
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toTimeString().split(' ')[0].substring(0, 5),
-      location: location,
-      immediate_actions: 'Area secured',
     } as any);
 
     if (ok) {
@@ -98,16 +158,6 @@ export default function ReportIncidentScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Step Indicator */}
-      <View style={styles.stepIndicatorRow}>
-        <View style={styles.segmentsContainer}>
-          <View style={[styles.segment, styles.segmentActive]} />
-          <View style={styles.segment} />
-          <View style={styles.segment} />
-        </View>
-        <Text style={styles.stepText}>Step 1/3</Text>
-      </View>
-
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>Incident Details</Text>
         <Text style={styles.sectionSub}>Provide the initial classification and description.</Text>
@@ -119,12 +169,27 @@ export default function ReportIncidentScreen({ navigation }: any) {
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
 
-        {/* Location Dropdown */}
+        {/* Location Dropdown — resolves to a working_stations FK */}
         <Text style={styles.inputLabel}>Location / Station</Text>
         <TouchableOpacity style={styles.dropdown} onPress={() => setLocationPickerVisible(true)}>
-          <Text style={styles.dropdownValue}>{location}</Text>
+          <Text style={styles.dropdownValue}>{stationName}</Text>
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
+
+        {/* Incident Date & Time */}
+        <Text style={styles.inputLabel}>Incident Date &amp; Time</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="YYYY-MM-DD HH:MM"
+            placeholderTextColor="#94A3B8"
+            value={formatDateTime(incidentDateTime)}
+            onChangeText={t => {
+              const parsed = new Date(t.replace(' ', 'T'));
+              if (!isNaN(parsed.getTime())) setIncidentDateTime(parsed);
+            }}
+          />
+        </View>
 
         {/* Description Input */}
         <Text style={styles.inputLabel}>Description</Text>
@@ -141,24 +206,27 @@ export default function ReportIncidentScreen({ navigation }: any) {
           />
         </View>
 
-        {/* Severity Level */}
+        {/* Severity Level — spec enum, matched verbatim by the KPI engine */}
         <Text style={styles.inputLabel}>Severity Level</Text>
         <View style={styles.severityRow}>
-          {[1, 2, 3, 4, 5].map((level) => (
+          {SEVERITIES.map((level) => (
             <TouchableOpacity
               key={level}
-              style={[styles.severityBtn, severity === level && styles.severityBtnActive]}
+              style={[styles.severityChip, severity === level && styles.severityBtnActive]}
               onPress={() => setSeverity(level)}
             >
-              <Text style={[styles.severityBtnText, severity === level && styles.severityBtnTextActive]}>
+              <Text
+                style={[styles.severityChipText, severity === level && styles.severityBtnTextActive]}
+                numberOfLines={1}
+              >
                 {level}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
         <View style={styles.severityLimitsRow}>
-          <Text style={styles.limitText}>LOW</Text>
-          <Text style={styles.limitText}>CRITICAL</Text>
+          <Text style={styles.limitText}>MINOR</Text>
+          <Text style={styles.limitText}>FATAL</Text>
         </View>
 
         {/* Incident Reason */}
@@ -176,24 +244,23 @@ export default function ReportIncidentScreen({ navigation }: any) {
           />
         </View>
 
-        {/* Was anyone injured toggle */}
-        <Text style={styles.inputLabel}>Was anyone injured?</Text>
-        <View style={styles.toggleGroup}>
-          <TouchableOpacity
-            style={[styles.toggleOption, anyoneInjured === 'Yes' && styles.toggleOptionActive]}
-            onPress={() => setAnyoneInjured('Yes')}
-          >
-            <Text style={[styles.toggleOptionText, anyoneInjured === 'Yes' && styles.toggleOptionTextActive]}>Yes</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleOption, anyoneInjured === 'No' && styles.toggleOptionActive]}
-            onPress={() => setAnyoneInjured('No')}
-          >
-            <Text style={[styles.toggleOptionText, anyoneInjured === 'No' && styles.toggleOptionTextActive]}>No</Text>
-          </TouchableOpacity>
+        {/* Number of Persons Involved */}
+        <Text style={styles.inputLabel}>Number of Persons Involved</Text>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="0"
+            placeholderTextColor="#94A3B8"
+            keyboardType="number-pad"
+            value={personsInvolved}
+            onChangeText={t => setPersonsInvolved(t.replace(/[^0-9]/g, ''))}
+          />
         </View>
 
-        {/* Injured Person Name */}
+        {/* Was anyone injured toggle */}
+        <YesNoRow label="Was anyone injured?" value={anyoneInjured} onChange={setAnyoneInjured} />
+
+        {/* Injury detail */}
         {anyoneInjured === 'Yes' && (
           <View>
             <Text style={styles.inputLabel}>Injured Person Name</Text>
@@ -206,6 +273,76 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 onChangeText={setInjuredPersonName}
               />
             </View>
+
+            <Text style={styles.inputLabel}>Body Part Injured</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Left hand, Lower back..."
+                placeholderTextColor="#94A3B8"
+                value={injuredBodyPart}
+                onChangeText={setInjuredBodyPart}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Linked Hazard */}
+        <Text style={styles.inputLabel}>Linked Hazard</Text>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setHazardPickerVisible(true)}>
+          <Text style={styles.dropdownValue}>{hazardName}</Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
+
+        {/* Control context — these three feed the risk / close-out analytics */}
+        <YesNoRow label="Permit active at the time?" value={permitActive} onChange={setPermitActive} />
+        <YesNoRow label="Control failure?" value={controlFailure} onChange={setControlFailure} />
+        <YesNoRow label="Hazard still present?" value={hazardStillPresent} onChange={setHazardStillPresent} />
+
+        {/* Immediate Actions Taken */}
+        <Text style={styles.inputLabel}>Immediate Actions Taken</Text>
+        <View style={styles.textAreaContainer}>
+          <TextInput
+            style={[styles.textArea, { height: 75 }]}
+            placeholder="What was done right away to make the area safe?"
+            placeholderTextColor="#94A3B8"
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            value={immediateActions}
+            onChangeText={setImmediateActions}
+          />
+        </View>
+
+        {/* Witnesses */}
+        <Text style={styles.inputLabel}>Witnesses</Text>
+        <View style={styles.witnessRow}>
+          <View style={[styles.inputContainer, styles.witnessInput]}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Add a witness name..."
+              placeholderTextColor="#94A3B8"
+              value={witnessDraft}
+              onChangeText={setWitnessDraft}
+              onSubmitEditing={addWitness}
+              returnKeyType="done"
+            />
+          </View>
+          <TouchableOpacity style={styles.witnessAddBtn} onPress={addWitness}>
+            <Icon name="plus" size={16} color="#2563EB" />
+          </TouchableOpacity>
+        </View>
+        {witnesses.length > 0 && (
+          <View style={styles.photoWrapper}>
+            {witnesses.map((name, idx) => (
+              <View key={`${name}-${idx}`} style={styles.photoTag}>
+                <Icon name="user" size={12} color="#334155" style={{ marginRight: 4 }} />
+                <Text style={styles.photoLabel}>{name}</Text>
+                <TouchableOpacity onPress={() => setWitnesses(prev => prev.filter((_, i) => i !== idx))}>
+                  <Icon emoji="✕" style={styles.photoRemoveBtn} />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         )}
 
@@ -228,6 +365,16 @@ export default function ReportIncidentScreen({ navigation }: any) {
               </View>
             ))}
           </View>
+        </View>
+
+        {/* GPS is auto-captured, so surface what will be attached */}
+        <View style={styles.gpsRow}>
+          <Icon name="map-pin" size={13} color="#64748B" style={{ marginRight: 6 }} />
+          <Text style={styles.gpsText}>
+            {geo.gps_latitude != null
+              ? `GPS ${geo.gps_latitude.toFixed(5)}, ${geo.gps_longitude?.toFixed(5)}`
+              : 'GPS unavailable — report will be submitted without coordinates'}
+          </Text>
         </View>
 
         <View style={{ height: 40 }} />
@@ -271,7 +418,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             
-            {['Injury', 'Spill', 'Fire', 'Equipment Damage', 'Near Miss'].map((type) => (
+            {INCIDENT_TYPES.map((type) => (
               <TouchableOpacity
                 key={type}
                 style={[styles.pickerItem, incidentType === type && styles.pickerItemActive]}
@@ -312,28 +459,109 @@ export default function ReportIncidentScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             
-            {['Heavy Assembly Station 1', 'Welding Station 1', 'Testing Station 1', 'Quality Inspection Station 1', 'Maintenance Station 1'].map((loc) => (
-              <TouchableOpacity
-                key={loc}
-                style={[styles.pickerItem, location === loc && styles.pickerItemActive]}
-                onPress={() => {
-                  setLocation(loc);
-                  setLocationPickerVisible(false);
-                }}
-              >
-                <Text style={[styles.pickerItemText, location === loc && styles.pickerItemTextActive]}>
-                  {loc}
-                </Text>
-                {location === loc && (
-                  <Icon emoji="✓" style={styles.checkmarkIcon} />
-                )}
+            <ScrollView style={styles.pickerScroll}>
+              {stations.length === 0 && (
+                <Text style={styles.pickerEmpty}>No working stations configured.</Text>
+              )}
+              {stations.map((st) => (
+                <TouchableOpacity
+                  key={st.id}
+                  style={[styles.pickerItem, stationId === st.id && styles.pickerItemActive]}
+                  onPress={() => {
+                    setStationId(st.id);
+                    setLocationPickerVisible(false);
+                  }}
+                >
+                  <Text style={[styles.pickerItemText, stationId === st.id && styles.pickerItemTextActive]}>
+                    {st.station_name}
+                  </Text>
+                  {stationId === st.id && (
+                    <Icon emoji="✓" style={styles.checkmarkIcon} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Linked Hazard Picker Modal */}
+      <Modal
+        visible={hazardPickerVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setHazardPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setHazardPickerVisible(false)}
+        >
+          <View style={styles.pickerContainer}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Link a Hazard</Text>
+              <TouchableOpacity onPress={() => setHazardPickerVisible(false)}>
+                <Icon emoji="✕" style={styles.pickerCloseBtn} />
               </TouchableOpacity>
-            ))}
+            </View>
+
+            <ScrollView style={styles.pickerScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, hazardId === null && styles.pickerItemActive]}
+                onPress={() => { setHazardId(null); setHazardPickerVisible(false); }}
+              >
+                <Text style={[styles.pickerItemText, hazardId === null && styles.pickerItemTextActive]}>
+                  None
+                </Text>
+                {hazardId === null && <Icon emoji="✓" style={styles.checkmarkIcon} />}
+              </TouchableOpacity>
+              {hazards.map((hz) => (
+                <TouchableOpacity
+                  key={hz.id}
+                  style={[styles.pickerItem, hazardId === hz.id && styles.pickerItemActive]}
+                  onPress={() => { setHazardId(hz.id); setHazardPickerVisible(false); }}
+                >
+                  <Text style={[styles.pickerItemText, hazardId === hz.id && styles.pickerItemTextActive]}>
+                    {hz.hazard_name}
+                  </Text>
+                  {hazardId === hz.id && <Icon emoji="✓" style={styles.checkmarkIcon} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
     </ScreenLayout>
   );
+}
+
+function YesNoRow({
+  label, value, onChange,
+}: { label: string; value: YesNo; onChange: (v: YesNo) => void }) {
+  return (
+    <View>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={styles.toggleGroup}>
+        {(['Yes', 'No'] as YesNo[]).map(opt => (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.toggleOption, value === opt && styles.toggleOptionActive]}
+            onPress={() => onChange(opt)}
+          >
+            <Text style={[styles.toggleOptionText, value === opt && styles.toggleOptionTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** `YYYY-MM-DD HH:MM` in local time — ISO-parseable once the space becomes a `T`. */
+function formatDateTime(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 const styles = StyleSheet.create({
@@ -456,7 +684,7 @@ const styles = StyleSheet.create({
   },
   severityRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginTop: 4,
   },
   severityBtn: {
@@ -468,6 +696,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  severityChip: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  severityChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  witnessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  witnessInput: {
+    flex: 1,
+  },
+  witnessAddBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  gpsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  gpsText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    flex: 1,
+  },
+  pickerScroll: {
+    maxHeight: 320,
+  },
+  pickerEmpty: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+    paddingVertical: 16,
+    textAlign: 'center',
   },
   severityBtnActive: {
     backgroundColor: '#2563EB',

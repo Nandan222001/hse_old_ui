@@ -17,6 +17,7 @@ class Audit(Base):
     site_id = Column(Integer, ForeignKey("sites.id"), nullable=True)
     site_name = Column(String(200))          # denormalised label for the mobile card
     department = Column(String(120))
+    shift = Column(String(20), nullable=True)  # Morning | Afternoon | Night
     auditor_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     scheduled_date = Column(DateTime)
     due_date = Column(DateTime)

@@ -9,7 +9,6 @@ import {
   MessageSquare,
   User,
   X,
-  UserPlus,
   ListChecks,
   ClipboardCheck,
   FileCheck2,
@@ -34,7 +33,6 @@ export function AppContainerView(props: ScreenProps) {
 
   const menuItems = [
     { label: "Assigned Tasks", desc: "Supervisor tasks & worker responses", icon: ListChecks, color: "#12B8A6", bg: "#E0F2F1", go: () => setCurrentScreen("assigned_tasks") },
-    { label: "Add Supervisor", desc: "Create a supervisor account", icon: UserPlus, color: "#2563EB", bg: "#EFF6FF", go: () => setCurrentScreen("add_supervisor") },
     { label: "Compliance Sign-off", desc: "Validate CAPA closures", icon: ClipboardCheck, color: "#16A34A", bg: "#F0FDF4", go: () => setCurrentScreen("compliance_approvals") },
     { label: "Permit Approvals", desc: "Approve/reject work permits", icon: FileCheck2, color: "#8B5CF6", bg: "#FAF5FF", go: () => setCurrentScreen("permit_approvals") },
     { label: "Assign CAPA Actions", desc: "Assign corrective actions", icon: Wrench, color: "#F97316", bg: "#FFF7ED", go: () => setCurrentScreen("assign_actions") },

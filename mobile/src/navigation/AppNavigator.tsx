@@ -22,6 +22,7 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import { OperationsScreen } from '../screens/OperationsScreen';
 import { TeamAttendanceScreen } from '../screens/TeamAttendanceScreen';
 import { ShiftMonitoringScreen } from '../screens/ShiftMonitoringScreen';
+import { ShiftConfirmationScreen } from '../screens/ShiftConfirmationScreen';
 import { ToolboxTalkScreen } from '../screens/ToolboxTalkScreen';
 import { SafetyComplianceScreen } from '../screens/SafetyComplianceScreen';
 import { PermitsScreen } from '../screens/PermitsScreen';
@@ -40,7 +41,6 @@ import { InspectionManagementScreen } from '../screens/InspectionManagementScree
 import { AuditPreparationScreen } from '../screens/AuditPreparationScreen';
 import { CAPAManagementScreen } from '../screens/CAPAManagementScreen';
 import AssignTaskScreen from '../screens/AssignTaskScreen';
-import AddWorkerScreen from '../screens/AddWorkerScreen';
 import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
 import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
 import { RiskManagementScreen } from '../screens/RiskManagementScreen';
@@ -93,9 +93,9 @@ function SupervisorOperationsStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="OperationsHome" component={OperationsScreen} />
       <Stack.Screen name="AssignTask" component={AssignTaskScreen} />
-      <Stack.Screen name="AddWorker" component={AddWorkerScreen} />
       <Stack.Screen name="TeamAttendance" component={TeamAttendanceScreen} />
       <Stack.Screen name="ShiftMonitoring" component={ShiftMonitoringScreen} />
+      <Stack.Screen name="ShiftConfirmation" component={ShiftConfirmationScreen} />
       <Stack.Screen name="ToolboxTalk" component={ToolboxTalkScreen} />
       <Stack.Screen name="SafetyCompliance" component={SafetyComplianceScreen} />
     </Stack.Navigator>

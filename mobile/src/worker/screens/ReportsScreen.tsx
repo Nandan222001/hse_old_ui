@@ -21,18 +21,18 @@ const REPORT_TYPES = [
 ];
 
 const INCIDENT_TYPE_LABEL: Record<IncidentType, string> = {
-  injury:           'Injury',
-  spill:            'Environmental Spill',
-  fire:             'Fire Incident',
-  equipment_damage: 'Equipment Damage',
-  near_miss:        'Near Miss',
+  'Injury':               'Injury',
+  'Dangerous Occurrence': 'Dangerous Occurrence',
+  'Property Damage':      'Property Damage',
+  'Environmental':        'Environmental',
 };
 
 const SEVERITY_ACCENT: Record<SeverityLevel, string> = {
-  critical: Colors.critical,
-  high:     Colors.warning,
-  medium:   Colors.blue,
-  low:      Colors.success,
+  'Fatal':     Colors.critical,
+  'Lost Time': Colors.critical,
+  'Severe':    Colors.warning,
+  'Moderate':  Colors.blue,
+  'Minor':     Colors.success,
 };
 
 function incidentStatusLabel(status: string): string {

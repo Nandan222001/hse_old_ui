@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react-native";
@@ -24,10 +24,21 @@ export function ComplianceApprovalsView({ setCurrentScreen, showToast }: ScreenP
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const signOff = async (id: number) => {
+  // Sign-off is a two-step flow: the spec makes effectiveness_rating required when a
+  // CAPA is marked Completed, and it is the sole input to the CAPA Effectiveness KPI.
+  const [ratingFor, setRatingFor] = useState<number | null>(null);
+  const [rating, setRating] = useState(4);
+
+  const confirmSignOff = async () => {
+    const id = ratingFor;
+    if (id == null) return;
     try {
       setBusy(id);
-      await apiClient.put(`/capa-actions/${id}`, { status: "Completed" });
+      setRatingFor(null);
+      await apiClient.put(`/capa-actions/${id}`, {
+        status: "Completed",
+        effectiveness_rating: rating,
+      });
       showToast?.(`CAPA-${id} signed off & closed`);
       load();
     } catch (e: any) {
@@ -82,7 +93,11 @@ export function ComplianceApprovalsView({ setCurrentScreen, showToast }: ScreenP
                 <Text style={styles.metaText}>👤 {item.assignee || "Unassigned"}</Text>
                 <Text style={[styles.metaText, item.is_overdue && { color: "#DC2626", fontWeight: "700" }]}>📅 {item.due_date || "—"}</Text>
               </View>
-              <TouchableOpacity style={styles.approveButton} onPress={() => signOff(item.id)} disabled={busy === item.id}>
+              <TouchableOpacity
+                style={styles.approveButton}
+                onPress={() => { setRating(4); setRatingFor(item.id); }}
+                disabled={busy === item.id}
+              >
                 {busy === item.id ? <ActivityIndicator size="small" color="#fff" /> : (
                   <><ShieldAlert size={16} color="#FFFFFF" style={{ marginRight: 6 }} /><Text style={styles.approveButtonText}>Sign-off & Close Action</Text></>
                 )}
@@ -91,12 +106,63 @@ export function ComplianceApprovalsView({ setCurrentScreen, showToast }: ScreenP
           ))
         )}
       </ScrollView>
+
+      <Modal visible={ratingFor != null} transparent animationType="fade" onRequestClose={() => setRatingFor(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.ratingCard}>
+            <Text style={styles.ratingTitle}>Effectiveness Rating</Text>
+            <Text style={styles.ratingSub}>
+              How effective was CAPA-{ratingFor} at addressing the root cause? This feeds the
+              CAPA Effectiveness KPI.
+            </Text>
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.ratingBtn, rating === n && styles.ratingBtnActive]}
+                  onPress={() => setRating(n)}
+                >
+                  <Text style={[styles.ratingBtnText, rating === n && styles.ratingBtnTextActive]}>{n}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.ratingScaleRow}>
+              <Text style={styles.ratingScaleText}>Not effective</Text>
+              <Text style={styles.ratingScaleText}>Fully effective</Text>
+            </View>
+            <View style={styles.ratingActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setRatingFor(null)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={confirmSignOff}>
+                <Text style={styles.confirmBtnText}>Sign Off</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F4F7FC" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 24 },
+  ratingCard: { backgroundColor: "#FFFFFF", borderRadius: 20, padding: 24, width: "100%" },
+  ratingTitle: { fontSize: 17, fontWeight: "800", color: "#0B3D91", marginBottom: 6 },
+  ratingSub: { fontSize: 13, color: "#718096", lineHeight: 18, marginBottom: 20 },
+  ratingRow: { flexDirection: "row", gap: 8 },
+  ratingBtn: { flex: 1, height: 52, borderRadius: 12, borderWidth: 1.5, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center" },
+  ratingBtnActive: { backgroundColor: "#0B3D91", borderColor: "#0B3D91" },
+  ratingBtnText: { fontSize: 16, fontWeight: "800", color: "#2D3748" },
+  ratingBtnTextActive: { color: "#FFFFFF" },
+  ratingScaleRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+  ratingScaleText: { fontSize: 10, fontWeight: "700", color: "#A0AEC0" },
+  ratingActions: { flexDirection: "row", gap: 12, marginTop: 24 },
+  cancelBtn: { flex: 1, height: 46, borderRadius: 12, borderWidth: 1.5, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center" },
+  cancelBtnText: { fontSize: 14, fontWeight: "700", color: "#718096" },
+  confirmBtn: { flex: 1.4, height: 46, borderRadius: 12, backgroundColor: "#0B3D91", alignItems: "center", justifyContent: "center" },
+  confirmBtnText: { fontSize: 14, fontWeight: "800", color: "#FFFFFF" },
   headerBar: { height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 16 },
   backButton: { padding: 8 },
   headerTitle: { flex: 1, textAlign: "center", fontSize: 18, fontWeight: "700", color: "#0B3D91" },

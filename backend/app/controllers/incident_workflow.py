@@ -441,6 +441,82 @@ def list_all_workflow_incidents(
     return rows
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# AUDITOR — close-out review
+# ══════════════════════════════════════════════════════════════════════════════
+@router.get("/audit-list")
+def auditor_closeout_list(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Incidents the auditor validates close-out on: investigation finished or the
+    incident already closed. Returns the completeness signals the spec asks the
+    auditor to check rather than making them open each record.
+    """
+    rows = (
+        db.query(Incident)
+        .filter(
+            Incident.organisation_id == current_user.org_id,
+            Incident.workflow_status.in_(["closed", "approved", "investigated"]),
+        )
+        .order_by(Incident.closed_at.desc(), Incident.id.desc())
+        .limit(100)
+        .all()
+    )
+
+    return [
+        {
+            "id": r.id,
+            "reference": f"INC-{r.id}",
+            "incident_type": r.incident_type,
+            "severity": r.severity,
+            "workflow_status": r.workflow_status,
+            # Completeness checks the auditor signs against
+            "investigation_status": r.investigation_status,
+            "has_five_why": bool(r.five_why_analysis),
+            "closure_notes": r.closure_notes,
+            "lessons_learned": r.lessons_learned,
+            "communicated_to_teams": r.communicated_to_teams,
+            "manager_signature": r.manager_signature,
+            "closed_at": r.closed_at.isoformat() if r.closed_at else None,
+            "auditor_verified_at": r.auditor_verified_at.isoformat() if r.auditor_verified_at else None,
+            "verification_notes": r.verification_notes,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/{incident_id}/verify")
+def auditor_verify_closeout(
+    incident_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Auditor sign-off note on an incident close-out."""
+    incident = _get_incident(db, incident_id, current_user.org_id)
+
+    emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    incident.auditor_verified_by = emp_id
+    incident.auditor_verified_at = datetime.now()
+    incident.verification_notes = (payload or {}).get("verification_notes")
+    db.commit()
+    db.refresh(incident)
+
+    return {
+        "success": True,
+        "data": {
+            "id": incident.id,
+            "auditor_verified_at": incident.auditor_verified_at.isoformat(),
+            "verification_notes": incident.verification_notes,
+        },
+    }
+
+
 @router.get("/{incident_id}", response_model=IncidentWorkflowResponse)
 def get_incident_detail(
     incident_id: int,
