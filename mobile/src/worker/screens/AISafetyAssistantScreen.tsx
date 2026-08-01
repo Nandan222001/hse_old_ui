@@ -2,9 +2,13 @@ import React, { useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform,
+  TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthStore } from '../store/authStore';
+import { askAi, aiErrorText, AiMessage } from '../../services/aiService';
+import { MarkdownText } from '../../components/AiAssistant/MarkdownText';
 
 interface Message {
   id: string;
@@ -13,62 +17,67 @@ interface Message {
   time: string;
   checklist?: string[];
   doc?: { title: string; desc: string };
+  /** Reply still arriving from the streaming endpoint. */
+  streaming?: boolean;
 }
 
+const clockNow = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 export default function AISafetyAssistantScreen({ navigation }: any) {
+  // ScreenLayout renders a plain View, so the composer had no bottom inset and
+  // sat underneath the gesture bar on gesture-navigation devices.
+  const insets = useSafeAreaInsets();
+  const user = useAuthStore(s => s.user);
+  const firstName = (user?.name || '').split(' ')[0];
+
+  // Opens with a greeting only. The previous seed conversation asserted specific
+  // PPE requirements for a named zone that no query ever produced — invented
+  // safety guidance a worker could act on, so it is not reinstated here.
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       sender: 'ai',
-      text: "Hello Alex. I'm your AI Safety Assistant. How can I help you ensure site safety today?",
-      time: '08:42 AM',
-    },
-    {
-      id: '2',
-      sender: 'user',
-      text: 'What PPE is required for Zone B?',
-      time: '08:45 AM',
-    },
-    {
-      id: '3',
-      sender: 'ai',
-      text: 'For **Zone B (High Pressure Testing Area)**, the following PPE is mandatory as per the latest safety audit:',
-      time: '08:45 AM',
-      checklist: [
-        'Level 3 Arc-Rated Flash Suit',
-        'Impact-resistant safety goggles (ANSI Z87.1)',
-        'Reinforced steel-toe industrial boots',
-        'Double hearing protection (Plugs + Muffs)',
-      ],
-      doc: {
-        title: 'SOP-HP-2024-B.pdf',
-        desc: 'Standard Operating Procedure - Zone B',
-      },
+      text: firstName
+        ? `Hello ${firstName}. I'm your AI Safety Assistant. Ask me about your tasks, shifts or reports.`
+        : "I'm your AI Safety Assistant. Ask me about your tasks, shifts or reports.",
+      time: clockNow(),
     },
   ]);
   const [inputText, setInputText] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    const newMsg: Message = {
-      id: String(messages.length + 1),
-      sender: 'user',
-      text: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages(prev => [...prev, newMsg]);
+  const handleSend = async () => {
+    const question = inputText.trim();
+    if (!question || busy) return;
+
+    // Prior turns only — the pending question is passed separately.
+    const history: AiMessage[] = messages.map(m => ({
+      role: m.sender === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+
+    // Created empty and filled in as deltas arrive, so the answer grows in place.
+    const replyId = `a${Date.now()}`;
+    setMessages(prev => [
+      ...prev,
+      { id: `u${Date.now()}`, sender: 'user', text: question, time: clockNow() },
+      { id: replyId, sender: 'ai', text: '', time: clockNow(), streaming: true },
+    ]);
     setInputText('');
+    setBusy(true);
 
-    // Simulated reply
-    setTimeout(() => {
-      const reply: Message = {
-        id: String(messages.length + 2),
-        sender: 'ai',
-        text: "I've logged your query. Let me look up the relevant Safety SOP for you.",
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, reply]);
-    }, 1200);
+    const patch = (fields: Partial<Message>) =>
+      setMessages(prev => prev.map(m => (m.id === replyId ? { ...m, ...fields } : m)));
+
+    try {
+      await askAi(question, history, (_chunk, sofar) => patch({ text: sofar }));
+      patch({ streaming: false });
+    } catch (err: any) {
+      patch({ streaming: false, text: aiErrorText(err) });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -97,7 +106,21 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
             <Text style={styles.dateText}>Today</Text>
           </View>
 
-          {messages.map(msg => (
+          {messages.map(msg => msg.streaming && !msg.text ? (
+            // Waiting on the first delta — show the robot with a spinner rather
+            // than an empty speech bubble.
+            <View key={msg.id} style={[styles.messageRow, styles.messageRowAi]}>
+              <View style={styles.aiIconBox}>
+                <Icon emoji="🤖" style={styles.aiIcon} />
+              </View>
+              <View style={styles.messageContent}>
+                <View style={[styles.bubble, styles.bubbleAi, styles.thinkingBubble]}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.thinkingText}>Reading your data…</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
             <View
               key={msg.id}
               style={[
@@ -119,9 +142,14 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
                     msg.sender === 'user' ? styles.bubbleUser : styles.bubbleAi,
                   ]}
                 >
-                  <Text style={[styles.msgText, msg.sender === 'user' && styles.msgTextUser]}>
-                    {msg.text}
-                  </Text>
+                  {msg.sender === 'user' ? (
+                    // Verbatim — the worker's own wording, never reformatted.
+                    <Text style={[styles.msgText, styles.msgTextUser]}>{msg.text}</Text>
+                  ) : (
+                    <MarkdownText color="#1E293B" accent="#2563EB" fontSize={14} lineHeight={20}>
+                      {msg.text}
+                    </MarkdownText>
+                  )}
 
                   {/* Checklist */}
                   {msg.checklist && (
@@ -182,19 +210,29 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
         </View>
 
         {/* Input area */}
-        <View style={styles.inputArea}>
+        <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <TouchableOpacity style={styles.attachmentBtn}>
             <Icon emoji="📎" style={styles.attachmentIcon} />
           </TouchableOpacity>
           <TextInput
             style={styles.textInput}
-            placeholder="Ask AI anything about safety SOP..."
+            placeholder="Ask about your tasks, shifts or reports..."
             placeholderTextColor="#94A3B8"
             value={inputText}
             onChangeText={setInputText}
+            editable={!busy}
+            onSubmitEditing={handleSend}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-            <Icon emoji="➤" style={styles.sendIcon} />
+          <TouchableOpacity
+            style={styles.sendBtn}
+            onPress={handleSend}
+            disabled={busy || !inputText.trim()}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Icon emoji="➤" style={styles.sendIcon} />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -310,6 +348,15 @@ const styles = StyleSheet.create({
   bubbleUser: {
     backgroundColor: '#2563EB',
     borderTopRightRadius: 4,
+  },
+  thinkingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thinkingText: {
+    fontSize: 13,
+    color: '#64748B',
   },
   msgText: {
     fontSize: 14,

@@ -142,7 +142,16 @@ export function AuditChecklistScreen({ route, navigation }: any) {
               Alert.alert(
                 'Success',
                 `Audit submitted. Compliance score: ${res.compliance_score ?? '—'}%`,
-                [{ text: 'OK', onPress: () => navigation.navigate('AssignedAudits') }],
+                // There is no route called 'AssignedAudits' — the list is the
+                // 'Audits' tab inside AuditorTabs, and this screen sits on the
+                // stack above it, so the tab has to be addressed through it.
+                [
+                  {
+                    text: 'OK',
+                    onPress: () =>
+                      navigation.navigate('AuditorTabs', { screen: 'Audits' }),
+                  },
+                ],
               );
             } catch (e: any) {
               Alert.alert('Submit failed', e?.response?.data?.detail ?? 'Could not reach the server.');

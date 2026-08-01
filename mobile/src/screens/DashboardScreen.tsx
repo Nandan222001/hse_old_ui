@@ -8,6 +8,7 @@ import { useDashboard } from '../hooks/useDashboard';
 import { permitService } from '../services/permitService';
 import { apiClient } from '../api/client';
 import { Avatar } from '../components';
+import { AiFab, AI_PROMPTS } from '../components/AiAssistant';
 
 const PERMIT_STATUS_COLOR: Record<string, string> = {
   active: '#16A34A', approved: '#16A34A', pending: '#F59E0B',
@@ -197,7 +198,12 @@ export function DashboardScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() => navigation.navigate('ShiftConfirmation')}
+            // ShiftConfirmation is registered in SupervisorOperationsStack, not in
+            // this Home stack, so a bare navigate('ShiftConfirmation') is not
+            // handled by any navigator. Address it through its parent tab.
+            onPress={() =>
+              navigation.navigate('Operations', { screen: 'ShiftConfirmation' })
+            }
             activeOpacity={0.8}
           >
             <View style={[styles.gridIcon, { backgroundColor: '#EFF6FF' }]}>
@@ -339,6 +345,8 @@ export function DashboardScreen({ navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      <AiFab onPress={() => navigation.navigate('AiAssistant', AI_PROMPTS.supervisor)} />
     </SafeAreaView>
   );
 }

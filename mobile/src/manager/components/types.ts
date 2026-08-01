@@ -10,7 +10,8 @@ export type ManagerScreen =
   | "permit_approvals"
   | "assigned_tasks"
   | "hazard_register"
-  | "policy_management";
+  | "policy_management"
+  | "ai_assistant";
 
 export interface ScreenProps {
   currentScreen: ManagerScreen;

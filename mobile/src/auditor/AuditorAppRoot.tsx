@@ -16,6 +16,7 @@ import { VerificationsScreen } from './screens/VerificationsScreen';
 import { AuditTrailScreen } from './screens/AuditTrailScreen';
 import { CloseOutReviewScreen } from './screens/CloseOutReviewScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
+import { AiChatScreen } from '../components/AiAssistant';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -75,6 +76,7 @@ export function AuditorAppRoot() {
       <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />
       <Stack.Screen name="CloseOutReview" component={CloseOutReviewScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <Stack.Screen name="AiAssistant" component={AiChatScreen} />
     </Stack.Navigator>
   );
 }
