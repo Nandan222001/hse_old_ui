@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { auditService, Audit } from '../services/auditService';
+import { AiFab, AI_PROMPTS } from '../../components/AiAssistant';
 
 export function AuditorDashboardScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -98,6 +99,8 @@ export function AuditorDashboardScreen({ navigation }: any) {
           </>
         )}
       </ScrollView>
+
+      <AiFab onPress={() => navigation.navigate('AiAssistant', AI_PROMPTS.auditor)} />
     </SafeAreaView>
   );
 }

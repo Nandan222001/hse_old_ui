@@ -2,9 +2,13 @@ import React, { useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform,
+  TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuthStore } from '../store/authStore';
+import { sendAiMessage, aiErrorText, AiMessage } from '../../services/aiService';
+import { MarkdownText } from '../../components/AiAssistant/MarkdownText';
 
 interface Message {
   id: string;
@@ -15,60 +19,68 @@ interface Message {
   doc?: { title: string; desc: string };
 }
 
+const clockNow = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 export default function AISafetyAssistantScreen({ navigation }: any) {
+  // ScreenLayout renders a plain View, so the composer had no bottom inset and
+  // sat underneath the gesture bar on gesture-navigation devices.
+  const insets = useSafeAreaInsets();
+  const user = useAuthStore(s => s.user);
+  const firstName = (user?.name || '').split(' ')[0];
+
+  // Opens with a greeting only. The previous seed conversation asserted specific
+  // PPE requirements for a named zone that no query ever produced — invented
+  // safety guidance a worker could act on, so it is not reinstated here.
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       sender: 'ai',
-      text: "Hello Alex. I'm your AI Safety Assistant. How can I help you ensure site safety today?",
-      time: '08:42 AM',
-    },
-    {
-      id: '2',
-      sender: 'user',
-      text: 'What PPE is required for Zone B?',
-      time: '08:45 AM',
-    },
-    {
-      id: '3',
-      sender: 'ai',
-      text: 'For **Zone B (High Pressure Testing Area)**, the following PPE is mandatory as per the latest safety audit:',
-      time: '08:45 AM',
-      checklist: [
-        'Level 3 Arc-Rated Flash Suit',
-        'Impact-resistant safety goggles (ANSI Z87.1)',
-        'Reinforced steel-toe industrial boots',
-        'Double hearing protection (Plugs + Muffs)',
-      ],
-      doc: {
-        title: 'SOP-HP-2024-B.pdf',
-        desc: 'Standard Operating Procedure - Zone B',
-      },
+      text: firstName
+        ? `Hello ${firstName}. I'm your AI Safety Assistant. Ask me about your tasks, shifts or reports.`
+        : "I'm your AI Safety Assistant. Ask me about your tasks, shifts or reports.",
+      time: clockNow(),
     },
   ]);
   const [inputText, setInputText] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    const newMsg: Message = {
-      id: String(messages.length + 1),
-      sender: 'user',
-      text: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages(prev => [...prev, newMsg]);
+  const handleSend = async () => {
+    const question = inputText.trim();
+    if (!question || busy) return;
+
+    // Prior turns only — the pending question is passed separately.
+    const history: AiMessage[] = messages.map(m => ({
+      role: m.sender === 'user' ? 'user' : 'assistant',
+      content: m.text,
+    }));
+
+    setMessages(prev => [
+      ...prev,
+      { id: `u${Date.now()}`, sender: 'user', text: question, time: clockNow() },
+    ]);
     setInputText('');
+    setBusy(true);
 
-    // Simulated reply
-    setTimeout(() => {
-      const reply: Message = {
-        id: String(messages.length + 2),
-        sender: 'ai',
-        text: "I've logged your query. Let me look up the relevant Safety SOP for you.",
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, reply]);
-    }, 1200);
+    try {
+      const reply = await sendAiMessage(question, history);
+      setMessages(prev => [
+        ...prev,
+        { id: `a${Date.now()}`, sender: 'ai', text: reply.answer, time: clockNow() },
+      ]);
+    } catch (err: any) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `e${Date.now()}`,
+          sender: 'ai',
+          text: aiErrorText(err),
+          time: clockNow(),
+        },
+      ]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -119,9 +131,14 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
                     msg.sender === 'user' ? styles.bubbleUser : styles.bubbleAi,
                   ]}
                 >
-                  <Text style={[styles.msgText, msg.sender === 'user' && styles.msgTextUser]}>
-                    {msg.text}
-                  </Text>
+                  {msg.sender === 'user' ? (
+                    // Verbatim — the worker's own wording, never reformatted.
+                    <Text style={[styles.msgText, styles.msgTextUser]}>{msg.text}</Text>
+                  ) : (
+                    <MarkdownText color="#1E293B" accent="#2563EB" fontSize={14} lineHeight={20}>
+                      {msg.text}
+                    </MarkdownText>
+                  )}
 
                   {/* Checklist */}
                   {msg.checklist && (
@@ -182,19 +199,29 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
         </View>
 
         {/* Input area */}
-        <View style={styles.inputArea}>
+        <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <TouchableOpacity style={styles.attachmentBtn}>
             <Icon emoji="📎" style={styles.attachmentIcon} />
           </TouchableOpacity>
           <TextInput
             style={styles.textInput}
-            placeholder="Ask AI anything about safety SOP..."
+            placeholder="Ask about your tasks, shifts or reports..."
             placeholderTextColor="#94A3B8"
             value={inputText}
             onChangeText={setInputText}
+            editable={!busy}
+            onSubmitEditing={handleSend}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-            <Icon emoji="➤" style={styles.sendIcon} />
+          <TouchableOpacity
+            style={styles.sendBtn}
+            onPress={handleSend}
+            disabled={busy || !inputText.trim()}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Icon emoji="➤" style={styles.sendIcon} />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

@@ -9,6 +9,7 @@ import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
 import { useAuthStore } from '../store/authStore';
 import apiClient from '../api/client';
+import { AiFab } from '../../components/AiAssistant';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks, shiftSummary, isLoading, refetch } = useTasks();
@@ -386,6 +387,13 @@ export default function DashboardScreen({ navigation }: any) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      {/* Same assistant button the other three roles use, stacked above the
+          permit FAB so the two don't overlap. */}
+      <AiFab
+        style={styles.aiFab}
+        onPress={() => navigation.navigate('AISafetyAssistant')}
+      />
 
       {/* Floating Action Button */}
       <TouchableOpacity
@@ -781,6 +789,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#334155',
     textAlign: 'center',
+  },
+  // Position only — size, colour and icon come from the shared AiFab so this
+  // matches supervisor/manager/auditor. Sits one FAB-height + gap above the
+  // permit FAB, and right-aligned with it (the shared default is 18).
+  aiFab: {
+    bottom: 88,
+    right: 20,
   },
   fab: {
     position: 'absolute',

@@ -13,6 +13,7 @@ import { LoadingScreen } from '../components';
 // ==========================================
 import { ManagerAppRoot } from '../manager/ManagerAppRoot';
 import { AuditorAppRoot } from '../auditor/AuditorAppRoot';
+import { AiChatScreen } from '../components/AiAssistant';
 
 // ==========================================
 // 2. SUPERVISOR SCREENS
@@ -84,6 +85,7 @@ function SupervisorHomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardHome" component={DashboardScreen} />
+      <Stack.Screen name="AiAssistant" component={AiChatScreen} />
     </Stack.Navigator>
   );
 }

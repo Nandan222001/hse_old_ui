@@ -33,6 +33,7 @@ import { HazardRegisterScreen } from "./components/HazardRegisterScreen";
 import { PolicyManagementScreen } from "./components/PolicyManagementScreen";
 import { PermitApprovalsView } from "./components/PermitApprovals";
 import { AppContainerView } from "./components/AppContainer";
+import { AiChatScreen, AiFab, AI_PROMPTS } from "../components/AiAssistant";
 
 export function ManagerAppRoot() {
   const { logout } = useAuth();
@@ -344,6 +345,15 @@ export function ManagerAppRoot() {
         return <PolicyManagementScreen {...sharedProps} />;
       case "permit_approvals":
         return <PermitApprovalsView {...sharedProps} />;
+      case "ai_assistant":
+        // This shell isn't React Navigation, so hand the shared chat screen the
+        // minimal navigation/route shape it reads instead of a real navigator.
+        return (
+          <AiChatScreen
+            navigation={{ goBack: () => setCurrentScreen("app") }}
+            route={{ params: AI_PROMPTS.manager }}
+          />
+        );
       case "app":
       default:
         return <AppContainerView {...sharedProps} />;
@@ -354,6 +364,12 @@ export function ManagerAppRoot() {
     <SafeAreaProvider>
       <View style={styles.appContainer}>
         {renderScreen()}
+
+        {/* Assistant entry point — dashboard only, so it never covers a form
+            or sit on top of the chat screen it opens. */}
+        {currentScreen === "app" && (
+          <AiFab style={styles.aiFab} onPress={() => setCurrentScreen("ai_assistant")} />
+        )}
 
         {/* Toast Alert Banner */}
         {toast && (
@@ -386,6 +402,10 @@ const styles = StyleSheet.create({
   appContainer: {
     flex: 1,
     backgroundColor: "#F4F7FC",
+  },
+  // Clear of the manager shell's bottom tab bar.
+  aiFab: {
+    bottom: 92,
   },
   toastBanner: {
     position: "absolute",
