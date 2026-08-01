@@ -7,12 +7,12 @@ rest of the app keeps working even without an AI key configured.
 import json
 import threading
 import time
-from typing import Any, List
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
-from app.config.database import get_db
+from app.config.database import SessionLocal
 from app.config.settings import get_settings
 from app.core.dependencies import get_current_user, CurrentUser
 from app.utils.logger import get_logger
@@ -48,7 +48,131 @@ _briefing_cache_lock = threading.Lock()
 _MAX_HISTORY_MESSAGES = 12
 
 
-def _build_project_briefing(db: Session, current_user: CurrentUser) -> str:
+def _fetch_overview(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        stats = get_dashboard_stats(start_date=None, end_date=None, db=db, current_user=current_user)
+        return (
+            "\n[Overview]\n"
+            f"Total incidents: {stats['total_incidents']} | Critical incidents (Fatal/Serious/Significant): {stats['critical_incidents']}\n"
+            f"Near misses: {stats['near_misses_count']} | Safety walks logged: {stats['safety_walks_count']}\n"
+            f"Employees: {stats['total_employees']} | Sites: {stats['total_sites']} | Active permits: {stats['active_permits']}\n"
+            f"Open CAPA actions: {stats['open_capa_actions']} (overdue: {stats['overdue_capa']}) | CAPA closure rate: {stats['capa_completion_rate']}%\n"
+            f"Avg safety walk compliance rating: {stats['avg_compliance_rating']}/5 | Avg housekeeping rating: {stats['avg_housekeeping_rating']}/5"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: dashboard stats failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+def _fetch_leading_indicators(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        leading = get_leading_indicators(start_date=None, end_date=None, db=db, current_user=current_user)
+        if leading.get("contractor_has_contractors", True):
+            contractor_text = f"{leading['contractor_risk_label']} ({leading['contractor_risk_score_10']}/10)"
+        else:
+            contractor_text = "N/A (no contractor workforce recorded)"
+        return (
+            "\n[Leading Indicators]\n"
+            f"Predictive injury risk score: {leading['predictive_injury_risk_score']} (trend {leading['predictive_injury_risk_trend']:+})\n"
+            f"TRIR: {leading['trir']} | LTIFR: {leading['ltifr']} | DART: {leading['dart_rate']} | FAR: {leading['far']}\n"
+            f"Near miss ratio: {leading['near_miss_ratio']}\n"
+            f"Contractor risk: {contractor_text}\n"
+            f"Audit readiness: {leading['audit_readiness_score']}% ({leading['audit_readiness_label']})"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: leading indicators failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+def _fetch_compliance(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        compliance = get_compliance_summary(db=db, current_user=current_user)
+        loto_text = (
+            f"{compliance['loto_compliance_pct']}%"
+            if compliance.get("loto_compliance_pct") is not None
+            else "no lockout permits recorded"
+        )
+        return (
+            "\n[Compliance]\n"
+            f"Permit (PTW) compliance: {compliance['permit_compliance_pct']}%\n"
+            f"LOTO compliance: {loto_text}\n"
+            f"Corrective action closure rate: {compliance['corrective_action_closure_rate']}%\n"
+            f"Policy review status: {compliance['policy_review_pct']}% current"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: compliance summary failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+def _fetch_risk(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        risk = get_risk_summary(db=db, current_user=current_user)
+        zones = ", ".join(f"{z['zone']} ({z['value']} incidents)" for z in risk.get("zone_risk", [])[:5]) or "no site data"
+        return (
+            "\n[Risk & CAPA]\n"
+            f"Open CAPA actions: {risk['kpis']['unverified_controls']} | Overdue: {risk['kpis']['risk_escalations']}\n"
+            f"Incidents by site: {zones}"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: risk summary failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+def _fetch_violations(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        violations = get_violations_summary(months=6, db=db, current_user=current_user)
+        top_types = ", ".join(f"{t['label']} ({t['value']})" for t in violations.get("by_type", [])[:5]) or "none"
+        top_causes = ", ".join(f"{c['name']} ({c['value']})" for c in violations.get("by_root_cause", [])[:5]) or "none"
+        return (
+            "\n[Incident Breakdown]\n"
+            f"Top incident types: {top_types}\n"
+            f"Top root causes: {top_causes}"
+        )
+    except Exception as exc:
+        logger.warning("Briefing: violations summary failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+def _fetch_vendor(current_user: CurrentUser) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        vendor = get_vendor_summary(db=db, current_user=current_user)
+        rscore = vendor["risk_score"]
+        rscore_text = "N/A (no contractors)" if not rscore.get("has_contractors", True) else f"{rscore['value']}/10"
+        return (
+            "\n[Contractors]\n"
+            f"Contractors tracked: {vendor['total_contractors']} | Contractor risk score: {rscore_text}\n"
+            f"Compliance breakdown: " + ", ".join(f"{c['name']} {c['value']}%" for c in vendor.get("compliance", []))
+        )
+    except Exception as exc:
+        logger.warning("Briefing: vendor summary failed: %s", exc)
+        return None
+    finally:
+        db.close()
+
+
+_BRIEFING_FETCHERS = [
+    _fetch_overview, _fetch_leading_indicators, _fetch_compliance,
+    _fetch_risk, _fetch_violations, _fetch_vendor,
+]
+
+
+def _build_project_briefing(current_user: CurrentUser) -> str:
     """Assemble a real, DB-backed snapshot of this org's HSE data for the AI to
     reason over — reuses the exact same query logic already shown on the
     Dashboard/Compliance/Vendors/Violations pages, so the AI's answers stay
@@ -57,8 +181,12 @@ def _build_project_briefing(db: Session, current_user: CurrentUser) -> str:
 
     Only Supervisor/Manager/Auditor roles get this org-wide snapshot; Worker/
     Employee roles (and any unrecognised role) get a restricted notice instead
-    — both an authorization boundary and, since it skips 6 DB round trips
-    entirely, the single biggest latency win for the majority of chat users."""
+    — both an authorization boundary and, since it skips the briefing entirely,
+    the single biggest latency win for the majority of chat users.
+
+    The 6 lookups below are independent read-only queries, so they run in
+    parallel (each on its own DB session) instead of back-to-back — this was
+    the dominant chunk of time-to-first-token before the LLM call even starts."""
     is_elevated = role_matches(current_user.role, ALL_ELEVATED_ROLES)
     if not is_elevated:
         return _RESTRICTED_BRIEFING
@@ -70,90 +198,11 @@ def _build_project_briefing(db: Session, current_user: CurrentUser) -> str:
         if cached and now - cached[0] < _BRIEFING_TTL_SECONDS:
             return cached[1]
 
+    with ThreadPoolExecutor(max_workers=len(_BRIEFING_FETCHERS)) as pool:
+        sections = list(pool.map(lambda fn: fn(current_user), _BRIEFING_FETCHERS))
+
     lines: list[str] = [f"=== LIVE HSE DATA SNAPSHOT for {current_user.email} (org_id={current_user.org_id}) ==="]
-
-    try:
-        stats = get_dashboard_stats(start_date=None, end_date=None, db=db, current_user=current_user)
-        lines.append(
-            "\n[Overview]\n"
-            f"Total incidents: {stats['total_incidents']} | Critical incidents (Fatal/Serious/Significant): {stats['critical_incidents']}\n"
-            f"Near misses: {stats['near_misses_count']} | Safety walks logged: {stats['safety_walks_count']}\n"
-            f"Employees: {stats['total_employees']} | Sites: {stats['total_sites']} | Active permits: {stats['active_permits']}\n"
-            f"Open CAPA actions: {stats['open_capa_actions']} (overdue: {stats['overdue_capa']}) | CAPA closure rate: {stats['capa_completion_rate']}%\n"
-            f"Avg safety walk compliance rating: {stats['avg_compliance_rating']}/5 | Avg housekeeping rating: {stats['avg_housekeeping_rating']}/5"
-        )
-    except Exception as exc:
-        logger.warning("Briefing: dashboard stats failed: %s", exc)
-
-    try:
-        leading = get_leading_indicators(start_date=None, end_date=None, db=db, current_user=current_user)
-        if leading.get("contractor_has_contractors", True):
-            contractor_text = f"{leading['contractor_risk_label']} ({leading['contractor_risk_score_10']}/10)"
-        else:
-            contractor_text = "N/A (no contractor workforce recorded)"
-        lines.append(
-            "\n[Leading Indicators]\n"
-            f"Predictive injury risk score: {leading['predictive_injury_risk_score']} (trend {leading['predictive_injury_risk_trend']:+})\n"
-            f"TRIR: {leading['trir']} | LTIFR: {leading['ltifr']} | DART: {leading['dart_rate']} | FAR: {leading['far']}\n"
-            f"Near miss ratio: {leading['near_miss_ratio']}\n"
-            f"Contractor risk: {contractor_text}\n"
-            f"Audit readiness: {leading['audit_readiness_score']}% ({leading['audit_readiness_label']})"
-        )
-    except Exception as exc:
-        logger.warning("Briefing: leading indicators failed: %s", exc)
-
-    try:
-        compliance = get_compliance_summary(db=db, current_user=current_user)
-        loto_text = (
-            f"{compliance['loto_compliance_pct']}%"
-            if compliance.get("loto_compliance_pct") is not None
-            else "no lockout permits recorded"
-        )
-        lines.append(
-            "\n[Compliance]\n"
-            f"Permit (PTW) compliance: {compliance['permit_compliance_pct']}%\n"
-            f"LOTO compliance: {loto_text}\n"
-            f"Corrective action closure rate: {compliance['corrective_action_closure_rate']}%\n"
-            f"Policy review status: {compliance['policy_review_pct']}% current"
-        )
-    except Exception as exc:
-        logger.warning("Briefing: compliance summary failed: %s", exc)
-
-    try:
-        risk = get_risk_summary(db=db, current_user=current_user)
-        zones = ", ".join(f"{z['zone']} ({z['value']} incidents)" for z in risk.get("zone_risk", [])[:5]) or "no site data"
-        lines.append(
-            "\n[Risk & CAPA]\n"
-            f"Open CAPA actions: {risk['kpis']['unverified_controls']} | Overdue: {risk['kpis']['risk_escalations']}\n"
-            f"Incidents by site: {zones}"
-        )
-    except Exception as exc:
-        logger.warning("Briefing: risk summary failed: %s", exc)
-
-    try:
-        violations = get_violations_summary(months=6, db=db, current_user=current_user)
-        top_types = ", ".join(f"{t['label']} ({t['value']})" for t in violations.get("by_type", [])[:5]) or "none"
-        top_causes = ", ".join(f"{c['name']} ({c['value']})" for c in violations.get("by_root_cause", [])[:5]) or "none"
-        lines.append(
-            "\n[Incident Breakdown]\n"
-            f"Top incident types: {top_types}\n"
-            f"Top root causes: {top_causes}"
-        )
-    except Exception as exc:
-        logger.warning("Briefing: violations summary failed: %s", exc)
-
-    try:
-        vendor = get_vendor_summary(db=db, current_user=current_user)
-        rscore = vendor["risk_score"]
-        rscore_text = "N/A (no contractors)" if not rscore.get("has_contractors", True) else f"{rscore['value']}/10"
-        lines.append(
-            "\n[Contractors]\n"
-            f"Contractors tracked: {vendor['total_contractors']} | Contractor risk score: {rscore_text}\n"
-            f"Compliance breakdown: " + ", ".join(f"{c['name']} {c['value']}%" for c in vendor.get("compliance", []))
-        )
-    except Exception as exc:
-        logger.warning("Briefing: vendor summary failed: %s", exc)
-
+    lines.extend(section for section in sections if section)
     lines.append(
         "\n=== END SNAPSHOT — use only the numbers above; do not invent figures not shown here. "
         "If asked about something not covered (e.g. training completion, medical fitness, JSA), say the data "
@@ -419,7 +468,7 @@ def ai_status():
     }
 
 
-def _prepare_messages(payload: dict, db: Session, current_user: CurrentUser) -> list[dict]:
+def _prepare_messages(payload: dict, current_user: CurrentUser) -> list[dict]:
     """Shared by /chat and /chat/stream: pull the message list out of the
     request body, bound its length, and prepend the role-scoped data briefing."""
     messages: list[dict] = payload.get("messages", [])
@@ -437,7 +486,7 @@ def _prepare_messages(payload: dict, db: Session, current_user: CurrentUser) -> 
     # Inject a fresh, real data snapshot on every call so the AI always answers
     # from this org's actual numbers instead of whatever (if anything) the
     # frontend happened to include in the user's message text.
-    briefing = _build_project_briefing(db, current_user)
+    briefing = _build_project_briefing(current_user)
     return [{"role": "system", "content": briefing}] + messages
 
 
@@ -445,7 +494,6 @@ def _prepare_messages(payload: dict, db: Session, current_user: CurrentUser) -> 
 def ai_chat(
     payload: dict[str, Any],
     current_user: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """
     Multi-turn AI chat endpoint (single blocking response — see /chat/stream
@@ -457,7 +505,7 @@ def ai_chat(
     Response:
       { "answer": "...", "model": "claude-sonnet-4-6" | "azure-openai" | "fallback" }
     """
-    messages = _prepare_messages(payload, db, current_user)
+    messages = _prepare_messages(payload, current_user)
     if not messages:
         return {"answer": "No message provided.", "model": "fallback"}
 
@@ -505,7 +553,6 @@ def ai_chat(
 def ai_chat_stream(
     payload: dict[str, Any],
     current_user: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """
     Same contract as /chat, but streams the reply as Server-Sent Events so the
@@ -516,7 +563,7 @@ def ai_chat_stream(
       {"delta": "text chunk"}
       {"done": true, "model": "..."}
     """
-    messages = _prepare_messages(payload, db, current_user)
+    messages = _prepare_messages(payload, current_user)
 
     get_settings.cache_clear()
     settings = get_settings()

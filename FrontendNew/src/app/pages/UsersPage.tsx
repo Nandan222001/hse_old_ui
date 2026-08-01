@@ -118,7 +118,7 @@ function GaugeDial({ value }: { value: number }) {
     <div className="relative h-[86px] w-[132px] overflow-hidden">
       <div
         className="absolute left-1/2 top-0 h-[132px] w-[132px] -translate-x-1/2 rounded-full"
-        style={{ background: `conic-gradient(from 180deg, #D9534F 0deg ${redEnd}deg, #F3C34C ${redEnd}deg ${amberEnd}deg, #67BC6B ${amberEnd}deg ${greenEnd}deg, #E5E7EB ${greenEnd}deg 360deg)` }}
+        style={{ background: `conic-gradient(from 270deg, #D9534F 0deg ${redEnd}deg, #F3C34C ${redEnd}deg ${amberEnd}deg, #67BC6B ${amberEnd}deg ${greenEnd}deg, #E5E7EB ${greenEnd}deg 360deg)` }}
       />
       <div className="absolute left-1/2 top-[15px] h-[101px] w-[101px] -translate-x-1/2 rounded-full bg-white" />
       <div className="absolute left-1/2 top-[42px] -translate-x-1/2 text-[18px] font-semibold" style={{ color: "#111827" }}>
