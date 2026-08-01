@@ -7,7 +7,7 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
-import { sendAiMessage, aiErrorText, AiMessage } from '../../services/aiService';
+import { askAi, aiErrorText, AiMessage } from '../../services/aiService';
 import { MarkdownText } from '../../components/AiAssistant/MarkdownText';
 
 interface Message {
@@ -17,6 +17,8 @@ interface Message {
   time: string;
   checklist?: string[];
   doc?: { title: string; desc: string };
+  /** Reply still arriving from the streaming endpoint. */
+  streaming?: boolean;
 }
 
 const clockNow = () =>
@@ -55,29 +57,24 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
       content: m.text,
     }));
 
+    // Created empty and filled in as deltas arrive, so the answer grows in place.
+    const replyId = `a${Date.now()}`;
     setMessages(prev => [
       ...prev,
       { id: `u${Date.now()}`, sender: 'user', text: question, time: clockNow() },
+      { id: replyId, sender: 'ai', text: '', time: clockNow(), streaming: true },
     ]);
     setInputText('');
     setBusy(true);
 
+    const patch = (fields: Partial<Message>) =>
+      setMessages(prev => prev.map(m => (m.id === replyId ? { ...m, ...fields } : m)));
+
     try {
-      const reply = await sendAiMessage(question, history);
-      setMessages(prev => [
-        ...prev,
-        { id: `a${Date.now()}`, sender: 'ai', text: reply.answer, time: clockNow() },
-      ]);
+      await askAi(question, history, (_chunk, sofar) => patch({ text: sofar }));
+      patch({ streaming: false });
     } catch (err: any) {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `e${Date.now()}`,
-          sender: 'ai',
-          text: aiErrorText(err),
-          time: clockNow(),
-        },
-      ]);
+      patch({ streaming: false, text: aiErrorText(err) });
     } finally {
       setBusy(false);
     }
@@ -109,7 +106,21 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
             <Text style={styles.dateText}>Today</Text>
           </View>
 
-          {messages.map(msg => (
+          {messages.map(msg => msg.streaming && !msg.text ? (
+            // Waiting on the first delta — show the robot with a spinner rather
+            // than an empty speech bubble.
+            <View key={msg.id} style={[styles.messageRow, styles.messageRowAi]}>
+              <View style={styles.aiIconBox}>
+                <Icon emoji="🤖" style={styles.aiIcon} />
+              </View>
+              <View style={styles.messageContent}>
+                <View style={[styles.bubble, styles.bubbleAi, styles.thinkingBubble]}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.thinkingText}>Reading your data…</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
             <View
               key={msg.id}
               style={[
@@ -337,6 +348,15 @@ const styles = StyleSheet.create({
   bubbleUser: {
     backgroundColor: '#2563EB',
     borderTopRightRadius: 4,
+  },
+  thinkingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thinkingText: {
+    fontSize: 13,
+    color: '#64748B',
   },
   msgText: {
     fontSize: 14,

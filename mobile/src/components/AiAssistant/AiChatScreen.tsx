@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../theme/colors';
-import { sendAiMessage, aiErrorText, AiMessage } from '../../services/aiService';
+import { askAi, aiErrorText, AiMessage } from '../../services/aiService';
 import { MarkdownText } from './MarkdownText';
 
 /**
@@ -32,6 +32,8 @@ import { MarkdownText } from './MarkdownText';
 interface Bubble extends AiMessage {
   id: string;
   failed?: boolean;
+  /** Reply still arriving — drives the caret and suppresses the send button. */
+  streaming?: boolean;
 }
 
 export interface AiChatScreenProps {
@@ -75,22 +77,29 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
         .filter((m) => !m.failed)
         .map(({ role, content }) => ({ role, content }));
 
-      setMessages((prev) => [...prev, { id: nextId(), role: 'user', content: question }]);
+      // The assistant bubble is created up front and filled in as deltas land,
+      // so the reply grows in place instead of appearing all at once at the end.
+      const replyId = nextId();
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'user', content: question },
+        { id: replyId, role: 'assistant', content: '', streaming: true },
+      ]);
       setDraft('');
       setBusy(true);
       scrollToEnd();
 
+      const patch = (fields: Partial<Bubble>) =>
+        setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, ...fields } : m)));
+
       try {
-        const reply = await sendAiMessage(question, history);
-        setMessages((prev) => [
-          ...prev,
-          { id: nextId(), role: 'assistant', content: reply.answer },
-        ]);
+        await askAi(question, history, (_chunk, sofar) => {
+          patch({ content: sofar });
+          scrollToEnd();
+        });
+        patch({ streaming: false });
       } catch (err: any) {
-        setMessages((prev) => [
-          ...prev,
-          { id: nextId(), role: 'assistant', failed: true, content: aiErrorText(err) },
-        ]);
+        patch({ streaming: false, failed: true, content: aiErrorText(err) });
       } finally {
         setBusy(false);
         scrollToEnd();
@@ -161,6 +170,9 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
 
           {messages.map((m) => {
             const mine = m.role === 'user';
+            // Before the first delta lands there is nothing to show — the
+            // "Reading your data…" row below stands in for this bubble.
+            if (m.streaming && !m.content) return null;
             return (
               <View
                 key={m.id}
@@ -182,7 +194,9 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
             );
           })}
 
-          {busy && (
+          {/* Only until the first token arrives — after that the reply itself is
+              visibly growing, so a spinner alongside it just adds noise. */}
+          {messages.some((m) => m.streaming && !m.content) && (
             <View style={[styles.bubble, styles.bubbleAi, styles.thinking]}>
               <ActivityIndicator size="small" color={Colors.primary} />
               <Text style={styles.thinkingText}>Reading your data…</Text>
