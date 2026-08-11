@@ -1,5 +1,6 @@
 import apiClient, { uploadClient } from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
+import { submitOrQueue, type SubmitResult } from '../../services/offlineQueue';
 import {
   Incident, IncidentListResponse,
   ReportIncidentRequest, ReportNearMissRequest, ReportUnsafeActRequest,
@@ -26,36 +27,54 @@ export const incidentService = {
     return data;
   },
 
-  async reportIncident(payload: ReportIncidentRequest): Promise<Incident> {
-    const hasPhotos = payload.photos && payload.photos.length > 0;
-    if (hasPhotos) {
-      const form = buildFormData({ ...payload, photos: undefined }, payload.photos);
-      const { data } = await uploadClient.post<Incident>(ENDPOINTS.INCIDENTS.REPORT, form);
-      return data;
-    }
-    const { data } = await apiClient.post<Incident>(ENDPOINTS.INCIDENTS.REPORT, payload);
-    return data;
+  async reportIncident(payload: ReportIncidentRequest): Promise<SubmitResult<Incident>> {
+    const photos = payload.photos ?? [];
+    const hasPhotos = photos.length > 0;
+    // Offline: the report is stored as a draft and replayed on reconnect. The
+    // photo files stay on the device, so the multipart body is rebuilt then.
+    return submitOrQueue<Incident>(
+      ENDPOINTS.INCIDENTS.REPORT,
+      hasPhotos ? { ...payload, photos: undefined } : payload,
+      {
+        kind: hasPhotos ? 'multipart' : 'json',
+        photos: hasPhotos ? photos.map(p => ({ uri: p.uri, name: p.name, type: p.type })) : undefined,
+        client: hasPhotos ? 'workerUpload' : 'worker',
+        label: 'Incident report',
+      },
+    );
   },
 
-  async reportNearMiss(payload: ReportNearMissRequest): Promise<Incident> {
-    const hasPhotos = payload.photos && payload.photos.length > 0;
-    if (hasPhotos) {
-      const form = buildFormData({ ...payload, photos: undefined }, payload.photos);
-      const { data } = await uploadClient.post<Incident>(ENDPOINTS.NEAR_MISS.REPORT, form);
-      return data;
-    }
-    const { data } = await apiClient.post<Incident>(ENDPOINTS.NEAR_MISS.REPORT, payload);
-    return data;
+  async reportNearMiss(payload: ReportNearMissRequest): Promise<SubmitResult<Incident>> {
+    const photos = payload.photos ?? [];
+    const hasPhotos = photos.length > 0;
+    // Offline: the report is stored as a draft and replayed on reconnect. The
+    // photo files stay on the device, so the multipart body is rebuilt then.
+    return submitOrQueue<Incident>(
+      ENDPOINTS.NEAR_MISS.REPORT,
+      hasPhotos ? { ...payload, photos: undefined } : payload,
+      {
+        kind: hasPhotos ? 'multipart' : 'json',
+        photos: hasPhotos ? photos.map(p => ({ uri: p.uri, name: p.name, type: p.type })) : undefined,
+        client: hasPhotos ? 'workerUpload' : 'worker',
+        label: 'Near miss report',
+      },
+    );
   },
 
-  async reportUnsafeAct(payload: ReportUnsafeActRequest): Promise<Incident> {
-    const hasPhotos = payload.photos && payload.photos.length > 0;
-    if (hasPhotos) {
-      const form = buildFormData({ ...payload, photos: undefined }, payload.photos);
-      const { data } = await uploadClient.post<Incident>(ENDPOINTS.UNSAFE_ACT.REPORT, form);
-      return data;
-    }
-    const { data } = await apiClient.post<Incident>(ENDPOINTS.UNSAFE_ACT.REPORT, payload);
-    return data;
+  async reportUnsafeAct(payload: ReportUnsafeActRequest): Promise<SubmitResult<Incident>> {
+    const photos = payload.photos ?? [];
+    const hasPhotos = photos.length > 0;
+    // Offline: the report is stored as a draft and replayed on reconnect. The
+    // photo files stay on the device, so the multipart body is rebuilt then.
+    return submitOrQueue<Incident>(
+      ENDPOINTS.UNSAFE_ACT.REPORT,
+      hasPhotos ? { ...payload, photos: undefined } : payload,
+      {
+        kind: hasPhotos ? 'multipart' : 'json',
+        photos: hasPhotos ? photos.map(p => ({ uri: p.uri, name: p.name, type: p.type })) : undefined,
+        client: hasPhotos ? 'workerUpload' : 'worker',
+        label: 'Unsafe act report',
+      },
+    );
   },
 };

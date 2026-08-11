@@ -11,7 +11,13 @@ export type ManagerScreen =
   | "assigned_tasks"
   | "hazard_register"
   | "policy_management"
-  | "ai_assistant";
+  | "ai_assistant"
+  // ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ──────────────────────────
+  | "sps_dashboard"
+  | "human_readiness"
+  | "contractor_oversight"
+  | "transport_oversight"
+  | "ai_governance";
 
 export interface ScreenProps {
   currentScreen: ManagerScreen;

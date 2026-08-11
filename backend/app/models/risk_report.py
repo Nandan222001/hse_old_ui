@@ -25,7 +25,27 @@ class RiskReport(Base, ReportWorkflowMixin):
 
     likelihood = Column(String(50))
     consequence = Column(String(50))
-    risk_score = Column(Integer)  # likelihood x consequence, 1-25
+    risk_score = Column(Integer)  # raw likelihood x consequence, 1-25
+
+    # ── WF-01 · mandatory uplifts (migration 045) ─────────────────────────────
+    # risk_score above stays the raw L x S so existing readers are unaffected.
+    # adjusted_risk_score is raw + uplifts capped at 25, and it is the number
+    # that bands the risk and decides whether work is blocked.
+    # Produced by app.services.risk_scoring.score_risk.
+    raw_risk_score = Column(Integer, nullable=True)
+    uplift_no_valid_rams = Column(Integer, default=0)        # +2
+    uplift_new_worker = Column(Integer, default=0)           # +1  under 30 days' service
+    uplift_night_shift = Column(Integer, default=0)          # +1  22:00-06:00
+    uplift_temporary_control = Column(Integer, default=0)    # +1
+    uplift_total = Column(Integer, default=0)
+    adjusted_risk_score = Column(Integer, nullable=True)
+    risk_band = Column(String(20), nullable=True)            # Low | Medium | High | Critical
+    risk_colour = Column(String(20), nullable=True)
+    review_frequency = Column(String(20), nullable=True)
+    approval_route = Column(String(40), nullable=True)       # Supervisor | Safety Manager | Executive
+    blocks_work = Column(Integer, default=0)                 # adjusted >= 15
+    risk_explanation = Column(Text, nullable=True)
+
     existing_controls = Column(Text)
     suggested_controls = Column(Text)
 

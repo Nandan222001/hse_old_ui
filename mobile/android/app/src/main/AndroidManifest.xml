@@ -5,6 +5,11 @@
     <!-- Profile photo capture. The gallery path uses the system photo picker,
          which needs no permission on Android 13+. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- GPS Capture (Layer 1 mobile shell): every HSE record carries lat/long
+         so a report traces back to the exact place of work. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application

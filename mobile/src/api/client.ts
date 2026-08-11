@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import { API_BASE_URL } from '../constants/config';
 import { TokenStorage } from '../utils/storage';
+import { registerClient } from '../services/offlineQueue';
 
 const BASE_URL = API_BASE_URL;
 
@@ -49,3 +50,7 @@ uploadClient.interceptors.request.use(async (config) => {
 });
 
 uploadClient.interceptors.response.use((res) => unwrap(res));
+
+// Registered as the fallback client for the offline queue — see offlineQueue.ts.
+registerClient('default', apiClient);
+registerClient('defaultUpload', uploadClient);

@@ -115,10 +115,14 @@ export default function ReportNearMissScreen({ navigation }: any) {
       photos: photoAttachments.length > 0 ? photoAttachments : undefined,
     } as any);
 
-    if (ok) {
-      Alert.alert('Report Submitted', 'Your near miss report has been submitted.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+    if (ok.ok) {
+      Alert.alert(
+        ok.queued ? 'Saved — waiting to send' : 'Report Submitted',
+        ok.queued
+          ? 'Saved on this device. There is no signal right now, so it will be sent automatically as soon as you are back online.'
+          : 'Your near miss report has been submitted.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
+      );
     } else {
       Alert.alert('Submission Failed', 'Could not submit report. Please try again.');
     }

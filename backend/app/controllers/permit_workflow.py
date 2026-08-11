@@ -28,11 +28,13 @@ from app.controllers.workflow_common import (
     MANAGER_ROLES,
     SUPERVISOR_ROLES,
     ALL_ELEVATED_ROLES,
+    ALL_READ_ROLES,
     employee_id_for,
     require_role,
     station_id_for,
 )
 from app.models.permit_to_work import PermitToWork
+from app.services.gate_engine import evaluate_permit_gates
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
     PermitApprove,
@@ -194,7 +196,7 @@ def supervisor_pending_review(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    require_role(current_user.role, ALL_ELEVATED_ROLES, "view pending permits")
+    require_role(current_user.role, ALL_READ_ROLES, "view pending permits")
     rows = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
@@ -258,6 +260,36 @@ def manager_approve(
 ):
     require_role(current_user.role, MANAGER_ROLES, "approve permits")
     row = _get(db, permit_id, current_user.org_id)
+
+    # ── The Integration Spine runs here ──────────────────────────────────────
+    # Permit issuance is the gate point the whole WF-06/08/09 chain feeds. A
+    # blocked verdict stops issuance outright: the permit stays where it is and
+    # the reason is recorded on the record and in gate_decision_log.
+    evaluation = evaluate_permit_gates(
+        db,
+        current_user.org_id,
+        row,
+        evaluated_by=employee_id_for(db, current_user.user_id),
+    )
+    row.gate_status = evaluation.overall
+    row.gate_checked_at = datetime.now()
+    row.gate_blocked_reason = "; ".join(evaluation.blocked_reasons) or None
+
+    if evaluation.overall == "block":
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Permit blocked by the deterministic gate engine.",
+                "gate_status": evaluation.overall,
+                "blocked_reasons": evaluation.blocked_reasons,
+                "gates": [
+                    {"gate_key": g.gate_key, "verdict": g.verdict, "reason": g.reason, "hard": g.hard}
+                    for g in evaluation.gates
+                ],
+            },
+        )
+
     row.workflow_status = "approved"
     row.status = "Active"  # website dashboard counts active permits by this field
     row.approved_at = datetime.now()
@@ -297,7 +329,7 @@ def active_permits(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Approved / active permits — the manager's monitoring view."""
-    require_role(current_user.role, ALL_ELEVATED_ROLES, "monitor active permits")
+    require_role(current_user.role, ALL_READ_ROLES, "monitor active permits")
     rows = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)

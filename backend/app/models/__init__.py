@@ -36,6 +36,34 @@ from app.models.api_key import ApiKey
 from app.models.webhook import Webhook
 from app.models.audit_log import AuditLog
 
+# ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ────────────────────────────────
+from app.models.competence import (
+    CertificationType,
+    CompetenceGap,
+    CompetenceMatrix,
+    CompetenceProfile,
+    TrainingRecord,
+)
+from app.models.fatigue import FatigueDeclaration
+from app.models.gates import GateDecisionLog, OverrideLog
+from app.models.contractor import (
+    ContractorCompany,
+    ContractorScorecard,
+    ContractorWorker,
+    IogpBenchmark,
+    RamsScore,
+)
+from app.models.transport import CheckInEvent, JourneyPlan, Vehicle, WeatherLimitTable
+from app.models.sps import (
+    CapaLookup,
+    ChangeEvent,
+    SpsAlert,
+    SpsSnapshot,
+    SupervisorInteraction,
+    WorkExecutionEvent,
+)
+from app.models.ai_decision import AiDecisionLog
+
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
@@ -45,4 +73,19 @@ __all__ = [
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
     "EquipmentCertification", "ApiKey", "Webhook", "AuditLog",
+    # WF-06 competence & human readiness
+    "CertificationType", "CompetenceProfile", "CompetenceMatrix",
+    "TrainingRecord", "CompetenceGap", "FatigueDeclaration",
+    # Gate engine
+    "GateDecisionLog", "OverrideLog",
+    # WF-08 contractor
+    "ContractorCompany", "ContractorWorker", "RamsScore",
+    "ContractorScorecard", "IogpBenchmark",
+    # WF-09 transport
+    "Vehicle", "WeatherLimitTable", "JourneyPlan", "CheckInEvent",
+    # WF-07 SPS
+    "SpsSnapshot", "SpsAlert", "CapaLookup", "WorkExecutionEvent",
+    "SupervisorInteraction", "ChangeEvent",
+    # AI governance
+    "AiDecisionLog",
 ]

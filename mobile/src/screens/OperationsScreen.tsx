@@ -73,6 +73,82 @@ export function OperationsScreen({ navigation }: Props) {
           </View>
         </TouchableOpacity>
 
+        {/* WF-06 … WF-09 · competence and fatigue gate the permit, so they lead */}
+        <Text style={styles.sectionTitle}>Gates, Competence & High-Risk Work</Text>
+        <View style={styles.grid}>
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('GateOverrideConsole')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons name="shield-checkmark-outline" size={26} color="#EF4444" />
+            </View>
+            <Text style={styles.gridLabel}>Gate Console</Text>
+            <Text style={styles.gridDesc}>Overrides</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('TeamCompetenceMatrix')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="school-outline" size={26} color="#004AC6" />
+            </View>
+            <Text style={styles.gridLabel}>Competence</Text>
+            <Text style={styles.gridDesc}>Team matrix</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('RamsScoring')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="document-text-outline" size={26} color="#F97316" />
+            </View>
+            <Text style={styles.gridLabel}>RAMS Scoring</Text>
+            <Text style={styles.gridDesc}>6 criteria</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('ContractorSiteControl')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#FAF5FF' }]}>
+              <Ionicons name="business-outline" size={26} color="#8B5CF6" />
+            </View>
+            <Text style={styles.gridLabel}>Contractors</Text>
+            <Text style={styles.gridDesc}>Site access</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('CheckInMonitor')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#E0F2F1' }]}>
+              <Ionicons name="car-outline" size={26} color="#12B8A6" />
+            </View>
+            <Text style={styles.gridLabel}>Journeys</Text>
+            <Text style={styles.gridDesc}>Check-in monitor</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('TeamSps')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="stats-chart-outline" size={26} color="#10B981" />
+            </View>
+            <Text style={styles.gridLabel}>Team SPS</Text>
+            <Text style={styles.gridDesc}>Five domains</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Quick Access Tiles Title */}
         <Text style={styles.sectionTitle}>Shift Management Modules</Text>
 

@@ -9,9 +9,25 @@ export interface SupervisorInvestigatePayload {
   root_cause_category?: string;
   severity_classification: string;
   days_away?: number;
+
+  // WF-03 decision tree (Q2-Q4). The backend derives P1-P5, the investigation
+  // SLA and statutory reportability from these — omit them and the incident
+  // stays unclassified for its whole lifecycle.
+  treatment_level?: 'none' | 'first_aid' | 'medical_treatment' | 'hospitalisation' | 'fatality';
+  dangerous_occurrence?: boolean;
+  worst_case_fatal?: boolean;
+  occupational_disease?: boolean;
+  loss_of_consciousness?: boolean;
+
   capa_description?: string;
   capa_responsible_person_id?: number;
+  /** Omit to let the WF-04 rule set it from the CAPA type. */
   capa_due_date?: string;
+  /** WF-04 matrix: 'low' | 'medium' | 'high' (or 1-3). */
+  capa_severity_potential?: string;
+  capa_systemic_risk?: string;
+  capa_type?: string;
+
   escalate: boolean;
   escalation_reason?: string;
 }

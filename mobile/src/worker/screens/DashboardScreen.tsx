@@ -4,6 +4,7 @@ import {
   StyleSheet, RefreshControl, ActivityIndicator, Image,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { PendingSyncBanner } from '../../components/PendingSyncBanner';
 import { Icon } from '../components/display/Icon';
 import { Colors } from '../theme/colors';
 import { useTasks } from '../hooks/useTasks';
@@ -173,6 +174,10 @@ export default function DashboardScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
+      {/* Offline drafts waiting to reach the backend. Also drives the flush on
+          app foreground — see components/PendingSyncBanner.tsx. */}
+      <PendingSyncBanner />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
@@ -220,6 +225,29 @@ export default function DashboardScreen({ navigation }: any) {
           <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ShiftCheckIn')}>
             <Icon name="clock" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Shift Check-In</Text>
+          </TouchableOpacity>
+          {/* WF-06 · competence and fatigue gate the permit, so they sit next to it */}
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('CompetenceCard')}>
+            <Icon name="shield" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Competence Card</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('FatigueDeclaration')}>
+            <Icon name="battery" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Fatigue</Text>
+          </TouchableOpacity>
+          {/* WF-09 */}
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('JourneyPlan')}>
+            <Icon name="truck" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Journey Plan</Text>
+          </TouchableOpacity>
+          {/* WF-07 */}
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('MySafetyScore')}>
+            <Icon name="activity" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>My Safety Score</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('TrainingAssessment')}>
+            <Icon name="book-open" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Training & Assessment</Text>
           </TouchableOpacity>
         </View>
 

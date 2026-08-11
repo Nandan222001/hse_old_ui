@@ -52,6 +52,15 @@ class RiskReportCreate(WorkerReportBase):
     suggested_controls: Optional[str] = None
     hazard_id: Optional[int] = None
 
+    # ── WF-01 mandatory uplift flags ──────────────────────────────────────────
+    # All four default to False, so a client that does not send them scores
+    # exactly as before. night_shift is derived server-side from
+    # observed_date_time when the client omits it — see risk_workflow._build_row.
+    no_valid_rams: bool = False
+    new_worker: bool = False
+    night_shift: Optional[bool] = None
+    temporary_control: bool = False
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SUPERVISOR — acknowledge / investigate / escalate
@@ -114,6 +123,32 @@ class ReportWorkflowResponse(BaseModel):
     escalation_reason: Optional[str] = None
     closure_notes: Optional[str] = None
 
+    # Step 4 — independent assurance
+    auditor_verified_by: Optional[int] = None
+    auditor_verified_at: Optional[datetime] = None
+    verification_result: Optional[str] = None
+    verification_notes: Optional[str] = None
+
+    # ── Stage 02 ASSESS ───────────────────────────────────────────────────────
+    # `severity` above is what the reporter picked. `assessed_priority` is what
+    # the deterministic assessor concluded, on the one P1-P5 scale shared by
+    # every event family.
+    assessed_priority: Optional[str] = None
+    assessed_label: Optional[str] = None
+    is_hipo: Optional[bool] = None
+    is_recurring_pattern: Optional[bool] = None
+    requires_systemic_rca: Optional[bool] = None
+    response_due_at: Optional[datetime] = None
+    min_investigator: Optional[str] = None
+    assessment_trace: Optional[str] = None
+
+    # ── Position in the eight stages ──────────────────────────────────────────
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
+
     details: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"from_attributes": True}
@@ -131,4 +166,25 @@ class ReportListItem(BaseModel):
     acknowledged_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
+    # Queues rank on the assessed priority and the response deadline, not on the
+    # reporter's severity guess.
+    assessed_priority: Optional[str] = None
+    is_hipo: Optional[bool] = None
+    response_due_at: Optional[datetime] = None
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+
     model_config = {"from_attributes": True}
+
+
+class ReportVerify(BaseModel):
+    """Step 4 of the workflow chain — the auditor verifies independently.
+
+    "Confirms on site that the control is real. Verification is recorded
+    against the original record — the independent assurance layer in the audit
+    trail." The verdict is deliberately separate from the workflow status: an
+    auditor records what they found, they do not move the record.
+    """
+
+    verification_result: str = Field(..., pattern="^(verified|not_verified|partial)$")
+    verification_notes: Optional[str] = None

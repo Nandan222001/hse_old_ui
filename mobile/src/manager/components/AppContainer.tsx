@@ -14,6 +14,11 @@ import {
   FileCheck2,
   Wrench,
   ChevronRight,
+  Activity,
+  GraduationCap,
+  Building2,
+  Truck,
+  BrainCircuit,
 } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { useAuth } from "../../hooks/useAuth";
@@ -36,6 +41,12 @@ export function AppContainerView(props: ScreenProps) {
     { label: "Compliance Sign-off", desc: "Validate CAPA closures", icon: ClipboardCheck, color: "#16A34A", bg: "#F0FDF4", go: () => setCurrentScreen("compliance_approvals") },
     { label: "Permit Approvals", desc: "Approve/reject work permits", icon: FileCheck2, color: "#8B5CF6", bg: "#FAF5FF", go: () => setCurrentScreen("permit_approvals") },
     { label: "Assign CAPA Actions", desc: "Assign corrective actions", icon: Wrench, color: "#F97316", bg: "#FFF7ED", go: () => setCurrentScreen("assign_actions") },
+    // ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ──────────────────────────
+    { label: "Safety Performance Score", desc: "Five domains, weekly, with alerts", icon: Activity, color: "#DC2626", bg: "#FEF2F2", go: () => setCurrentScreen("sps_dashboard") },
+    { label: "Competence & Fatigue", desc: "Own the matrix, authorise exceptions", icon: GraduationCap, color: "#2563EB", bg: "#EFF6FF", go: () => setCurrentScreen("human_readiness") },
+    { label: "Contractor Oversight", desc: "Pre-qualification & scorecards", icon: Building2, color: "#8B5CF6", bg: "#FAF5FF", go: () => setCurrentScreen("contractor_oversight") },
+    { label: "Transport & Change", desc: "Journey KPIs & MOC-Lite log", icon: Truck, color: "#0891B2", bg: "#ECFEFF", go: () => setCurrentScreen("transport_oversight") },
+    { label: "AI Governance", desc: "PIRS, learning loop, model version", icon: BrainCircuit, color: "#7C3AED", bg: "#F5F3FF", go: () => setCurrentScreen("ai_governance") },
   ];
 
   const openTool = (go: () => void) => { setMenuOpen(false); go(); };

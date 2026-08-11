@@ -45,6 +45,18 @@ from app.controllers import (
     hazard_register as hazard_register_controller,
     audit as audit_controller,
     audit_trail as audit_trail_controller,
+    # ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ───────────────────────────
+    competence as competence_controller,
+    fatigue as fatigue_controller,
+    gates as gates_controller,
+    contractor as contractor_controller,
+    transport as transport_controller,
+    sps as sps_controller,
+    ai_governance as ai_governance_controller,
+    orchestrator as orchestrator_controller,
+    workflow_engine as workflow_engine_controller,
+    events as events_controller,
+    change_log as change_log_controller,
 )
 
 settings = get_settings()
@@ -121,6 +133,26 @@ def create_app() -> FastAPI:
     # Permit to Work (flow 6) and Hazard register (flow 5) role workflows.
     app.include_router(permit_workflow_controller.router, prefix=prefix)
     app.include_router(hazard_register_controller.router, prefix=prefix)
+
+    # ── WF-06 … WF-09 · competence gates the permit, so it registers first ────
+    app.include_router(competence_controller.router, prefix=prefix)
+    app.include_router(competence_controller.training_router, prefix=prefix)
+    app.include_router(fatigue_controller.router, prefix=prefix)
+    app.include_router(gates_controller.router, prefix=prefix)
+    app.include_router(contractor_controller.router, prefix=prefix)
+    app.include_router(contractor_controller.rams_router, prefix=prefix)
+    app.include_router(transport_controller.router, prefix=prefix)
+    app.include_router(transport_controller.vehicles_router, prefix=prefix)
+    app.include_router(sps_controller.router, prefix=prefix)
+    app.include_router(ai_governance_controller.router, prefix=prefix)
+    # Every AI capability is reached through the Orchestrator, which enforces the
+    # LEAN hierarchy and writes the decision log.
+    app.include_router(orchestrator_controller.router, prefix=prefix)
+    # One view of the eight stages across all five event families.
+    app.include_router(workflow_engine_controller.router, prefix=prefix)
+    # Domain event bus — the closure cascade and its audit trail.
+    app.include_router(events_controller.router, prefix=prefix)
+    app.include_router(change_log_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

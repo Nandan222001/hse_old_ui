@@ -15,6 +15,12 @@ import { AuditCalendarScreen } from './screens/AuditCalendarScreen';
 import { VerificationsScreen } from './screens/VerificationsScreen';
 import { AuditTrailScreen } from './screens/AuditTrailScreen';
 import { CloseOutReviewScreen } from './screens/CloseOutReviewScreen';
+// ── WF-06 … WF-09 audit screens ────────────────────────────────────────────
+import CompetenceEvidenceAuditScreen from './screens/CompetenceEvidenceAuditScreen';
+import GateOverrideAuditScreen from './screens/GateOverrideAuditScreen';
+import DataIntegrityScreen from './screens/DataIntegrityScreen';
+import ContractorAuditScreen from './screens/ContractorAuditScreen';
+import TransportVehicleAuditScreen from './screens/TransportVehicleAuditScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
 import { AiChatScreen } from '../components/AiAssistant';
 
@@ -75,6 +81,11 @@ export function AuditorAppRoot() {
       <Stack.Screen name="Verifications" component={VerificationsScreen} />
       <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />
       <Stack.Screen name="CloseOutReview" component={CloseOutReviewScreen} />
+      <Stack.Screen name="CompetenceEvidenceAudit" component={CompetenceEvidenceAuditScreen} />
+      <Stack.Screen name="GateOverrideAudit" component={GateOverrideAuditScreen} />
+      <Stack.Screen name="DataIntegrity" component={DataIntegrityScreen} />
+      <Stack.Screen name="ContractorAudit" component={ContractorAuditScreen} />
+      <Stack.Screen name="TransportVehicleAudit" component={TransportVehicleAuditScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="AiAssistant" component={AiChatScreen} />
     </Stack.Navigator>

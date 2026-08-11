@@ -65,6 +65,39 @@ class Incident(Base):
     immediate_actions_taken = Column(Text, nullable=True)
     supervisor_signature = Column(String(255), nullable=True)
     severity_classification = Column(String(50), nullable=True)  # LTI | MTI | First Aid | Near Miss
+
+    # ── WF-03 · P1-P5 severity (migration 045) ────────────────────────────────
+    # `severity` and `severity_classification` above are the legacy free-text and
+    # LTI/MTI taxonomy the website still reads. `severity_priority` is the
+    # spec's system-enforced classification and is the one that drives the
+    # investigation SLA and the statutory deadline.
+    # Produced by app.services.incident_severity.classify_severity.
+    severity_priority = Column(String(4), nullable=True)          # P1 | P2 | P3 | P4 | P5
+    severity_label = Column(String(60), nullable=True)
+    treatment_level = Column(String(40), nullable=True)           # Q2 answer
+    dangerous_occurrence = Column(Integer, default=0)             # Q3
+    worst_case_fatal = Column(Integer, default=0)                 # Q4 input
+    is_hipo = Column(Integer, default=0)                          # Q4 verdict
+    is_recurring_pattern = Column(Integer, default=0)             # Q5
+    requires_systemic_rca = Column(Integer, default=0)
+    severity_trace = Column(Text, nullable=True)                  # which questions decided it
+    severity_classified_at = Column(DateTime, nullable=True)
+    investigation_due_at = Column(DateTime, nullable=True)
+    min_investigator = Column(String(60), nullable=True)
+
+    # ── Appendix A · statutory notification (migration 045) ───────────────────
+    # A drafted obligation, never a submission. statutory_authorised_* is the
+    # human gate the spec requires before anything reaches a regulator.
+    statutory_reportable = Column(Integer, default=0)
+    statutory_jurisdiction = Column(String(8), nullable=True)
+    statutory_regulator = Column(String(120), nullable=True)
+    statutory_obligations = Column(JSON, nullable=True)
+    statutory_due_at = Column(DateTime, nullable=True)
+    statutory_summary = Column(String(500), nullable=True)
+    statutory_authorised_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    statutory_authorised_at = Column(DateTime, nullable=True)
+    statutory_reference = Column(String(120), nullable=True)
+
     # Auditor close-out review — mirrors the same trio on permits_to_work and hazards.
     auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     auditor_verified_at = Column(DateTime, nullable=True)

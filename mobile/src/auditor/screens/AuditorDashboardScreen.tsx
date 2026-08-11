@@ -77,6 +77,11 @@ export function AuditorDashboardScreen({ navigation }: any) {
             </View>
             <View style={styles.actionsRow}>
               <Action label="Close-Out Review" icon="clipboard-outline" onPress={() => navigation.navigate('CloseOutReview')} />
+              <Action label="Competence Evidence" icon="school-outline" onPress={() => navigation.navigate('CompetenceEvidenceAudit')} />
+              <Action label="Gate Overrides" icon="lock-open-outline" onPress={() => navigation.navigate('GateOverrideAudit')} />
+              <Action label="Data Integrity" icon="analytics-outline" onPress={() => navigation.navigate('DataIntegrity')} />
+              <Action label="Contractor Audit" icon="business-outline" onPress={() => navigation.navigate('ContractorAudit')} />
+              <Action label="Transport Audit" icon="car-outline" onPress={() => navigation.navigate('TransportVehicleAudit')} />
               <View style={{ flex: 1 }} />
             </View>
 

@@ -678,9 +678,49 @@ def report_incident(
     # Read the id before committing — after a commit the SELECT can land on a
     # different pooled connection and return an unrelated LAST_INSERT_ID().
     new_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+
+    # ── WF-03 · classify before committing ───────────────────────────────────
+    # This is the endpoint the mobile app actually posts to (worker
+    # ReportIncidentScreen -> ENDPOINTS.INCIDENTS.REPORT). The parallel
+    # /incident-workflow/report route classifies too, but nothing calls it, so
+    # without this every incident raised from the app was landing unclassified:
+    # no P1-P5, no investigation SLA, no statutory obligation.
+    #
+    # The form does not yet collect the decision tree's Q2-Q4 inputs, so they
+    # are read from the payload when a client sends them and otherwise left
+    # unset — an injury with no treatment level classifies as "unclassified"
+    # and escalates, which is the correct fail-safe.
+    from app.controllers.incident_workflow import _apply_severity_and_statutory
+    from app.models.incident import Incident
+
+    incident_row = db.query(Incident).filter(Incident.id == new_id).first()
+    if incident_row is not None:
+        _apply_severity_and_statutory(
+            db, incident_row,
+            treatment_level=data.get("treatment_level"),
+            dangerous_occurrence=data.get("dangerous_occurrence"),
+            worst_case_fatal=data.get("worst_case_fatal"),
+            days_away=data.get("days_away"),
+        )
+
     db.commit()
 
-    return {"success": True, "data": {"id": str(new_id), "status": "submitted"}}
+    return {
+        "success": True,
+        "data": {
+            "id": str(new_id),
+            "status": "submitted",
+            # Returned so the app can show the classification straight after
+            # submit rather than making the worker wait for a supervisor.
+            "severity_priority": incident_row.severity_priority if incident_row else None,
+            "severity_label": incident_row.severity_label if incident_row else None,
+            "investigation_due_at": (
+                incident_row.investigation_due_at.isoformat()
+                if incident_row is not None and incident_row.investigation_due_at else None
+            ),
+            "statutory_reportable": bool(incident_row.statutory_reportable) if incident_row else False,
+        },
+    }
 
 
 @router.get("/incidents")

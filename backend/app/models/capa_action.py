@@ -14,3 +14,17 @@ class CapaAction(Base):
     due_date = Column(Date)
     status = Column(String(50))
     effectiveness_rating = Column(Integer)
+
+    # ── WF-04 · priority matrix and due-date rules (migration 046) ────────────
+    # priority_score/band answer "how important" (severity x systemic, 1-9).
+    # capa_type answers "how fast" (P1 24h .. P5 90 days) and sets due_date.
+    # The two are independent — see app.services.capa_priority.
+    severity_potential = Column(Integer, nullable=True)   # 1-3
+    systemic_risk = Column(Integer, nullable=True)        # 1-3
+    priority_score = Column(Integer, nullable=True)       # 1-9
+    priority_band = Column(String(20), nullable=True)     # Standard | High | Critical
+    capa_type = Column(String(4), nullable=True)          # P1..P5
+    capa_type_label = Column(String(20), nullable=True)
+    target_hours = Column(Integer, nullable=True)
+    evidence_required = Column(String(255), nullable=True)
+    priority_explanation = Column(Text, nullable=True)

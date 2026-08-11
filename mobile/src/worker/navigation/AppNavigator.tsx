@@ -27,6 +27,12 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import SafetyTrainingDetailScreen from '../screens/SafetyTrainingDetailScreen';
 import AISafetyAssistantScreen from '../screens/AISafetyAssistantScreen';
 import ShiftCheckInScreen from '../screens/ShiftCheckInScreen';
+// ── WF-06 / WF-07 / WF-09 (HSE_Mobile_Architecture_v4) ──────────────────────
+import CompetenceCardScreen from '../screens/CompetenceCardScreen';
+import FatigueDeclarationScreen from '../screens/FatigueDeclarationScreen';
+import JourneyPlanScreen from '../screens/JourneyPlanScreen';
+import MySafetyScoreScreen from '../screens/MySafetyScoreScreen';
+import TrainingAssessmentScreen from '../screens/TrainingAssessmentScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -145,6 +151,11 @@ export default function AppNavigator() {
         <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="ShiftCheckIn" component={ShiftCheckInScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="CompetenceCard" component={CompetenceCardScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="FatigueDeclaration" component={FatigueDeclarationScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="JourneyPlan" component={JourneyPlanScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="MySafetyScore" component={MySafetyScoreScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="TrainingAssessment" component={TrainingAssessmentScreen} options={{ presentation: 'card' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

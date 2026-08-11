@@ -50,3 +50,26 @@ class ReportWorkflowMixin:
     evidence_json = Column(JSON, nullable=True)
     gps_latitude = Column(String(32), nullable=True)
     gps_longitude = Column(String(32), nullable=True)
+
+    # ── Auditor verification (step 4 of the workflow chain, migration 044) ───
+    # Independent assurance recorded against the original record. Never alters
+    # workflow_status — the auditor observes the chain, they do not drive it.
+    # ── Stage 02 ASSESS (migration 049) ───────────────────────────────────────
+    # `severity` above is the reporter's impression and drives nothing.
+    # `assessed_priority` is what the deterministic assessor produced and is the
+    # field that ranks this record against every other event type — see
+    # app.services.event_assessment.
+    assessed_priority = Column(String(4), nullable=True)      # P1..P5
+    assessed_label = Column(String(60), nullable=True)
+    is_hipo = Column(Integer, default=0)
+    is_recurring_pattern = Column(Integer, default=0)
+    requires_systemic_rca = Column(Integer, default=0)
+    response_due_at = Column(DateTime, nullable=True)
+    min_investigator = Column(String(60), nullable=True)
+    assessment_trace = Column(Text, nullable=True)
+    assessed_at = Column(DateTime, nullable=True)
+
+    auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    auditor_verified_at = Column(DateTime, nullable=True)
+    verification_result = Column(String(50), nullable=True)
+    verification_notes = Column(Text, nullable=True)

@@ -21,6 +21,15 @@ const INCIDENT_TYPES: IncidentType[] = [
 /** Ordered least → most severe; "Lost Time" and "Fatal" are what drive LTIFR/LTISR/DART/FAR. */
 const SEVERITIES: SeverityLevel[] = ['Minor', 'Moderate', 'Severe', 'Lost Time', 'Fatal'];
 
+// WF-03 Q2. These values are the ones the backend decision tree accepts —
+// anything else classifies as "unrecognised" and escalates rather than guessing.
+const TREATMENT_LEVELS = [
+  { value: 'first_aid', label: 'First aid only' },
+  { value: 'medical_treatment', label: 'Medical treatment' },
+  { value: 'hospitalisation', label: 'Hospitalised / >3 days lost' },
+  { value: 'fatality', label: 'Fatality' },
+];
+
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
   const { geo } = useGeoTag();
@@ -42,6 +51,14 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [reason, setReason] = useState('');
   const [personsInvolved, setPersonsInvolved] = useState('');
   const [anyoneInjured, setAnyoneInjured] = useState<YesNo>('No');
+  // ── WF-03 decision tree inputs ─────────────────────────────────────────────
+  // The `severity` picker above is the reporter's impression and drives nothing.
+  // These three are what the backend's decision tree reads to assign P1-P5, the
+  // investigation SLA and any statutory deadline. Without them an injury
+  // reported from the app can never classify at submission time.
+  const [treatmentLevel, setTreatmentLevel] = useState('');
+  const [dangerousOccurrence, setDangerousOccurrence] = useState<YesNo>('No');
+  const [worstCaseFatal, setWorstCaseFatal] = useState<YesNo>('No');
   const [injuredPersonName, setInjuredPersonName] = useState('');
   const [injuredBodyPart, setInjuredBodyPart] = useState('');
   const [permitActive, setPermitActive] = useState<YesNo>('No');
@@ -124,6 +141,12 @@ export default function ReportIncidentScreen({ navigation }: any) {
       anyone_injured: anyoneInjured,
       injured_person_name: anyoneInjured === 'Yes' ? injuredPersonName.trim() : undefined,
       injured_body_part: anyoneInjured === 'Yes' ? injuredBodyPart.trim() || undefined : undefined,
+      // WF-03 Q2-Q4. Treatment level only applies when someone was hurt; the
+      // other two stand alone (a near miss can still be a dangerous occurrence
+      // or a high-potential event).
+      treatment_level: anyoneInjured === 'Yes' ? treatmentLevel || undefined : undefined,
+      dangerous_occurrence: dangerousOccurrence === 'Yes',
+      worst_case_fatal: worstCaseFatal === 'Yes',
       hazard_id: hazardId ?? undefined,
       permit_active: permitActive,
       control_failure: controlFailure,
@@ -134,11 +157,13 @@ export default function ReportIncidentScreen({ navigation }: any) {
       mockPhotos: photos,
     } as any);
 
-    if (ok) {
+    if (ok.ok) {
       Alert.alert(
-        'Success',
-        'Incident report submitted successfully to the safety team.',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        ok.queued ? 'Saved — waiting to send' : 'Success',
+        ok.queued
+          ? 'Saved on this device. There is no signal right now, so it will be sent automatically as soon as you are back online.'
+          : 'Incident report submitted successfully to the safety team.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } else {
       Alert.alert('Submission Failed', 'Failed to report the incident. Please try again.');
@@ -284,8 +309,42 @@ export default function ReportIncidentScreen({ navigation }: any) {
                 onChangeText={setInjuredBodyPart}
               />
             </View>
+
+            {/* WF-03 Q2 — sets the severity, the investigation deadline and any
+                regulator notification. Optional here on purpose: a worker in the
+                field may not know yet, and the supervisor confirms it during the
+                investigation. Left blank the incident stays unclassified rather
+                than being guessed. */}
+            <Text style={styles.inputLabel}>Level of treatment (if known)</Text>
+            <View style={styles.wfChipRow}>
+              {TREATMENT_LEVELS.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[styles.wfChip, treatmentLevel === t.value && styles.wfChipOn]}
+                  onPress={() => setTreatmentLevel(treatmentLevel === t.value ? '' : t.value)}
+                >
+                  <Text style={[styles.wfChipText, treatmentLevel === t.value && styles.wfChipTextOn]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
+
+        {/* WF-03 Q3 and Q4 — asked for every report, injury or not. A near miss
+            that could have killed someone is a high-potential incident and gets
+            the P2 investigation protocol. */}
+        <YesNoRow
+          label="Dangerous occurrence? (collapse, explosion, major release)"
+          value={dangerousOccurrence}
+          onChange={setDangerousOccurrence}
+        />
+        <YesNoRow
+          label="Could this have killed or seriously injured someone?"
+          value={worstCaseFatal}
+          onChange={setWorstCaseFatal}
+        />
 
         {/* Linked Hazard */}
         <Text style={styles.inputLabel}>Linked Hazard</Text>
@@ -565,6 +624,14 @@ function formatDateTime(d: Date): string {
 }
 
 const styles = StyleSheet.create({
+  wfChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  wfChip: {
+    borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#FFFFFF',
+  },
+  wfChipOn: { borderColor: '#0B3D91', backgroundColor: '#EFF6FF' },
+  wfChipText: { fontSize: 13, color: '#475569', fontWeight: '600' },
+  wfChipTextOn: { color: '#0B3D91' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

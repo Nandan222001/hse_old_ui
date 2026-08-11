@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, API_TIMEOUT } from '../constants/config';
 import { TokenStorage } from '../utils/storage';
 import { ENDPOINTS } from './endpoints';
+import { registerClient } from '../../services/offlineQueue';
 
 // Queued requests waiting for an in-flight token refresh to complete.
 // Each entry holds the resolve/reject of its outer Promise so it can be
@@ -154,3 +155,10 @@ uploadClient.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+// ── Offline queue registration ───────────────────────────────────────────────
+// The queue stores a client *name* rather than an axios instance (an instance
+// cannot be serialised), so both of this app's clients register themselves here
+// and the queue resolves them at flush time.
+registerClient('worker', apiClient);
+registerClient('workerUpload', uploadClient);

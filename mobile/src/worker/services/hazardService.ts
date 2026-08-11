@@ -1,5 +1,6 @@
 import apiClient from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
+import { submitOrQueue, type SubmitResult } from '../../services/offlineQueue';
 
 export interface ReportRiskRequest {
   /** Hazard category id (see hazard_categories) */
@@ -33,19 +34,22 @@ const WORKFLOW_SEVERITY: Record<string, string> = {
 };
 
 export const hazardService = {
-  async reportRisk(payload: ReportRiskRequest): Promise<boolean> {
+  async reportRisk(payload: ReportRiskRequest): Promise<SubmitResult<unknown>> {
     const key = (payload.severity ?? '').trim().toLowerCase();
 
     // Goes to risk_reports (a worker's field observation), NOT the hazards catalog —
     // only the workflow table has a supervisor queue behind it.
-    await apiClient.post(ENDPOINTS.RISK.REPORT, {
-      description: payload.hazard_name,
-      risk_title: payload.hazard_name,
-      risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
-      likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
-      consequence: CONSEQUENCE[key],
-      severity: WORKFLOW_SEVERITY[key] ?? 'medium',
-    });
-    return true;
+    return submitOrQueue(
+      ENDPOINTS.RISK.REPORT,
+      {
+        description: payload.hazard_name,
+        risk_title: payload.hazard_name,
+        risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
+        likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
+        consequence: CONSEQUENCE[key],
+        severity: WORKFLOW_SEVERITY[key] ?? 'medium',
+      },
+      { client: 'worker', label: 'Risk / hazard report' },
+    );
   },
 };

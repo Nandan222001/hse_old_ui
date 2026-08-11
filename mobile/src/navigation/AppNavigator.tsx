@@ -47,6 +47,13 @@ import { PermitRequestManagementScreen } from '../screens/PermitRequestManagemen
 import { RiskManagementScreen } from '../screens/RiskManagementScreen';
 import { DocumentManagementScreen } from '../screens/DocumentManagementScreen';
 import { AISafetyInsightsScreen } from '../screens/AISafetyInsightsScreen';
+// ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ─────────────────────────────
+import GateOverrideConsoleScreen from '../screens/GateOverrideConsoleScreen';
+import TeamCompetenceMatrixScreen from '../screens/TeamCompetenceMatrixScreen';
+import RamsScoringScreen from '../screens/RamsScoringScreen';
+import ContractorSiteControlScreen from '../screens/ContractorSiteControlScreen';
+import CheckInMonitorScreen from '../screens/CheckInMonitorScreen';
+import TeamSpsScreen from '../screens/TeamSpsScreen';
 import { AppSettingsScreen } from '../screens/AppSettingsScreen';
 import { ReportsAnalyticsScreen } from '../screens/ReportsAnalyticsScreen';
 import { SiteMonitoringOverviewScreen } from '../screens/SiteMonitoringOverviewScreen';
@@ -308,6 +315,12 @@ export function AppNavigator() {
               <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
               <Stack.Screen name="ReportsAnalytics" component={ReportsAnalyticsScreen} />
               <Stack.Screen name="SiteMonitoringOverview" component={SiteMonitoringOverviewScreen} />
+              <Stack.Screen name="GateOverrideConsole" component={GateOverrideConsoleScreen} />
+              <Stack.Screen name="TeamCompetenceMatrix" component={TeamCompetenceMatrixScreen} />
+              <Stack.Screen name="RamsScoring" component={RamsScoringScreen} />
+              <Stack.Screen name="ContractorSiteControl" component={ContractorSiteControlScreen} />
+              <Stack.Screen name="CheckInMonitor" component={CheckInMonitorScreen} />
+              <Stack.Screen name="TeamSps" component={TeamSpsScreen} />
             </>
           ) : (
             // ==========================================

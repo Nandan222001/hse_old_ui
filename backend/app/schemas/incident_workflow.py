@@ -31,6 +31,23 @@ class WorkerIncidentReport(BaseModel):
     gps_longitude: Optional[Decimal] = None
     number_persons_involved: Optional[int] = None
 
+    # ── WF-03 severity decision tree inputs ───────────────────────────────────
+    # `severity` above stays as the reporter's own impression, which the website
+    # still displays. These three feed the system-enforced P1-P5 classification.
+    # All optional: a worker reporting from the field may not know the treatment
+    # level yet, and an unclassified incident is safer than a guessed one.
+    treatment_level: Optional[str] = Field(
+        None,
+        description="Q2 — none | first_aid | medical_treatment | hospitalisation | fatality",
+    )
+    dangerous_occurrence: bool = Field(
+        False, description="Q3 — structural collapse, explosion, major release"
+    )
+    worst_case_fatal: bool = Field(
+        False, description="Q4 — could this plausibly have killed or injured several people?"
+    )
+    days_away: Optional[int] = None
+
 
 # ── Supervisor: Acknowledge ───────────────────────────────────────────────────
 
@@ -52,10 +69,27 @@ class SupervisorInvestigate(BaseModel):
     root_cause_category: Optional[str] = None
     severity_classification: str = Field(..., description="LTI | MTI | First Aid | Near Miss")
     days_away: Optional[int] = None
+    # Re-runs the WF-03 decision tree with what the investigation established.
+    # The supervisor usually learns the real treatment level after the reporter
+    # filed, so this is where P1-P5 most often changes.
+    treatment_level: Optional[str] = Field(
+        None,
+        description="Q2 — none | first_aid | medical_treatment | hospitalisation | fatality",
+    )
+    dangerous_occurrence: Optional[bool] = None
+    worst_case_fatal: Optional[bool] = None
+    occupational_disease: bool = False
+    loss_of_consciousness: bool = False
     # CAPA details (optional — can also be created separately)
     capa_description: Optional[str] = None
     capa_responsible_person_id: Optional[int] = None
+    # Optional. Left unset, WF-04's due-date rule computes it from the CAPA type.
     capa_due_date: Optional[date] = None
+    # WF-04 priority matrix inputs. Without both, the CAPA still gets a type and
+    # a deadline from the incident severity — just no 1-9 priority band.
+    capa_severity_potential: Optional[str] = Field(None, description="low | medium | high (or 1-3)")
+    capa_systemic_risk: Optional[str] = Field(None, description="low | medium | high (or 1-3)")
+    capa_type: Optional[str] = Field(None, description="P1..P5 — overrides inheritance from incident severity")
     # Escalate to manager?
     escalate: bool = Field(default=False, description="Set true to escalate to manager")
     escalation_reason: Optional[str] = None
@@ -158,6 +192,38 @@ class IncidentWorkflowResponse(BaseModel):
     supervisor_signature: Optional[str] = None
     severity_classification: Optional[str] = None
 
+    # WF-03 severity classification
+    severity_priority: Optional[str] = None
+    severity_label: Optional[str] = None
+    treatment_level: Optional[str] = None
+    dangerous_occurrence: Optional[bool] = None
+    worst_case_fatal: Optional[bool] = None
+    is_hipo: Optional[bool] = None
+    is_recurring_pattern: Optional[bool] = None
+    requires_systemic_rca: Optional[bool] = None
+    severity_trace: Optional[str] = None
+    severity_classified_at: Optional[datetime] = None
+    investigation_due_at: Optional[datetime] = None
+    min_investigator: Optional[str] = None
+
+    # Appendix A statutory notification
+    statutory_reportable: Optional[bool] = None
+    statutory_jurisdiction: Optional[str] = None
+    statutory_regulator: Optional[str] = None
+    statutory_obligations: Optional[Any] = None
+    statutory_due_at: Optional[datetime] = None
+    statutory_summary: Optional[str] = None
+    statutory_authorised_by: Optional[int] = None
+    statutory_authorised_at: Optional[datetime] = None
+    statutory_reference: Optional[str] = None
+
+    # Auditor close-out (stage 08). These were written by POST /{id}/verify but
+    # never exposed here, so the detail endpoint the app reads reported an
+    # audited incident as unverified.
+    auditor_verified_by: Optional[int] = None
+    auditor_verified_at: Optional[datetime] = None
+    verification_notes: Optional[str] = None
+
     model_config = {"from_attributes": True}
 
 
@@ -176,5 +242,16 @@ class IncidentListItem(BaseModel):
     anyone_injured: Optional[str] = None
     severity_classification: Optional[str] = None
     created_at: Optional[datetime] = None
+
+    # The list view is what the supervisor and manager queues render, so the
+    # priority, the HIPO flag and both due dates need to be visible without
+    # opening each record.
+    severity_priority: Optional[str] = None
+    severity_label: Optional[str] = None
+    is_hipo: Optional[bool] = None
+    is_recurring_pattern: Optional[bool] = None
+    investigation_due_at: Optional[datetime] = None
+    statutory_reportable: Optional[bool] = None
+    statutory_due_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

@@ -15,7 +15,19 @@ WORKER_ROLES = {"Worker", "Employee", "Operator", "Technician"}
 SUPERVISOR_ROLES = {"Supervisor", "Site Inspector", "Safety Manager", "Safety_Manager", "Site Engineer"}
 MANAGER_ROLES = {"Manager", "HSE Manager", "Admin", "Superadmin", "Safety Manager", "Safety_Manager", "Director"}
 AUDITOR_ROLES = {"Auditor"}
-ALL_ELEVATED_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES | AUDITOR_ROLES
+
+# Roles that may ACT on a record — acknowledge, investigate, escalate, close.
+#
+# Auditors are deliberately excluded. The interaction matrix in
+# HSE_Web_Mobile_DataFlow gives the Auditor READ on incidents, near misses and
+# unsafe acts, and the workflow chain makes step 4 "Auditor verifies
+# independently". An auditor who could investigate a record would later be
+# verifying their own work, which defeats the independent assurance the step
+# exists to provide.
+ALL_ELEVATED_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES
+
+# Anyone who may READ a workflow record, including the auditor.
+ALL_READ_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES | AUDITOR_ROLES
 
 
 def role_matches(user_role: str, allowed: set) -> bool:

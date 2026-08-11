@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db, SessionLocal
 from app.config.settings import get_settings
 from app.core.dependencies import get_current_user, CurrentUser
+from app.services.ai_governance import log_answer
 from app.utils.logger import get_logger
 
 from app.controllers.dashboard import get_dashboard_stats, get_leading_indicators
@@ -441,7 +442,15 @@ _BRIEFING_BUILDERS = {
 # The data itself is always read live — this only controls how long a just-built
 # read may be reused for the *same* user's follow-up messages. Set
 # AI_BRIEFING_TTL_SECONDS=0 to disable entirely and query on every message.
-_BRIEFING_TTL_SECONDS = float(os.getenv("AI_BRIEFING_TTL_SECONDS", "30"))
+# Default 0 — the snapshot is rebuilt on every question.
+#
+# HSE_AI_Overview_Client states this to the client twice: "Rebuilt on every
+# question — never cached, never stale" and "Nothing is cached, so nothing is
+# out of date." A 30-second reuse window was faster but made that claim untrue,
+# so the honest default wins. Set AI_BRIEFING_TTL_SECONDS to a positive number
+# to trade a little staleness back for latency — and update the client
+# documentation if you do.
+_BRIEFING_TTL_SECONDS = float(os.getenv("AI_BRIEFING_TTL_SECONDS", "0"))
 _briefing_cache: dict[tuple[int, str], tuple[float, str]] = {}
 
 
@@ -935,6 +944,21 @@ def ai_status():
     }
 
 
+def _last_user_message(messages: list[dict]) -> str:
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            return str(m.get("content") or "")
+    return ""
+
+
+def _last_briefing(messages: list[dict]) -> str:
+    """The system message _prepare_request prepended IS the grounding snapshot."""
+    for m in messages:
+        if m.get("role") == "system":
+            return str(m.get("content") or "")
+    return ""
+
+
 def _prepare_request(
     payload: dict, db: Session, current_user: CurrentUser
 ) -> tuple[list[dict], str, str]:
@@ -1018,7 +1042,14 @@ def ai_chat(
                 "AI chat via Claude (%s) for user %s [scope=%s]",
                 settings.anthropic_model, current_user.email, bucket,
             )
-            return {"answer": reply, "model": settings.anthropic_model, "scope": bucket}
+            log_id = log_answer(
+                db, current_user, bucket,
+                question=_last_user_message(messages), answer=reply,
+                briefing=_last_briefing(messages),
+                model_id=settings.anthropic_model, provider="anthropic",
+            )
+            return {"answer": reply, "model": settings.anthropic_model,
+                    "scope": bucket, "ai_log_id": log_id, "ai_generated": True}
         except Exception as exc:
             last_error = exc
             logger.warning("Claude call failed: %s — trying Azure OpenAI fallback", exc)
@@ -1028,7 +1059,15 @@ def ai_chat(
         try:
             reply = _call_azure_openai(messages, settings, system_prompt=system_prompt)
             logger.info("AI chat via Azure OpenAI for user %s [scope=%s]", current_user.email, bucket)
-            return {"answer": reply, "model": "azure-openai", "scope": bucket}
+            log_id = log_answer(
+                db, current_user, bucket,
+                question=_last_user_message(messages), answer=reply,
+                briefing=_last_briefing(messages),
+                model_id=getattr(settings, "azure_openai_deployment", "azure-openai"),
+                provider="azure_openai",
+            )
+            return {"answer": reply, "model": "azure-openai",
+                    "scope": bucket, "ai_log_id": log_id, "ai_generated": True}
         except Exception as exc:
             last_error = exc
             logger.warning("Azure OpenAI call failed: %s", exc)

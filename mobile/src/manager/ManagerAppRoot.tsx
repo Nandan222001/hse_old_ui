@@ -34,6 +34,12 @@ import { PolicyManagementScreen } from "./components/PolicyManagementScreen";
 import { PermitApprovalsView } from "./components/PermitApprovals";
 import { AppContainerView } from "./components/AppContainer";
 import { AiChatScreen, AiFab, AI_PROMPTS } from "../components/AiAssistant";
+// ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ───────────────────────────
+import MgrSpsDashboard from "./components/MgrSpsDashboard";
+import MgrHumanReadiness from "./components/MgrHumanReadiness";
+import MgrContractorOversight from "./components/MgrContractorOversight";
+import MgrTransportOversight from "./components/MgrTransportOversight";
+import MgrAiGovernance from "./components/MgrAiGovernance";
 
 export function ManagerAppRoot() {
   const { logout } = useAuth();
@@ -343,6 +349,16 @@ export function ManagerAppRoot() {
         return <HazardRegisterScreen {...sharedProps} />;
       case "policy_management":
         return <PolicyManagementScreen {...sharedProps} />;
+      case "sps_dashboard":
+        return <MgrSpsDashboard {...sharedProps} />;
+      case "human_readiness":
+        return <MgrHumanReadiness {...sharedProps} />;
+      case "contractor_oversight":
+        return <MgrContractorOversight {...sharedProps} />;
+      case "transport_oversight":
+        return <MgrTransportOversight {...sharedProps} />;
+      case "ai_governance":
+        return <MgrAiGovernance {...sharedProps} />;
       case "permit_approvals":
         return <PermitApprovalsView {...sharedProps} />;
       case "ai_assistant":

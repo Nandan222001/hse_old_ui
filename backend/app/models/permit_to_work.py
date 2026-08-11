@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text, Time
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, Time
 from app.models.base import Base
 
 
@@ -40,3 +40,16 @@ class PermitToWork(Base):
     auditor_verified_at = Column(DateTime, nullable=True)
     verification_result = Column(String(50), nullable=True)  # valid | invalid | not_displayed
     verification_notes = Column(Text, nullable=True)
+
+    # ── Deterministic gate engine (migration 044) ────────────────────────────
+    # The permit is where five of the six gates land, so it carries the verdict
+    # and the inputs the gates read.
+    gate_status = Column(String(20), nullable=True)  # pass | amber | block
+    gate_checked_at = Column(DateTime, nullable=True)
+    gate_blocked_reason = Column(Text, nullable=True)
+    contractor_company_id = Column(Integer, ForeignKey("contractor_companies.id"), nullable=True)
+    rams_score_id = Column(Integer, nullable=True)
+    zone = Column(String(120), nullable=True)
+    is_high_energy = Column(Integer, nullable=False, default=0)
+    gps_latitude = Column(Numeric(10, 7), nullable=True)
+    gps_longitude = Column(Numeric(10, 7), nullable=True)

@@ -79,15 +79,17 @@ export default function ReportRiskScreen({ navigation }: any) {
     if (!validate()) return;
     setIsLoading(true);
     try {
-      await hazardService.reportRisk({
+      const res = await hazardService.reportRisk({
         category_id: Number(category),
         hazard_name: description.trim(),
         severity,
         probability,
       });
       Alert.alert(
-        'Hazard Reported',
-        `Your ${rating ?? ''} hazard observation has been submitted to your supervisor.`,
+        res.queued ? 'Saved — waiting to send' : 'Hazard Reported',
+        res.queued
+          ? 'Saved on this device. There is no signal right now, so it will be sent automatically as soon as you are back online.'
+          : `Your ${rating ?? ''} hazard observation has been submitted to your supervisor.`,
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch {

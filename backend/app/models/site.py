@@ -16,3 +16,12 @@ class Site(Base):
     capacity = Column(Integer)
     primary_products = Column(String(255))
     hazard_classification = Column(String(50))
+
+    # Drives Appendix A statutory reportability — see app.services.statutory_reporting.
+    # Nullable on purpose: an unset jurisdiction returns "cannot determine"
+    # rather than defaulting to a regulator this site may not answer to.
+    jurisdiction = Column(String(8), nullable=True)  # UK | US | UAE | KSA | AU | EU
+    # Sub-national authority selector: emirate (UAE), state (AU), member state (EU).
+    # Without it those three still raise the obligation but cannot name the
+    # specific regulator — the obligation comes back marked encoded=False.
+    region = Column(String(60), nullable=True)

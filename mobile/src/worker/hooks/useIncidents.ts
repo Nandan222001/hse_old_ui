@@ -2,6 +2,16 @@ import { useState, useCallback } from 'react';
 import { incidentService } from '../services/incidentService';
 import { Incident, ReportIncidentRequest, ReportNearMissRequest, ReportUnsafeActRequest } from '../types';
 
+/**
+ * `queued` means the report was saved on the device because there was no
+ * signal, and will be sent on reconnect. Screens must say so rather than
+ * claiming a successful submission — see services/offlineQueue.ts.
+ */
+export interface ReportOutcome {
+  ok: boolean;
+  queued: boolean;
+}
+
 export function useIncidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoading, setLoading] = useState(false);
@@ -19,46 +29,49 @@ export function useIncidents() {
     }
   }, []);
 
-  const reportIncident = useCallback(async (payload: ReportIncidentRequest): Promise<boolean> => {
+  const reportIncident = useCallback(async (payload: ReportIncidentRequest): Promise<ReportOutcome> => {
     setLoading(true);
     setError(null);
     try {
-      const incident = await incidentService.reportIncident(payload);
-      setIncidents(prev => [incident, ...prev]);
-      return true;
+      const res = await incidentService.reportIncident(payload);
+      // A queued draft has no server record yet, so nothing goes into the list.
+      if (!res.queued && res.data) setIncidents(prev => [res.data as Incident, ...prev]);
+      return { ok: true, queued: res.queued };
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Failed to submit report');
-      return false;
+      return { ok: false, queued: false };
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const reportNearMiss = useCallback(async (payload: ReportNearMissRequest): Promise<boolean> => {
+  const reportNearMiss = useCallback(async (payload: ReportNearMissRequest): Promise<ReportOutcome> => {
     setLoading(true);
     setError(null);
     try {
-      const incident = await incidentService.reportNearMiss(payload);
-      setIncidents(prev => [incident, ...prev]);
-      return true;
+      const res = await incidentService.reportNearMiss(payload);
+      // A queued draft has no server record yet, so nothing goes into the list.
+      if (!res.queued && res.data) setIncidents(prev => [res.data as Incident, ...prev]);
+      return { ok: true, queued: res.queued };
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Failed to submit near miss');
-      return false;
+      return { ok: false, queued: false };
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const reportUnsafeAct = useCallback(async (payload: ReportUnsafeActRequest): Promise<boolean> => {
+  const reportUnsafeAct = useCallback(async (payload: ReportUnsafeActRequest): Promise<ReportOutcome> => {
     setLoading(true);
     setError(null);
     try {
-      const incident = await incidentService.reportUnsafeAct(payload);
-      setIncidents(prev => [incident, ...prev]);
-      return true;
+      const res = await incidentService.reportUnsafeAct(payload);
+      // A queued draft has no server record yet, so nothing goes into the list.
+      if (!res.queued && res.data) setIncidents(prev => [res.data as Incident, ...prev]);
+      return { ok: true, queued: res.queued };
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Failed to submit observation');
-      return false;
+      return { ok: false, queued: false };
     } finally {
       setLoading(false);
     }
