@@ -223,5 +223,13 @@ def default_capabilities() -> Dict[str, Capability]:
             business_criticality=HIGH, requires_hitl=True,
             description="Investigation findings must be reviewed by a qualified investigator.",
         ),
+        Capability(
+            "CAP-CHAT-001", "AI Chat Assistant", "1.0.0",
+            preferred_engine=LLM_ENGINE,
+            fallback_chain=[LLM_FALLBACK, HUMAN_ENGINE],
+            confidence_threshold=0.85, latency_target_ms=8000, cost_limit_per_call=0.10,
+            business_criticality=MEDIUM, cache_ttl_seconds=0,
+            description="Role-scoped conversational AI assistant with live HSE data briefings.",
+        ),
     ]
     return {c.capability_id: c for c in caps}

@@ -57,6 +57,12 @@ from app.controllers import (
     workflow_engine as workflow_engine_controller,
     events as events_controller,
     change_log as change_log_controller,
+    # ── WF-13 Barrier/Bowtie Analysis ────────────────────────────────────────
+    bowtie as bowtie_controller,
+    # ── WF-14 Process Safety Management ──────────────────────────────────────
+    psm as psm_controller,
+    # ── WF-15 Emergency Management ───────────────────────────────────────────
+    emergency as emergency_controller,
 )
 
 settings = get_settings()
@@ -153,6 +159,12 @@ def create_app() -> FastAPI:
     # Domain event bus — the closure cascade and its audit trail.
     app.include_router(events_controller.router, prefix=prefix)
     app.include_router(change_log_controller.router, prefix=prefix)
+    # ── WF-13 Barrier/Bowtie Analysis ────────────────────────────────────────
+    app.include_router(bowtie_controller.router, prefix=prefix)
+    # ── WF-14 Process Safety Management ──────────────────────────────────────
+    app.include_router(psm_controller.router, prefix=prefix)
+    # ── WF-15 Emergency Management ───────────────────────────────────────────
+    app.include_router(emergency_controller.router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     def health():

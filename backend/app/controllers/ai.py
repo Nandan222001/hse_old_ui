@@ -1003,106 +1003,189 @@ def ai_chat(
     Multi-turn AI chat endpoint (single blocking response — see /chat/stream for
     the incremental version).
 
+    Now routes through the orchestrator for capability registry, engine selection,
+    confidence evaluation, and decision logging.
+
     Request body:
       { "messages": [ {"role": "user"|"assistant"|"system", "content": "..."}, ... ] }
 
     Response:
       { "answer": "...", "model": "claude-sonnet-4-6" | "azure-openai" | "fallback" }
     """
-    messages, bucket, system_prompt = _prepare_request(payload, db, current_user)
+    from app.services.orchestrator import get_orchestrator
+    from app.services.orchestrator.core import UnknownCapability
+    from app.controllers.orchestrator import _audit_sink
+    import uuid
+    
+    # Extract and prepare messages
+    messages: list[dict] = payload.get("messages", [])
     if not messages:
-        return {"answer": "No message provided.", "model": "fallback", "scope": bucket}
-
-    # Set if a configured provider was tried and failed, so the final response can
-    # distinguish "broken" from "never set up".
-    last_error: Exception | None = None
-
-    # This used to bust the settings cache on every message so an edited .env was
-    # picked up without a restart — which re-parsed the env file from disk on each
-    # chat turn. Keep that convenience only while no key is configured (i.e. while
-    # someone is actively setting one up); once a key is present, serve from cache
-    # so the hot path does no disk I/O. uvicorn --reload watches .py, not .env, so
-    # the no-key case genuinely needs this.
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        get_settings.cache_clear()
-        settings = get_settings()
-
-    # ── Try Anthropic Claude first ────────────────────────────────────────────
-    if settings.anthropic_api_key:
-        try:
-            reply = _call_claude(
-                messages,
-                settings.anthropic_api_key,
-                settings.anthropic_model,
-                base_url=settings.anthropic_base_url,  # empty string for standard Anthropic
-                system_prompt=system_prompt,
-            )
-            logger.info(
-                "AI chat via Claude (%s) for user %s [scope=%s]",
-                settings.anthropic_model, current_user.email, bucket,
-            )
-            log_id = log_answer(
-                db, current_user, bucket,
-                question=_last_user_message(messages), answer=reply,
-                briefing=_last_briefing(messages),
-                model_id=settings.anthropic_model, provider="anthropic",
-            )
-            return {"answer": reply, "model": settings.anthropic_model,
-                    "scope": bucket, "ai_log_id": log_id, "ai_generated": True}
-        except Exception as exc:
-            last_error = exc
-            logger.warning("Claude call failed: %s — trying Azure OpenAI fallback", exc)
-
-    # ── Fallback: Azure OpenAI ────────────────────────────────────────────────
-    if settings.azure_openai_api_key and settings.azure_openai_endpoint:
-        try:
-            reply = _call_azure_openai(messages, settings, system_prompt=system_prompt)
-            logger.info("AI chat via Azure OpenAI for user %s [scope=%s]", current_user.email, bucket)
-            log_id = log_answer(
-                db, current_user, bucket,
-                question=_last_user_message(messages), answer=reply,
-                briefing=_last_briefing(messages),
-                model_id=getattr(settings, "azure_openai_deployment", "azure-openai"),
-                provider="azure_openai",
-            )
-            return {"answer": reply, "model": "azure-openai",
-                    "scope": bucket, "ai_log_id": log_id, "ai_generated": True}
-        except Exception as exc:
-            last_error = exc
-            logger.warning("Azure OpenAI call failed: %s", exc)
-
-    # ── Nothing served the request ────────────────────────────────────────────
-    # Two very different situations reach here, and conflating them sent people
-    # to re-check a key that was already correct: a provider IS configured but
-    # its call failed (timeout, auth, upstream error) — say so — versus no
-    # provider configured at all, which is the genuine setup case.
-    if last_error is not None:
-        logger.error(
-            "AI providers configured but all failed [scope=%s]: %s", bucket, last_error
+        single = payload.get("message") or payload.get("content") or ""
+        if single:
+            messages = [{"role": "user", "content": single}]
+    
+    if not messages:
+        return {"answer": "No message provided.", "model": "fallback", "scope": "unknown"}
+    
+    # Limit history length
+    if len(messages) > _MAX_HISTORY_MESSAGES:
+        messages = messages[-_MAX_HISTORY_MESSAGES:]
+    
+    # Get role bucket for response context
+    bucket = _role_bucket(current_user)
+    
+    # Route through orchestrator
+    try:
+        orchestrator = get_orchestrator()
+        result = orchestrator.invoke(
+            "CAP-CHAT-001",
+            {
+                "messages": messages,
+                "db": db,
+                "current_user": current_user,
+                "streaming": False,
+            },
+            correlation_id=str(uuid.uuid4()),
+            use_cache=False,  # Chat responses should never be cached (per CAP-CHAT-001 TTL=0)
+            audit_sink=_audit_sink(db, current_user),
         )
+        
+        # Extract response from orchestrator result
+        response_data = result.result or {}
+        answer = response_data.get("text", "")
+        model = response_data.get("model", "unknown")
+        provider = response_data.get("provider", "unknown")
+        
+        if not answer:
+            # Orchestrator returned empty - likely escalated or failed
+            if result.pathway in ("HUMAN_REVIEW", "ESCALATE"):
+                return {
+                    "answer": (
+                        "**This conversation requires human review.**\n\n"
+                        f"Reason: {result.hitl_reason or 'quality assurance'}\n\n"
+                        "Your message has been queued for a safety specialist."
+                    ),
+                    "model": "escalated",
+                    "scope": bucket,
+                    "pathway": result.pathway,
+                    "requires_hitl": True,
+                }
+            else:
+                return {
+                    "answer": _UNAVAILABLE_TEXT,
+                    "model": "error",
+                    "scope": bucket,
+                }
+        
+        # Log to ai_governance table (preserves existing logging)
+        log_id = log_answer(
+            db, current_user, bucket,
+            question=_last_user_message(messages),
+            answer=answer,
+            briefing=_last_briefing(messages),
+            model_id=model,
+            provider=provider,
+        )
+        
+        logger.info(
+            "AI chat via orchestrator: %s (engine=%s, confidence=%.2f, pathway=%s) for user %s [scope=%s]",
+            model, result.engine_selected, result.confidence, result.pathway,
+            current_user.email, bucket,
+        )
+        
         return {
+            "answer": answer,
+            "model": model,
             "scope": bucket,
-            "model": "error",
-            "answer": (
-                "**The assistant is temporarily unavailable.**\n\n"
-                "The AI provider is configured but did not respond in time. "
-                "Please try again in a moment — if it keeps happening, check the "
-                "backend logs for the upstream error."
-            ),
+            "ai_log_id": log_id,
+            "ai_generated": True,
+            "orchestrator": {
+                "capability": result.capability_id,
+                "engine": result.engine_selected,
+                "confidence": result.confidence,
+                "pathway": result.pathway,
+                "latency_ms": result.latency_ms,
+            },
         }
-
-    logger.warning("No AI provider configured — returning setup instructions [scope=%s]", bucket)
-    return {
-        "scope": bucket,
-        "answer": (
-            "**AI Assistant is not yet configured.**\n\n"
-            "To enable the AI advisor, add your API key to `backend/.env`:\n\n"
-            "```\nANTHROPIC_API_KEY=sk-ant-...\n```\n\n"
-            "Once added, restart the backend server and the assistant will be live."
-        ),
-        "model": "fallback",
-    }
+        
+    except UnknownCapability:
+        logger.error("CAP-CHAT-001 not registered in orchestrator")
+        return {
+            "answer": "**Chat capability not registered.** Contact administrator.",
+            "model": "error",
+            "scope": bucket,
+        }
+    except Exception as exc:
+        logger.exception("Orchestrator invocation failed for chat: %s", exc)
+        # Fall back to direct call for backward compatibility during transition
+        logger.warning("Falling back to direct LLM call (orchestrator bypass)")
+        
+        messages_with_briefing, bucket, system_prompt = _prepare_request(payload, db, current_user)
+        if not messages_with_briefing:
+            return {"answer": "No message provided.", "model": "fallback", "scope": bucket}
+        
+        settings = get_settings()
+        if not settings.anthropic_api_key:
+            get_settings.cache_clear()
+            settings = get_settings()
+        
+        # Try Claude
+        if settings.anthropic_api_key:
+            try:
+                reply = _call_claude(
+                    messages_with_briefing,
+                    settings.anthropic_api_key,
+                    settings.anthropic_model,
+                    base_url=settings.anthropic_base_url or "",
+                    system_prompt=system_prompt,
+                )
+                log_id = log_answer(
+                    db, current_user, bucket,
+                    question=_last_user_message(messages_with_briefing),
+                    answer=reply,
+                    briefing=_last_briefing(messages_with_briefing),
+                    model_id=settings.anthropic_model,
+                    provider="anthropic",
+                )
+                return {
+                    "answer": reply,
+                    "model": settings.anthropic_model,
+                    "scope": bucket,
+                    "ai_log_id": log_id,
+                    "ai_generated": True,
+                    "orchestrator_bypassed": True,
+                }
+            except Exception as e:
+                logger.warning("Claude fallback failed: %s", e)
+        
+        # Try Azure OpenAI
+        if settings.azure_openai_api_key and settings.azure_openai_endpoint:
+            try:
+                reply = _call_azure_openai(messages_with_briefing, settings, system_prompt=system_prompt)
+                log_id = log_answer(
+                    db, current_user, bucket,
+                    question=_last_user_message(messages_with_briefing),
+                    answer=reply,
+                    briefing=_last_briefing(messages_with_briefing),
+                    model_id=getattr(settings, "azure_openai_deployment", "azure-openai"),
+                    provider="azure_openai",
+                )
+                return {
+                    "answer": reply,
+                    "model": "azure-openai",
+                    "scope": bucket,
+                    "ai_log_id": log_id,
+                    "ai_generated": True,
+                    "orchestrator_bypassed": True,
+                }
+            except Exception as e:
+                logger.warning("Azure OpenAI fallback failed: %s", e)
+        
+        return {
+            "answer": _UNAVAILABLE_TEXT,
+            "model": "error",
+            "scope": bucket,
+        }
 
 
 _NOT_CONFIGURED_TEXT = (
@@ -1131,86 +1214,247 @@ def ai_chat_stream(
     Server-Sent Events so the UI can render text as it is generated instead of
     waiting for the full completion.
 
+    Now routes through orchestrator for capability resolution and decision logging,
+    with streaming handled in the controller layer.
+
     Each event is `data: {...}\\n\\n` with one of:
       {"delta": "text chunk"}
       {"done": true, "model": "...", "scope": "..."}
     """
-    # Built before the generator starts so DB work happens while the request's
-    # session is still open — a StreamingResponse body runs after dependency
-    # teardown, and touching `db` in there would use a closed session.
-    messages, bucket, system_prompt = _prepare_request(payload, db, current_user)
-
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        get_settings.cache_clear()
-        settings = get_settings()
-
+    from app.services.orchestrator import get_orchestrator
+    from app.services.orchestrator.core import UnknownCapability
+    from app.controllers.orchestrator import _audit_sink
+    import uuid
+    
+    # Extract and prepare messages
+    messages_raw: list[dict] = payload.get("messages", [])
+    if not messages_raw:
+        single = payload.get("message") or payload.get("content") or ""
+        if single:
+            messages_raw = [{"role": "user", "content": single}]
+    
+    # Limit history length
+    if len(messages_raw) > _MAX_HISTORY_MESSAGES:
+        messages_raw = messages_raw[-_MAX_HISTORY_MESSAGES:]
+    
+    bucket = _role_bucket(current_user)
+    
     def event(obj: dict) -> str:
         return f"data: {json.dumps(obj)}\n\n"
-
+    
     def generate():
-        if not messages:
+        if not messages_raw:
             yield event({"delta": "No message provided."})
             yield event({"done": True, "model": "fallback", "scope": bucket})
             return
-
-        last_error: Exception | None = None
-
-        if settings.anthropic_api_key:
-            started = False
-            try:
-                for chunk in _call_claude_stream(
-                    messages,
-                    settings.anthropic_api_key,
-                    settings.anthropic_model,
-                    base_url=settings.anthropic_base_url,
-                    system_prompt=system_prompt,
-                ):
-                    started = True
-                    yield event({"delta": chunk})
-                logger.info(
-                    "AI chat stream via Claude (%s) for user %s [scope=%s]",
-                    settings.anthropic_model, current_user.email, bucket,
-                )
-                yield event({"done": True, "model": settings.anthropic_model, "scope": bucket})
-                return
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Claude stream failed: %s", exc)
-                if started:
-                    # Partial text is already on the client — splicing a second
-                    # provider's answer onto it would read as one garbled reply.
-                    yield event({"delta": "\n\n_(connection interrupted — please retry)_"})
-                    yield event({"done": True, "model": settings.anthropic_model, "scope": bucket})
+        
+        # Route through orchestrator with streaming=True flag
+        try:
+            orchestrator = get_orchestrator()
+            correlation_id = str(uuid.uuid4())
+            
+            # Invoke orchestrator to get engine selection and prepare streaming
+            result = orchestrator.invoke(
+                "CAP-CHAT-001",
+                {
+                    "messages": messages_raw,
+                    "db": db,
+                    "current_user": current_user,
+                    "streaming": True,  # Signal to adapter to prepare for streaming
+                },
+                correlation_id=correlation_id,
+                use_cache=False,
+                audit_sink=_audit_sink(db, current_user),
+            )
+            
+            # Check if we need to handle HITL or errors
+            response_data = result.result or {}
+            
+            if not response_data.get("streaming"):
+                # Not a streaming response - likely error or HITL
+                if result.pathway in ("HUMAN_REVIEW", "ESCALATE"):
+                    yield event({
+                        "delta": (
+                            "**This conversation requires human review.**\n\n"
+                            f"Reason: {result.hitl_reason or 'quality assurance'}\n\n"
+                            "Your message has been queued for a safety specialist."
+                        )
+                    })
+                    yield event({
+                        "done": True,
+                        "model": "escalated",
+                        "scope": bucket,
+                        "pathway": result.pathway,
+                    })
                     return
-                logger.warning("Trying Azure OpenAI fallback")
-
-        if settings.azure_openai_api_key and settings.azure_openai_endpoint:
-            try:
-                for chunk in _call_azure_openai_stream(messages, settings, system_prompt=system_prompt):
-                    yield event({"delta": chunk})
-                logger.info(
-                    "AI chat stream via Azure OpenAI for user %s [scope=%s]", current_user.email, bucket
-                )
-                yield event({"done": True, "model": "azure-openai", "scope": bucket})
-                return
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Azure OpenAI stream failed: %s", exc)
-
-        # Same distinction the blocking path makes: a provider that is configured
-        # but failing is not a setup problem, and saying so sent people off to
-        # re-check a key that was already correct.
-        if last_error is not None:
-            logger.error("AI providers configured but all failed [scope=%s]: %s", bucket, last_error)
-            yield event({"delta": _UNAVAILABLE_TEXT})
+                else:
+                    yield event({"delta": _UNAVAILABLE_TEXT})
+                    yield event({"done": True, "model": "error", "scope": bucket})
+                    return
+            
+            # Extract prepared streaming context from adapter
+            full_messages = response_data.get("messages", [])
+            system_prompt = response_data.get("system_prompt", "")
+            
+            settings = get_settings()
+            if not settings.anthropic_api_key:
+                get_settings.cache_clear()
+                settings = get_settings()
+            
+            # Perform the actual streaming through the selected engine
+            last_error = None
+            started = False
+            model_used = None
+            
+            # Try Claude first
+            if settings.anthropic_api_key:
+                try:
+                    for chunk in _call_claude_stream(
+                        full_messages,
+                        settings.anthropic_api_key,
+                        settings.anthropic_model,
+                        base_url=settings.anthropic_base_url or "",
+                        system_prompt=system_prompt,
+                    ):
+                        started = True
+                        yield event({"delta": chunk})
+                    
+                    model_used = settings.anthropic_model
+                    logger.info(
+                        "AI chat stream via orchestrator→Claude (%s) for user %s [scope=%s, engine=%s, pathway=%s]",
+                        model_used, current_user.email, bucket,
+                        result.engine_selected, result.pathway,
+                    )
+                    yield event({
+                        "done": True,
+                        "model": model_used,
+                        "scope": bucket,
+                        "orchestrator": {
+                            "capability": result.capability_id,
+                            "engine": result.engine_selected,
+                            "confidence": result.confidence,
+                            "pathway": result.pathway,
+                        },
+                    })
+                    return
+                    
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning("Claude stream via orchestrator failed: %s", exc)
+                    if started:
+                        yield event({"delta": "\n\n_(connection interrupted — please retry)_"})
+                        yield event({"done": True, "model": settings.anthropic_model, "scope": bucket})
+                        return
+            
+            # Try Azure OpenAI fallback
+            if settings.azure_openai_api_key and settings.azure_openai_endpoint:
+                try:
+                    for chunk in _call_azure_openai_stream(full_messages, settings, system_prompt=system_prompt):
+                        started = True
+                        yield event({"delta": chunk})
+                    
+                    model_used = getattr(settings, "azure_openai_deployment", "azure-openai")
+                    logger.info(
+                        "AI chat stream via orchestrator→Azure OpenAI for user %s [scope=%s, engine=%s, pathway=%s]",
+                        current_user.email, bucket, result.engine_selected, result.pathway,
+                    )
+                    yield event({
+                        "done": True,
+                        "model": "azure-openai",
+                        "scope": bucket,
+                        "orchestrator": {
+                            "capability": result.capability_id,
+                            "engine": result.engine_selected,
+                            "confidence": result.confidence,
+                            "pathway": result.pathway,
+                        },
+                    })
+                    return
+                    
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning("Azure OpenAI stream via orchestrator failed: %s", exc)
+            
+            # All streaming attempts failed
+            if last_error:
+                logger.error("AI stream providers configured but all failed [scope=%s]: %s", bucket, last_error)
+                yield event({"delta": _UNAVAILABLE_TEXT})
+                yield event({"done": True, "model": "error", "scope": bucket})
+            else:
+                logger.warning("No AI provider configured [scope=%s]", bucket)
+                yield event({"delta": _NOT_CONFIGURED_TEXT})
+                yield event({"done": True, "model": "fallback", "scope": bucket})
+        
+        except UnknownCapability:
+            logger.error("CAP-CHAT-001 not registered in orchestrator")
+            yield event({"delta": "**Chat capability not registered.** Contact administrator."})
             yield event({"done": True, "model": "error", "scope": bucket})
-            return
-
-        logger.warning("No AI provider configured — returning setup instructions [scope=%s]", bucket)
-        yield event({"delta": _NOT_CONFIGURED_TEXT})
-        yield event({"done": True, "model": "fallback", "scope": bucket})
-
+            
+        except Exception as exc:
+            logger.exception("Orchestrator invocation failed for chat stream: %s", exc)
+            # Fall back to direct streaming (orchestrator bypass for transition safety)
+            logger.warning("Falling back to direct streaming (orchestrator bypass)")
+            
+            messages_with_briefing, bucket, system_prompt = _prepare_request(payload, db, current_user)
+            if not messages_with_briefing:
+                yield event({"delta": "No message provided."})
+                yield event({"done": True, "model": "fallback", "scope": bucket})
+                return
+            
+            settings = get_settings()
+            if not settings.anthropic_api_key:
+                get_settings.cache_clear()
+                settings = get_settings()
+            
+            last_error = None
+            started = False
+            
+            if settings.anthropic_api_key:
+                try:
+                    for chunk in _call_claude_stream(
+                        messages_with_briefing,
+                        settings.anthropic_api_key,
+                        settings.anthropic_model,
+                        base_url=settings.anthropic_base_url or "",
+                        system_prompt=system_prompt,
+                    ):
+                        started = True
+                        yield event({"delta": chunk})
+                    yield event({
+                        "done": True,
+                        "model": settings.anthropic_model,
+                        "scope": bucket,
+                        "orchestrator_bypassed": True,
+                    })
+                    return
+                except Exception as e:
+                    last_error = e
+                    if started:
+                        yield event({"delta": "\n\n_(connection interrupted — please retry)_"})
+                        yield event({"done": True, "model": settings.anthropic_model, "scope": bucket})
+                        return
+            
+            if settings.azure_openai_api_key and settings.azure_openai_endpoint:
+                try:
+                    for chunk in _call_azure_openai_stream(messages_with_briefing, settings, system_prompt=system_prompt):
+                        yield event({"delta": chunk})
+                    yield event({
+                        "done": True,
+                        "model": "azure-openai",
+                        "scope": bucket,
+                        "orchestrator_bypassed": True,
+                    })
+                    return
+                except Exception as e:
+                    last_error = e
+            
+            if last_error:
+                yield event({"delta": _UNAVAILABLE_TEXT})
+                yield event({"done": True, "model": "error", "scope": bucket})
+            else:
+                yield event({"delta": _NOT_CONFIGURED_TEXT})
+                yield event({"done": True, "model": "fallback", "scope": bucket})
+    
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",

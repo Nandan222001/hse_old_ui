@@ -64,6 +64,42 @@ from app.models.sps import (
 )
 from app.models.ai_decision import AiDecisionLog
 
+# ── WF-13 Barrier/Bowtie Analysis ─────────────────────────────────────────────
+from app.models.bowtie import (
+    BowtieDiagram,
+    BowtieThreat,
+    BowtieConsequence,
+    BowtieBarrier,
+    BowtieBarrierVerification,
+    BowtieIncidentLink,
+    BowtieReview,
+    BowtieBarrierAlert,
+)
+
+# ── WF-14 Process Safety Management ───────────────────────────────────────────
+from app.models.psm import (
+    PSMElement,
+    PHAStudy,
+    PHAScenario,
+    PHARecommendation,
+    CriticalEquipment,
+    EquipmentInspection,
+    OperatingProcedure,
+    PSMAudit,
+    PSMAuditFinding,
+)
+
+# ── WF-15 Emergency Management ────────────────────────────────────────────────
+from app.models.emergency import (
+    EmergencyPlan,
+    EmergencyResponseTeam,
+    EmergencyContact,
+    EvacuationProcedure,
+    EmergencyDrill,
+    EmergencyEquipment,
+    EmergencyActivation,
+)
+
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
     "Site", "PermitType", "TrainingProgram", "Policy", "Department",
@@ -88,4 +124,16 @@ __all__ = [
     "SupervisorInteraction", "ChangeEvent",
     # AI governance
     "AiDecisionLog",
+    # WF-13 Barrier/Bowtie Analysis
+    "BowtieDiagram", "BowtieThreat", "BowtieConsequence", "BowtieBarrier",
+    "BowtieBarrierVerification", "BowtieIncidentLink", "BowtieReview",
+    "BowtieBarrierAlert",
+    # WF-14 Process Safety Management
+    "PSMElement", "PHAStudy", "PHAScenario", "PHARecommendation",
+    "CriticalEquipment", "EquipmentInspection", "OperatingProcedure",
+    "PSMAudit", "PSMAuditFinding",
+    # WF-15 Emergency Management
+    "EmergencyPlan", "EmergencyResponseTeam", "EmergencyContact",
+    "EvacuationProcedure", "EmergencyDrill", "EmergencyEquipment",
+    "EmergencyActivation",
 ]

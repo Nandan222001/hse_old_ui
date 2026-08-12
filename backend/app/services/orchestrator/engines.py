@@ -226,6 +226,108 @@ def _llm_generate(payload: Dict[str, Any]) -> EngineOutput:
     )
 
 
+def _llm_chat(payload: Dict[str, Any]) -> EngineOutput:
+    """Chat adapter with role-scoped briefings and conversation history.
+    
+    Payload structure:
+        messages: list of conversation turns (required)
+        db: SQLAlchemy session (required for briefing)
+        current_user: CurrentUser dependency (required for role scoping)
+        system_prompt: optional override for role prompt
+        streaming: bool (if True, returns special streaming marker)
+    """
+    from app.config.settings import settings
+    
+    messages = payload.get("messages")
+    if not messages:
+        raise EngineError("no messages supplied for chat capability")
+    
+    db = payload.get("db")
+    current_user = payload.get("current_user")
+    if not db or not current_user:
+        raise EngineError("chat requires db session and current_user context")
+    
+    # Import here to avoid circular dependency
+    from app.controllers.ai import (
+        _call_claude, _call_azure_openai, _prepare_request, _cached_briefing,
+        _role_bucket, _ROLE_PROMPTS,
+    )
+    
+    # Prepare the request with role-scoped briefing (reuses existing logic)
+    bucket = _role_bucket(current_user)
+    system_prompt = payload.get("system_prompt") or _ROLE_PROMPTS[bucket]
+    briefing = _cached_briefing(db, current_user, bucket)
+    
+    # Prepend briefing as system message
+    full_messages = [{"role": "system", "content": briefing}] + list(messages)
+    
+    # Check if streaming is requested
+    if payload.get("streaming", False):
+        # Return a special marker - streaming must be handled by the controller
+        # since EngineOutput can't yield
+        return EngineOutput(
+            result={
+                "streaming": True,
+                "messages": full_messages,
+                "system_prompt": system_prompt,
+                "bucket": bucket,
+            },
+            confidence=0.85,
+            explanation="Chat request prepared for streaming (deferred to controller)",
+        )
+    
+    # Blocking chat response
+    last_error = None
+    
+    # Try Anthropic Claude first
+    if settings.anthropic_api_key:
+        try:
+            text = _call_claude(
+                full_messages,
+                api_key=settings.anthropic_api_key,
+                model=settings.anthropic_model,
+                base_url=settings.anthropic_base_url or "",
+                system_prompt=system_prompt,
+            )
+            return EngineOutput(
+                result={
+                    "text": text,
+                    "model": settings.anthropic_model,
+                    "provider": "anthropic",
+                    "bucket": bucket,
+                },
+                confidence=0.85,
+                explanation="Chat via Claude with role-scoped briefing. "
+                           "Confidence capped at 0.85 (grounding validation not implemented).",
+            )
+        except Exception as e:
+            last_error = e
+    
+    # Fallback to Azure OpenAI
+    if settings.azure_openai_api_key and settings.azure_openai_endpoint:
+        try:
+            text = _call_azure_openai(full_messages, settings, system_prompt=system_prompt)
+            return EngineOutput(
+                result={
+                    "text": text,
+                    "model": getattr(settings, "azure_openai_deployment", "azure-openai"),
+                    "provider": "azure_openai",
+                    "bucket": bucket,
+                },
+                confidence=0.85,
+                explanation="Chat via Azure OpenAI with role-scoped briefing. "
+                           "Confidence capped at 0.85 (grounding validation not implemented).",
+            )
+        except Exception as e:
+            last_error = e
+    
+    # Both failed or none configured
+    if last_error:
+        raise EngineError(f"All LLM providers failed: {last_error}")
+    else:
+        raise EngineError("No LLM provider configured")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _human_review(payload: Dict[str, Any]) -> EngineOutput:
@@ -247,6 +349,7 @@ ADAPTERS = {
     "CAP-RAMS-001": {"RE-ENGINE-01": _rules_rams, "LLM-ENGINE-01": _llm_generate},
     "CAP-DOC-001":  {"LLM-ENGINE-01": _llm_generate},
     "CAP-RCA-001":  {"LLM-ENGINE-01": _llm_generate},
+    "CAP-CHAT-001": {"LLM-ENGINE-01": _llm_chat},
 }
 
 # Every capability can reach L7.
