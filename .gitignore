@@ -47,3 +47,6 @@ desktop.ini
 # Compiled assets
 *.pyc
 *.pyd
+
+# Uploaded incident evidence photos — user data, not source.
+backend/uploads/

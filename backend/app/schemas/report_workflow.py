@@ -3,7 +3,7 @@
 Mirrors app/schemas/incident_workflow.py. Kept separate from it so that changing one
 report type's contract can never alter the incident contract the website depends on.
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -75,6 +75,33 @@ class SupervisorInvestigateReport(BaseModel):
     immediate_actions_taken: Optional[str] = None
     supervisor_signature: Optional[str] = None
     severity: Optional[str] = None
+
+    # ── Stage 05 IMPROVE ──────────────────────────────────────────────────────
+    # A corrective action raised here is what makes IMPROVE and VERIFY
+    # occupiable: without one there is nothing to improve and nothing whose
+    # effectiveness could be confirmed, and the record goes 04 -> 07 directly.
+    capa_description: Optional[str] = None
+    capa_responsible_person_id: Optional[int] = None
+    # Omit to let the WF-04 rule compute it from the CAPA type.
+    capa_due_date: Optional[date] = None
+    capa_severity_potential: Optional[str] = Field(None, description="low | medium | high (or 1-3)")
+    capa_systemic_risk: Optional[str] = Field(None, description="low | medium | high (or 1-3)")
+    capa_type: Optional[str] = Field(None, description="P1..P5 — overrides inheritance from severity")
+
+
+class ManagerVerifyReportEffectiveness(BaseModel):
+    """Stage 06 VERIFY — did the corrective action actually work?
+
+    `effective=False` returns the record to IMPROVE and reopens its actions: a
+    control that did not hold means the hazard is still live.
+    """
+    effective: bool = Field(..., description="Did the CAPA hold?")
+    verification_notes: Optional[str] = Field(None, description="What was checked, and how")
+
+
+class ReportCapaComplete(BaseModel):
+    """Marks a corrective action done. effectiveness_rating is 1-5."""
+    effectiveness_rating: Optional[int] = None
 
 
 class SupervisorEscalateReport(BaseModel):
@@ -171,8 +198,13 @@ class ReportListItem(BaseModel):
     assessed_priority: Optional[str] = None
     is_hipo: Optional[bool] = None
     response_due_at: Optional[datetime] = None
+    # Enough to draw the eight-stage rail on a queue card without opening the
+    # record — the detail response carries the identical five fields.
     stage: Optional[str] = None
     stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

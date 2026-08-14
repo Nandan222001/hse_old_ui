@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   surface: { height: 210, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
 
   spinnerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', minWidth: 32, textAlign: 'center' },
 
   seekTrack: { flex: 1, height: 20, justifyContent: 'center' },
-  seekBg:    { ...StyleSheet.absoluteFillObject, top: 8, bottom: 8, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
+  seekBg:    { ...StyleSheet.absoluteFill, top: 8, bottom: 8, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   seekFill:  { position: 'absolute', left: 0, top: 8, bottom: 8, borderRadius: 3, backgroundColor: Colors.primary },
   seekKnob:  {
     position: 'absolute', top: '50%', marginTop: -7, marginLeft: -7,

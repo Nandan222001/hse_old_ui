@@ -37,16 +37,30 @@ export const ENDPOINTS = {
     STATS:  '/supervisor/dashboard',
     ALERTS: '/supervisor/alerts',
   },
+  // The eight-stage lifecycle. START_INVESTIGATION (03->04) and
+  // VERIFY_EFFECTIVENESS (06->07) exist on /incident-workflow only — the other
+  // three report families still run the shorter factory workflow, so they are
+  // deliberately absent from reportWorkflowEndpoints below.
   INCIDENT_WORKFLOW: {
     ACKNOWLEDGE: (id: string) => `/incident-workflow/${id}/acknowledge`,
+    START_INVESTIGATION: (id: string) => `/incident-workflow/${id}/start-investigation`,
     INVESTIGATE: (id: string) => `/incident-workflow/${id}/investigate`,
     ESCALATE: (id: string) => `/incident-workflow/${id}/escalate`,
     MANAGER_QUEUE: '/incident-workflow/manager-queue',
     APPROVE: (id: string) => `/incident-workflow/${id}/approve-investigation`,
+    VERIFY_EFFECTIVENESS: (id: string) => `/incident-workflow/${id}/verify-effectiveness`,
     CLOSE: (id: string) => `/incident-workflow/${id}/close`,
     DETAIL: (id: string) => `/incident-workflow/${id}`,
     CAPA_MY_ACTIONS: '/incident-workflow/capa/my-actions',
     CAPA_COMPLETE: (id: string | number) => `/incident-workflow/capa/${id}/complete`,
+    // Supervisors, not workers — a corrective action is a control change and
+    // the accountable owner is the supervisor for that area.
+    CAPA_ASSIGNABLE_OWNERS: '/incident-workflow/capa/assignable-owners',
+    // "What do I do next" — the queue for the dashboard, and the stage tracker
+    // plus outstanding step for one incident. Both read the same backend
+    // resolver, so the list and the detail screen cannot disagree.
+    NEXT_ACTIONS: '/incident-workflow/next-actions',
+    NEXT_ACTION: (id: string | number) => `/incident-workflow/${id}/next-action`,
   },
 } as const;
 
@@ -77,12 +91,17 @@ export const reportWorkflowEndpoints = (type: ReportType) => {
     // Supervisor
     PENDING_REVIEW: `${base}/pending-review`,
     ACKNOWLEDGE: (id: string | number) => `${base}/${id}/acknowledge`,
+    START_INVESTIGATION: (id: string | number) => `${base}/${id}/start-investigation`,
     INVESTIGATE: (id: string | number) => `${base}/${id}/investigate`,
     ESCALATE: (id: string | number) => `${base}/${id}/escalate`,
     // Manager
     MANAGER_QUEUE: `${base}/manager-queue`,
     APPROVE: (id: string | number) => `${base}/${id}/approve-investigation`,
+    VERIFY_EFFECTIVENESS: (id: string | number) => `${base}/${id}/verify-effectiveness`,
     CLOSE: (id: string | number) => `${base}/${id}/close`,
+    // Stage 05 IMPROVE — corrective actions raised off this report type
+    CAPA_MY_ACTIONS: `${base}/capa/my-actions`,
+    CAPA_COMPLETE: (id: string | number) => `${base}/capa/${id}/complete`,
     // Shared
     STATS: `${base}/stats/summary`,
     DETAIL: (id: string | number) => `${base}/${id}`,
@@ -105,11 +124,16 @@ export const PERMIT_WORKFLOW = {
   APPROVE: (id: string | number) => `/permit-workflow/${id}/approve`,
   REJECT: (id: string | number) => `/permit-workflow/${id}/reject`,
   ACTIVE: '/permit-workflow/active',
+  // Stages 05 -> 06 -> 04 -> 06 -> 07. Approval grants the permit (IMPROVE);
+  // activation is the separate act of starting work under it (VERIFY).
+  ACTIVATE: (id: string | number) => `/permit-workflow/${id}/activate`,
+  SUSPEND: (id: string | number) => `/permit-workflow/${id}/suspend`,
+  RESUME: (id: string | number) => `/permit-workflow/${id}/resume`,
+  COMPLETE_WORK: (id: string | number) => `/permit-workflow/${id}/complete-work`,
   CLOSE: (id: string | number) => `/permit-workflow/${id}/close`,
   // Auditor
   AUDIT_LIST: '/permit-workflow/audit-list',
   VERIFY: (id: string | number) => `/permit-workflow/${id}/verify`,
-  CLOSE: (id: string | number) => `/permit-workflow/${id}/close`,
   // Shared
   STATS: '/permit-workflow/stats/summary',
   DETAIL: (id: string | number) => `/permit-workflow/${id}`,

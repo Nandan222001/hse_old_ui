@@ -24,3 +24,6 @@ export { Avatar } from './display/Avatar';
 // Feedback
 export { LoadingOverlay, LoadingScreen } from './feedback/LoadingOverlay';
 export { EmptyState } from './feedback/EmptyState';
+
+// Workflow
+export { WorkflowStageBar } from './workflow/WorkflowStageBar';

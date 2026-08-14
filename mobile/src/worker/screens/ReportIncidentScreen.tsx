@@ -2,14 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, ActivityIndicator, Modal,
+  Alert, TextInput, ActivityIndicator, Modal, Image,
+  PermissionsAndroid, Platform, KeyboardAvoidingView,
 } from 'react-native';
+import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
+import { DateTimePickerModal } from '../components/inputs/DateTimePickerModal';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
 import { useGeoTag } from '../hooks/useGeoTag';
-import { lookupService, WorkingStation, HazardOption } from '../services/lookupService';
-import type { IncidentType, SeverityLevel, YesNo } from '../types';
+import { lookupService, WorkingStation, HazardOption, EmployeeOption } from '../services/lookupService';
+import type { IncidentType, PhotoAttachment, SeverityLevel, YesNo } from '../types';
 
 const INCIDENT_TYPES: IncidentType[] = [
   'Injury',
@@ -46,6 +49,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [hazardPickerVisible, setHazardPickerVisible] = useState(false);
 
   const [incidentDateTime, setIncidentDateTime] = useState<Date>(new Date());
+  const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<SeverityLevel>('Minor');
   const [reason, setReason] = useState('');
@@ -61,13 +65,18 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [worstCaseFatal, setWorstCaseFatal] = useState<YesNo>('No');
   const [injuredPersonName, setInjuredPersonName] = useState('');
   const [injuredBodyPart, setInjuredBodyPart] = useState('');
-  const [permitActive, setPermitActive] = useState<YesNo>('No');
+
   const [controlFailure, setControlFailure] = useState<YesNo>('No');
   const [hazardStillPresent, setHazardStillPresent] = useState<YesNo>('No');
   const [immediateActions, setImmediateActions] = useState('');
   const [witnessDraft, setWitnessDraft] = useState('');
   const [witnesses, setWitnesses] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+
+  // Real files now, not invented filenames. PhotoAttachment is what
+  // incidentService already expects for its multipart upload, so attaching
+  // these is what finally uses the upload path the service always had.
+  const [photos, setPhotos] = useState<PhotoAttachment[]>([]);
 
   useEffect(() => {
     lookupService.workingStations()
@@ -77,7 +86,19 @@ export default function ReportIncidentScreen({ navigation }: any) {
       })
       .catch(() => setStations([]));
     lookupService.hazards().then(setHazards).catch(() => setHazards([]));
+    lookupService.employees().then(setEmployees).catch(() => setEmployees([]));
   }, []);
+
+  const filteredEmployees = useMemo(() => {
+    const q = witnessDraft.trim().toLowerCase();
+    if (!q) return [];
+    return employees.filter(
+      emp =>
+        emp.full_name.toLowerCase().includes(q) ||
+        `emp-${emp.id}`.includes(q) ||
+        String(emp.id).includes(q)
+    );
+  }, [employees, witnessDraft]);
 
   const stationName = useMemo(
     () => stations.find(s => s.id === stationId)?.station_name ?? 'Select a station',
@@ -95,24 +116,140 @@ export default function ReportIncidentScreen({ navigation }: any) {
     setWitnessDraft('');
   };
 
-  const handleAddPhoto = () => {
-    const mockPhotoNames = [
-      'evidence_spill_01.jpg',
-      'floor_strap_obstruction.jpg',
-      'damaged_scaffolding_clip.jpg',
-      'exhaust_steam_leak.jpg',
-      'valve_gasket_wear.jpg'
-    ];
-    const nextPhoto = mockPhotoNames[Math.floor(Math.random() * mockPhotoNames.length)];
-    const timeStamp = new Date().getTime().toString().slice(-4);
-    setPhotos(prev => [...prev, `${timeStamp}_${nextPhoto}`]);
+  /**
+   * Take the result of a picker and keep only what the upload needs.
+   *
+   * This screen used to invent a filename — it picked at random from a list of
+   * five hardcoded names like `evidence_spill_01.jpg` and attached that string.
+   * No image was ever captured, and the investigator opening the incident got a
+   * filename pointing at nothing. These are real files now.
+   */
+  const addAssets = (assets?: Asset[]) => {
+    const picked = (assets ?? [])
+      .filter(a => !!a.uri)
+      .map((a, i) => {
+        const isVideo = a.type?.startsWith('video/') || a.uri?.endsWith('.mp4') || a.uri?.endsWith('.mov');
+        const defaultExt = isVideo ? 'mp4' : 'jpg';
+        const defaultType = isVideo ? 'video/mp4' : 'image/jpeg';
+        return {
+          uri: a.uri as string,
+          name: a.fileName || `evidence_${Date.now()}_${i}.${defaultExt}`,
+          type: a.type || defaultType,
+        };
+      });
+    if (picked.length) setPhotos(prev => [...prev, ...picked]);
+  };
+
+  const reportPickerError = (label: string, code?: string, message?: string) => {
+    // didCancel is the user backing out — not something to interrupt them over.
+    if (code === 'camera_unavailable') {
+      Alert.alert('No camera', 'This device has no camera available.');
+    } else if (code === 'permission') {
+      Alert.alert(
+        `${label} permission needed`,
+        `Allow access in Settings to attach evidence photos or videos.`,
+      );
+    } else if (message) {
+      Alert.alert(`Could not open ${label.toLowerCase()}`, message);
+    }
+  };
+
+  /**
+   * Ask for CAMERA at runtime, because nothing else will.
+   *
+   * react-native-image-picker only requests this itself when the app does NOT
+   * declare CAMERA in its manifest. This app does declare it (AndroidManifest
+   * line 7), which flips the responsibility to us — and since that request was
+   * never made, the permission sat at granted=false and launchCamera failed
+   * every time. Gallery was unaffected: the Android photo picker needs no
+   * permission at all.
+   */
+  const ensureCameraPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    try {
+      const already = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (already) return true;
+
+      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
+        title: 'Camera access',
+        message: 'SafeGuard needs the camera to attach evidence photos and videos to this report.',
+        buttonPositive: 'Allow',
+        buttonNegative: 'Not now',
+      });
+      if (result === PermissionsAndroid.RESULTS.GRANTED) return true;
+
+      Alert.alert(
+        'Camera permission needed',
+        result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+          ? 'Camera access was turned off for this app. Enable it in Settings → Apps → SafeGuard → Permissions, or attach evidence from the gallery instead.'
+          : 'Evidence captures need camera access. You can still attach one from the gallery.',
+      );
+      return false;
+    } catch (e: any) {
+      Alert.alert('Camera unavailable', e?.message ?? 'Could not request camera permission.');
+      return false;
+    }
+  };
+
+  const takePhoto = async () => {
+    if (!(await ensureCameraPermission())) return;
+    Alert.alert(
+      'Camera Option',
+      'Choose whether you want to take a photo or record a video:',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const res = await launchCamera({
+              mediaType: 'photo',
+              quality: 0.7,
+              maxWidth: 1600,
+              maxHeight: 1600,
+              saveToPhotos: false,
+            });
+            if (res.didCancel) return;
+            if (res.errorCode) return reportPickerError('Camera', res.errorCode, res.errorMessage);
+            addAssets(res.assets);
+          },
+        },
+        {
+          text: 'Record Video',
+          onPress: async () => {
+            const res = await launchCamera({
+              mediaType: 'video',
+              videoQuality: 'medium',
+              durationLimit: 30,
+              saveToPhotos: false,
+            });
+            if (res.didCancel) return;
+            if (res.errorCode) return reportPickerError('Camera', res.errorCode, res.errorMessage);
+            addAssets(res.assets);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const pickFromGallery = async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'mixed',     // allow both photos and videos
+      quality: 0.7,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      selectionLimit: 0,     // 0 = as many as they need
+    });
+    if (res.didCancel) return;
+    if (res.errorCode) return reportPickerError('Gallery', res.errorCode, res.errorMessage);
+    addAssets(res.assets);
   };
 
   const handleRemovePhoto = (index: number) => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleNext = async () => {
+  const handleSubmit = async () => {
     if (!description.trim()) {
       Alert.alert('Required', 'Please enter a description of the incident.');
       return;
@@ -148,13 +285,16 @@ export default function ReportIncidentScreen({ navigation }: any) {
       dangerous_occurrence: dangerousOccurrence === 'Yes',
       worst_case_fatal: worstCaseFatal === 'Yes',
       hazard_id: hazardId ?? undefined,
-      permit_active: permitActive,
+      permit_active: 'No',
       control_failure: controlFailure,
       hazard_still_present: hazardStillPresent,
       immediate_actions_taken: immediateActions.trim() || undefined,
       witnesses,
       ...geo,
-      mockPhotos: photos,
+      // `photos` — not `mockPhotos`. This is what switches the request to the
+      // multipart path in incidentService, so the files are actually uploaded
+      // and, offline, replayed from disk when the connection returns.
+      photos,
     } as any);
 
     if (ok.ok) {
@@ -172,12 +312,15 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
   return (
     <ScreenLayout bg="#F8FAFC">
-      {/* Top Header */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Top Header */}
       <View style={styles.header}>
+        {/* The action is goBack(), so the icon is a back arrow. It was a
+            hamburger, which promises a menu and delivers a navigation pop. */}
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
-          <Icon emoji="☰" style={styles.headerIcon} />
+          <Icon name="arrow-left" size={22} color={Colors.textDark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>SafeGuard HSE</Text>
+        <Text style={styles.headerTitle}>Report Incident</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.navigate('Notifications')}>
           <Icon emoji="🔔" style={styles.headerIcon} />
         </TouchableOpacity>
@@ -201,20 +344,16 @@ export default function ReportIncidentScreen({ navigation }: any) {
           <Text style={styles.chevronIcon}>▼</Text>
         </TouchableOpacity>
 
-        {/* Incident Date & Time */}
+        {/* Incident Date & Time
+            Was a free-text box the worker had to type "YYYY-MM-DD HH:MM" into.
+            Anything it could not parse was silently discarded and the report
+            went in stamped with the time the form was opened — which is the one
+            field the investigation SLA and the statutory clock both count from. */}
         <Text style={styles.inputLabel}>Incident Date &amp; Time</Text>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="YYYY-MM-DD HH:MM"
-            placeholderTextColor="#94A3B8"
-            value={formatDateTime(incidentDateTime)}
-            onChangeText={t => {
-              const parsed = new Date(t.replace(' ', 'T'));
-              if (!isNaN(parsed.getTime())) setIncidentDateTime(parsed);
-            }}
-          />
-        </View>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setDateTimePickerVisible(true)}>
+          <Text style={styles.dropdownValue}>{formatDateTime(incidentDateTime)}</Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
 
         {/* Description Input */}
         <Text style={styles.inputLabel}>Description</Text>
@@ -354,7 +493,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
         </TouchableOpacity>
 
         {/* Control context — these three feed the risk / close-out analytics */}
-        <YesNoRow label="Permit active at the time?" value={permitActive} onChange={setPermitActive} />
+
         <YesNoRow label="Control failure?" value={controlFailure} onChange={setControlFailure} />
         <YesNoRow label="Hazard still present?" value={hazardStillPresent} onChange={setHazardStillPresent} />
 
@@ -375,19 +514,46 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
         {/* Witnesses */}
         <Text style={styles.inputLabel}>Witnesses</Text>
-        <View style={styles.witnessRow}>
-          <View style={[styles.inputContainer, styles.witnessInput]}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Add a witness name..."
-              placeholderTextColor="#94A3B8"
-              value={witnessDraft}
-              onChangeText={setWitnessDraft}
-              onSubmitEditing={addWitness}
-              returnKeyType="done"
-            />
+        <View style={[styles.witnessRow, { zIndex: 10, position: 'relative' }]}>
+          <View style={{ flex: 1, position: 'relative' }}>
+            <View style={[styles.inputContainer, styles.witnessInput, { marginBottom: 0 }]}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Add a witness name..."
+                placeholderTextColor="#94A3B8"
+                value={witnessDraft}
+                onChangeText={setWitnessDraft}
+                onSubmitEditing={addWitness}
+                returnKeyType="done"
+              />
+            </View>
+            {filteredEmployees.length > 0 && (
+              <View style={styles.autocompleteDropdown}>
+                <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
+                  {filteredEmployees.slice(0, 5).map((emp) => {
+                    const empRef = `EMP-${emp.id}`;
+                    return (
+                      <TouchableOpacity
+                        key={emp.id}
+                        style={styles.autocompleteItem}
+                        onPress={() => {
+                          const displayText = `${empRef} - ${emp.full_name}`;
+                          if (!witnesses.includes(displayText)) {
+                            setWitnesses(prev => [...prev, displayText]);
+                          }
+                          setWitnessDraft('');
+                        }}
+                      >
+                        <Text style={styles.autocompleteItemName}>{emp.full_name}</Text>
+                        <Text style={styles.autocompleteItemRef}>{empRef}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
           </View>
-          <TouchableOpacity style={styles.witnessAddBtn} onPress={addWitness}>
+          <TouchableOpacity style={[styles.witnessAddBtn, { marginBottom: 0 }]} onPress={addWitness}>
             <Icon name="plus" size={16} color="#2563EB" />
           </TouchableOpacity>
         </View>
@@ -405,25 +571,48 @@ export default function ReportIncidentScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Photos Upload Section */}
-        <Text style={styles.inputLabel}>Photos / Evidence</Text>
+        {/* Photos & Videos Upload Section */}
+        <Text style={styles.inputLabel}>Photos / Videos / Evidence</Text>
         <View style={styles.photoContainer}>
-          <TouchableOpacity style={[styles.photoAddBtn, styles.photoAddRow]} onPress={handleAddPhoto}>
-            <Icon name="camera" size={15} color="#2563EB" style={styles.photoAddIcon} />
-            <Text style={styles.photoAddText}>Add Evidence Photo</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.photoWrapper}>
+          <View style={styles.photoBtnRow}>
+            <TouchableOpacity style={[styles.photoAddBtn, styles.photoAddRow]} onPress={takePhoto}>
+              <Icon name="camera" size={15} color="#2563EB" style={styles.photoAddIcon} />
+              <Text style={styles.photoAddText}>Take Photo/Video</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.photoAddBtn, styles.photoAddRow]} onPress={pickFromGallery}>
+              <Icon name="image" size={15} color="#2563EB" style={styles.photoAddIcon} />
+              <Text style={styles.photoAddText}>Gallery</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Thumbnails, not filenames. The reporter can see what they actually
+              attached before they submit — the old chips showed a made-up name
+              and there was nothing behind them to look at. */}
+          <View style={styles.thumbWrapper}>
             {photos.map((item, idx) => (
-              <View key={idx} style={styles.photoTag}>
-                <Icon name="image" size={12} color="#334155" style={{ marginRight: 4 }} />
-                <Text style={styles.photoLabel}>{item}</Text>
-                <TouchableOpacity onPress={() => handleRemovePhoto(idx)}>
-                  <Icon emoji="✕" style={styles.photoRemoveBtn} />
+              <View key={`${item.uri}-${idx}`} style={styles.thumb}>
+                {item.type?.startsWith('video/') ? (
+                  <View style={[styles.thumbImg, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' }]}>
+                    <Icon name="video" size={24} color="#FFFFFF" />
+                  </View>
+                ) : (
+                  <Image source={{ uri: item.uri }} style={styles.thumbImg} />
+                )}
+                <TouchableOpacity
+                  style={styles.thumbRemove}
+                  onPress={() => handleRemovePhoto(idx)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon emoji="✕" style={styles.thumbRemoveIcon} />
                 </TouchableOpacity>
               </View>
             ))}
           </View>
+          {photos.length > 0 && (
+            <Text style={styles.photoCount}>
+              {photos.length} media file{photos.length === 1 ? '' : 's'} attached
+            </Text>
+          )}
         </View>
 
         {/* GPS is auto-captured, so surface what will be attached */}
@@ -439,19 +628,20 @@ export default function ReportIncidentScreen({ navigation }: any) {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Footer Actions */}
+      {/* Footer Action
+          One button, and it says what it does. "Next" implied a second step
+          that never existed — this submits the report. The "Draft" button beside
+          it had no onPress at all, so tapping it did nothing; a control that
+          looks like it saves your work and silently discards it is worse than
+          no control. */}
       <View style={styles.footer}>
-        <TouchableOpacity style={[styles.draftBtn, styles.footerBtnRow]}>
-          <Icon name="save" size={15} color="#475569" style={styles.footerBtnIcon} />
-          <Text style={styles.draftBtnText}>Draft</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.nextBtn} onPress={handleNext} disabled={isSubmitting}>
+        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={isSubmitting}>
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <View style={styles.footerBtnRow}>
-              <Text style={styles.nextBtnText}>Next</Text>
-              <Icon name="arrow-right" size={15} color="#FFFFFF" style={styles.footerBtnIconRight} />
+              <Icon name="check-circle" size={16} color="#FFFFFF" style={styles.footerBtnIcon} />
+              <Text style={styles.submitBtnText}>Submit Report</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -590,6 +780,29 @@ export default function ReportIncidentScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+
+
+      {/* Incident date & time.
+          minToday is off and maxToday on: an incident has already happened, so
+          the picker offers the last two years and refuses anything in the
+          future. A future date here would push the investigation deadline and
+          the regulator's clock out with it. */}
+      <DateTimePickerModal
+        visible={dateTimePickerVisible}
+        value={formatDateTime(incidentDateTime)}
+        title="When did it happen?"
+        minToday={false}
+        maxToday
+        pastYears={2}
+        onCancel={() => setDateTimePickerVisible(false)}
+        onConfirm={(val) => {
+          const parsed = new Date(val.replace(' ', 'T'));
+          if (!isNaN(parsed.getTime())) setIncidentDateTime(parsed);
+          setDateTimePickerVisible(false);
+        }}
+      />
+      </KeyboardAvoidingView>
     </ScreenLayout>
   );
 }
@@ -854,20 +1067,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 24,
   },
-  draftBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  draftBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#475569',
-  },
   footerBtnRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -875,9 +1074,6 @@ const styles = StyleSheet.create({
   },
   footerBtnIcon: {
     marginRight: 6,
-  },
-  footerBtnIconRight: {
-    marginLeft: 6,
   },
   photoAddRow: {
     flexDirection: 'row',
@@ -887,15 +1083,15 @@ const styles = StyleSheet.create({
   photoAddIcon: {
     marginRight: 6,
   },
-  nextBtn: {
-    flex: 1.5,
+  submitBtn: {
+    flex: 1,
     height: 48,
     borderRadius: 12,
     backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextBtnText: {
+  submitBtnText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
@@ -1002,7 +1198,13 @@ const styles = StyleSheet.create({
   photoContainer: {
     marginBottom: 20,
   },
+  // Camera and Gallery share the row, so each takes half the width.
+  photoBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   photoAddBtn: {
+    flex: 1,
     backgroundColor: '#EFF6FF',
     borderWidth: 1.5,
     borderColor: '#2563EB',
@@ -1012,6 +1214,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+  },
+  thumbWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  thumb: {
+    width: 76,
+    height: 76,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  thumbImg: { width: '100%', height: '100%' },
+  thumbRemove: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbRemoveIcon: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  photoCount: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#64748B',
   },
   photoAddText: {
     color: '#2563EB',
@@ -1042,5 +1276,41 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '800',
     paddingHorizontal: 4,
+  },
+  autocompleteDropdown: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    zIndex: 1000,
+  },
+  autocompleteItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  autocompleteItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  autocompleteItemRef: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });

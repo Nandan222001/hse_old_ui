@@ -29,7 +29,36 @@ class CapaActionService:
         data = payload.model_dump()
         if org_id is not None:
             data["organisation_id"] = org_id
-        return self._repo.create(data)
+        capa = self._repo.create(data)
+
+        # Send notification
+        try:
+            from app.models.employee import Employee
+            from app.models.notification import Notification
+            from datetime import datetime
+
+            db = self._repo._db
+            emp_name = "Employee"
+            if capa.responsible_person_id:
+                emp = db.query(Employee).filter(Employee.id == capa.responsible_person_id).first()
+                if emp:
+                    emp_name = emp.full_name or f"EMP-{capa.responsible_person_id}"
+
+            notif = Notification(
+                organisation_id=org_id,
+                title="New CAPA Action Assigned",
+                message=f"A new corrective action (CAPA) has been assigned to {emp_name}: {capa.description}",
+                type="info",
+                target_type="all",
+                status="sent",
+                sent_at=datetime.utcnow()
+            )
+            db.add(notif)
+            db.flush()
+        except Exception as e:
+            logger.error("Failed to create assignment notification: %s", e)
+
+        return capa
 
     def update(self, id: int, payload: CapaActionUpdate, org_id: Optional[int] = None):
         item = (

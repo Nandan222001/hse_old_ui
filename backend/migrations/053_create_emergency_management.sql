@@ -374,7 +374,10 @@ CREATE TABLE IF NOT EXISTS emergency_equipment (
     
     -- Status
     equipment_status        VARCHAR(50) DEFAULT 'operational' COMMENT 'operational, out_of_service, expired, missing',
-    condition               VARCHAR(50) COMMENT 'Excellent, Good, Fair, Poor',
+    -- Backquoted: CONDITION is a MySQL reserved word, and unquoted it fails the
+    -- whole CREATE TABLE. The name is kept because EmergencyEquipment.condition
+    -- in app/models/emergency.py maps to it.
+    `condition`             VARCHAR(50) COMMENT 'Excellent, Good, Fair, Poor',
     deficiencies            TEXT,
     
     -- Ownership

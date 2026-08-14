@@ -222,33 +222,6 @@ export default function DashboardScreen({ navigation }: any) {
             <Icon name="award" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Training</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ShiftCheckIn')}>
-            <Icon name="clock" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Shift Check-In</Text>
-          </TouchableOpacity>
-          {/* WF-06 · competence and fatigue gate the permit, so they sit next to it */}
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('CompetenceCard')}>
-            <Icon name="shield" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Competence Card</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('FatigueDeclaration')}>
-            <Icon name="battery" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Fatigue</Text>
-          </TouchableOpacity>
-          {/* WF-09 */}
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('JourneyPlan')}>
-            <Icon name="truck" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Journey Plan</Text>
-          </TouchableOpacity>
-          {/* WF-07 */}
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('MySafetyScore')}>
-            <Icon name="activity" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>My Safety Score</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('TrainingAssessment')}>
-            <Icon name="book-open" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Training & Assessment</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Your month — personal figures, not site-wide */}

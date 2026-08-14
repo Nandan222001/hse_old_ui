@@ -1,17 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  SafeAreaView,
-  TextInput,
-  Image,
-  ActivityIndicator,
-  RefreshControl,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Image, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { auditService, Audit as ApiAudit } from '../services/auditService';
@@ -24,7 +15,12 @@ interface Audit {
   dept: string;
   dueDate: string;
   time: string;
-  status: 'overdue' | 'in_progress' | 'scheduled' | 'completed';
+  // The full eight-stage vocabulary. Narrowing this to four states was what
+  // made the list drop audits sitting in any of the middle stages.
+  status:
+    | 'scheduled' | 'in_progress' | 'immediate_action' | 'fieldwork'
+    | 'findings_raised' | 'capa_open' | 'pending_review' | 'verified'
+    | 'completed' | 'overdue' | string;
   priority: 'High' | 'Med' | 'Low';
   progress?: number;
 }
@@ -82,12 +78,27 @@ export function AssignedAuditsScreen({ navigation }: any) {
     return [a.title, a.site, a.dept, a.checklist_type].some((f) => (f || '').toLowerCase().includes(q));
   });
   
+  // Covers the full eight-stage vocabulary. Anything unrecognised still falls
+  // through to "Scheduled" rather than rendering a blank badge.
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'overdue':
         return { bg: '#FEE2E2', text: '#EF4444', icon: 'time-outline', label: 'Overdue' };
       case 'in_progress':
         return { bg: '#F5F3FF', text: '#8B5CF6', icon: 'sync-outline', label: 'In Progress' };
+      case 'immediate_action':
+        return { bg: '#FEE2E2', text: '#B91C1C', icon: 'hand-left-outline', label: 'Stop Work' };
+      case 'fieldwork':
+        return { bg: '#F5F3FF', text: '#8B5CF6', icon: 'walk-outline', label: 'Fieldwork' };
+      case 'findings_raised':
+      case 'capa_open':
+        return { bg: '#FFF7ED', text: '#C2410C', icon: 'construct-outline', label: 'Actions Open' };
+      case 'pending_review':
+        return { bg: '#EFF6FF', text: '#2563EB', icon: 'search-outline', label: 'Awaiting Verification' };
+      case 'verified':
+        return { bg: '#ECFDF5', text: '#059669', icon: 'shield-checkmark-outline', label: 'Verified' };
+      case 'completed':
+        return { bg: '#DCFCE7', text: '#16A34A', icon: 'checkmark-done-outline', label: 'Completed' };
       default:
         return { bg: '#EFF6FF', text: '#3B82F6', icon: 'calendar-outline', label: 'Scheduled' };
     }
@@ -249,30 +260,28 @@ export function AssignedAuditsScreen({ navigation }: any) {
                     </Text>
                   </View>
 
-                  {item.status === 'overdue' && (
-                    <TouchableOpacity
-                      style={styles.startBtn}
-                      onPress={() => navigation.navigate('AuditDetail', { audit: item })}
-                    >
-                      <Text style={styles.startBtnText}>Start Audit</Text>
-                    </TouchableOpacity>
-                  )}
-                  {item.status === 'in_progress' && (
-                    <TouchableOpacity
-                      style={[styles.startBtn, styles.resumeBtn]}
-                      onPress={() => navigation.navigate('AuditChecklist', { audit: item })}
-                    >
-                      <Text style={styles.startBtnText}>Resume</Text>
-                    </TouchableOpacity>
-                  )}
-                  {item.status === 'scheduled' && (
-                    <TouchableOpacity
-                      style={[styles.startBtn, styles.detailsBtn]}
-                      onPress={() => navigation.navigate('AuditDetail', { audit: item })}
-                    >
-                      <Text style={styles.detailsBtnText}>Details</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Always a way in. This used to render a button only for
+                      scheduled, in_progress and overdue, so an audit in any
+                      other stage — in fieldwork, awaiting verification, stopped
+                      on a critical finding — had no route into it from the list
+                      at all. The detail screen decides which action the stage
+                      actually allows; this just opens it. */}
+                  <TouchableOpacity
+                    style={[
+                      styles.startBtn,
+                      item.status === 'scheduled' && styles.detailsBtn,
+                      item.status === 'in_progress' && styles.resumeBtn,
+                    ]}
+                    onPress={() => navigation.navigate('AuditDetail', { audit: item })}
+                  >
+                    <Text style={item.status === 'scheduled' ? styles.detailsBtnText : styles.startBtnText}>
+                      {item.status === 'overdue'
+                        ? 'Start Audit'
+                        : item.status === 'in_progress' || item.status === 'fieldwork'
+                          ? 'Resume'
+                          : 'Details'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             );

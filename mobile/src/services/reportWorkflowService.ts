@@ -70,6 +70,16 @@ export function reportWorkflowService(type: ReportType) {
       return data;
     },
 
+    /**
+     * Stage 03 -> 04. Opens the investigation before any findings exist, so the
+     * record sits visibly in INVESTIGATE while the work happens rather than
+     * jumping from RESPOND straight to a finished RCA.
+     */
+    async startInvestigation(id: number): Promise<ReportDetail> {
+      const { data } = await apiClient.post(E.START_INVESTIGATION(id), {});
+      return data;
+    },
+
     async investigate(id: number, payload: InvestigatePayload): Promise<ReportDetail> {
       const { data } = await apiClient.post(E.INVESTIGATE(id), payload);
       return data;
@@ -91,6 +101,23 @@ export function reportWorkflowService(type: ReportType) {
 
     async approveInvestigation(id: number, approved = true, notes?: string): Promise<ReportDetail> {
       const { data } = await apiClient.post(E.APPROVE(id), { approved, notes });
+      return data;
+    },
+
+    /**
+     * Stage 06 VERIFY. `effective: false` returns the record to IMPROVE and
+     * reopens its corrective actions — a control that did not hold means the
+     * hazard is still live.
+     */
+    async verifyEffectiveness(
+      id: number,
+      effective: boolean,
+      verificationNotes?: string,
+    ): Promise<ReportDetail> {
+      const { data } = await apiClient.post(E.VERIFY_EFFECTIVENESS(id), {
+        effective,
+        verification_notes: verificationNotes,
+      });
       return data;
     },
 

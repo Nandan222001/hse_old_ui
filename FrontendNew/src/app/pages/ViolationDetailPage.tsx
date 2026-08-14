@@ -203,6 +203,7 @@ export function ViolationDetailPage() {
                 { label: "Days Away", value: detail.days_away > 0 ? String(detail.days_away) : "None" },
                 { label: "Permit Active", value: detail.permit_active },
                 { label: "Control Failure", value: detail.control_failure },
+                { label: "Reporting Channel", value: detail.source || "Web App" },
               ].map(d => (
                 <div key={d.label}>
                   <label className="block mb-1">{d.label}</label>

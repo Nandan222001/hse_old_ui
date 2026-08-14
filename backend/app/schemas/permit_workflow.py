@@ -51,6 +51,12 @@ class PermitVerify(BaseModel):
     verification_notes: Optional[str] = None
 
 
+class PermitSuspend(BaseModel):
+    """Stage 04 INVESTIGATE — work stops while the cause is established."""
+
+    reason: str = Field(..., min_length=1, description="Why work was stopped")
+
+
 class PermitClose(BaseModel):
     """
     Supervisor closing out a permit. `deviation_reported` is the sole input to the
@@ -94,6 +100,14 @@ class PermitWorkflowResponse(BaseModel):
     auditor_verified_at: Optional[datetime] = None
     verification_result: Optional[str] = None
     verification_notes: Optional[str] = None
+    suspension_reason: Optional[str] = None
+
+    # Position on the eight stages, derived from workflow_status — never stored.
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -109,5 +123,12 @@ class PermitListItem(BaseModel):
     requested_by: Optional[int] = None
     requested_at: Optional[datetime] = None
     validity_end: Optional[datetime] = None
+
+    # Enough to draw the stage rail on a queue card without opening the permit.
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
 
     model_config = {"from_attributes": True}

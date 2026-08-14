@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config.settings import get_settings
 from app.config.logging_config import configure_logging
@@ -9,6 +10,7 @@ from app.core.exceptions import (
     not_found_handler, conflict_handler, validation_handler,
 )
 from app.core.middleware import RequestLoggingMiddleware
+from app.services import media_storage
 from app.services.scheduler import start_scheduler, stop_scheduler
 
 # Ensure all models are registered with SQLAlchemy metadata
@@ -37,6 +39,7 @@ from app.controllers import (
     assigned_tasks as assigned_tasks_controller,
     team as team_controller,
     incident_workflow as incident_workflow_controller,
+    event_drafts as event_drafts_controller,
     settings as settings_controller,
     near_miss_workflow as near_miss_workflow_controller,
     unsafe_act_workflow as unsafe_act_workflow_controller,
@@ -45,6 +48,7 @@ from app.controllers import (
     hazard_register as hazard_register_controller,
     audit as audit_controller,
     audit_trail as audit_trail_controller,
+    incident_trail as incident_trail_controller,
     # ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ───────────────────────────
     competence as competence_controller,
     fatigue as fatigue_controller,
@@ -96,6 +100,18 @@ def create_app() -> FastAPI:
     # ── Request logging ───────────────────────────────────────────────────────
     app.add_middleware(RequestLoggingMiddleware)
 
+    # ── Uploaded evidence ─────────────────────────────────────────────────────
+    # Incident photos are written to backend/uploads and the record stores the
+    # URL path, so the file has to be served back for the supervisor and manager
+    # screens that render evidence_json. Mounted outside the /api/v1 prefix
+    # because these are files, not API resources.
+    media_storage.UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        media_storage.URL_PREFIX,
+        StaticFiles(directory=str(media_storage.UPLOAD_ROOT)),
+        name="uploads",
+    )
+
     # ── Exception handlers ────────────────────────────────────────────────────
     app.add_exception_handler(NotFoundError,   not_found_handler)
     app.add_exception_handler(ConflictError,   conflict_handler)
@@ -129,9 +145,12 @@ def create_app() -> FastAPI:
     app.include_router(assigned_tasks_controller.router, prefix=prefix)
     app.include_router(team_controller.router, prefix=prefix)
     app.include_router(incident_workflow_controller.router, prefix=prefix)
+    app.include_router(event_drafts_controller.router, prefix=prefix)
     app.include_router(settings_controller.router, prefix=prefix)
     app.include_router(audit_controller.router, prefix=prefix)
     app.include_router(audit_trail_controller.router, prefix=prefix)
+    # Admin view: every action on an incident, stage 01 through stage 08.
+    app.include_router(incident_trail_controller.router, prefix=prefix)
     # Near miss / unsafe act / risk each get their own table and their own workflow.
     app.include_router(near_miss_workflow_controller.router, prefix=prefix)
     app.include_router(unsafe_act_workflow_controller.router, prefix=prefix)

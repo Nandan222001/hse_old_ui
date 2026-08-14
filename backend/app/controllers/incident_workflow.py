@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 
 from app.config.database import SessionLocal, get_db
@@ -21,12 +21,15 @@ from app.services import events, statutory_reporting
 from app.services.events import catalogue
 from app.services.capa_priority import prioritise
 from app.services.incident_severity import classify_severity
+from app.services import workflow_stages
+from app.services import incident_next_action
 from app.schemas.incident_workflow import (
     WorkerIncidentReport,
     SupervisorAcknowledge,
     SupervisorInvestigate,
     SupervisorEscalate,
     ManagerApproveInvestigation,
+    ManagerVerifyEffectiveness,
     ManagerCloseIncident,
     CapaComplete,
     IncidentWorkflowResponse,
@@ -40,6 +43,17 @@ WORKER_ROLES = {"Worker", "Employee", "Operator", "Technician"}
 SUPERVISOR_ROLES = {"Supervisor", "Site Inspector", "Safety Manager", "Safety_Manager", "Site Engineer"}
 MANAGER_ROLES = {"Manager", "HSE Manager", "Admin", "Superadmin", "Safety Manager", "Safety_Manager", "Director"}
 ALL_ELEVATED_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES
+
+# ── Queue membership ──────────────────────────────────────────────────────────
+# Stages 04, 05, 06 and 07 all sit with the manager in one form or another.
+SUPERVISOR_QUEUE_STATUSES = ["reported", "acknowledged", "under_investigation"]
+MANAGER_QUEUE_STATUSES = [
+    "escalated",            # 04 — needs a decision one level up
+    "pending_approval",     # 04 — RCA awaiting sign-off
+    "capa_open",            # 05 — visible, but the action is the assignee's
+    "pending_verification", # 06 — fix done, effectiveness unconfirmed
+    "approved",             # 07 — verified, awaiting the lesson and closure
+]
 
 
 def _get_incident(db: Session, incident_id: int, org_id: Optional[int]) -> Incident:
@@ -56,6 +70,80 @@ def _get_incident(db: Session, incident_id: int, org_id: Optional[int]) -> Incid
 def _role_matches(user_role: str, allowed_roles: set) -> bool:
     """Case-insensitive role check."""
     return user_role.strip().lower() in {r.lower() for r in allowed_roles}
+
+
+def _find_supervisor_for(db: Session, current_user: CurrentUser) -> Optional[int]:
+    """The supervisor an incident from this user should land on.
+
+    The reporter's own manager where there is one, otherwise any active
+    supervisor in the org — an unassigned incident sits in nobody's queue, which
+    is worse than one assigned to an approximately right person.
+    """
+    reporter = (
+        db.query(Employee)
+        .filter(Employee.organisation_id == current_user.org_id)
+        .filter(Employee.full_name.ilike(f"%{current_user.username}%"))
+        .first()
+    )
+    if reporter and reporter.manager_id:
+        return reporter.manager_id
+
+    from app.models.role import Role
+    sup = (
+        db.query(Employee)
+        .join(Role, Employee.role_id == Role.id)
+        .filter(Employee.organisation_id == current_user.org_id)
+        .filter(Role.role_name.in_(["Supervisor", "Site Inspector", "Safety Manager"]))
+        .filter(Employee.active_status == "Active")
+        .first()
+    )
+    return sup.id if sup else None
+
+
+def _acting_employee_id(db: Session, current_user: CurrentUser) -> Optional[int]:
+    """The employees.id behind the logged-in user.
+
+    Resolved through `users.employee_id`, which is the real foreign key. The
+    older lookups in this module match `employees.full_name ILIKE %username%`,
+    which only lands when the username happens to appear inside the person's
+    name — for worker01 / supervisor01 / manager01 it matches nothing. That is
+    why every stage past RECORD had a timestamp but no actor: the transition was
+    recorded, the person performing it was not.
+    """
+    row = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"),
+        {"uid": current_user.user_id},
+    ).mappings().first()
+    return row["employee_id"] if row and row["employee_id"] else None
+
+
+def _stamp_actor(db: Session, incident: Incident, column: str, current_user: CurrentUser) -> None:
+    """Record who performed a transition, if it is not already recorded.
+
+    Only fills a null. An actor already on the incident is the person who first
+    took that role, and overwriting it on every later action would turn the
+    audit trail into "whoever touched it last".
+    """
+    if getattr(incident, column, None):
+        return
+    emp_id = _acting_employee_id(db, current_user)
+    if emp_id:
+        setattr(incident, column, emp_id)
+
+
+def _has_open_capa(db: Session, incident_id: int) -> bool:
+    """Is any corrective action for this incident still outstanding?"""
+    return (
+        db.query(CapaAction.id)
+        .filter(CapaAction.incident_id == incident_id)
+        .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
+        .first()
+        is not None
+    )
+
+
+def _has_any_capa(db: Session, incident_id: int) -> bool:
+    return db.query(CapaAction.id).filter(CapaAction.incident_id == incident_id).first() is not None
 
 
 def _require_role(user_role: str, allowed_roles: set, action: str):
@@ -249,23 +337,7 @@ def worker_report_incident(
         .first()
     )
 
-    # Find supervisor to auto-assign (reporter's manager or any supervisor in org)
-    supervisor_id = None
-    if reporter_employee and reporter_employee.manager_id:
-        supervisor_id = reporter_employee.manager_id
-    else:
-        # Fallback: find any supervisor-role employee in the org
-        from app.models.role import Role
-        sup_employee = (
-            db.query(Employee)
-            .join(Role, Employee.role_id == Role.id)
-            .filter(Employee.organisation_id == current_user.org_id)
-            .filter(Role.role_name.in_(["Supervisor", "Site Inspector", "Safety Manager"]))
-            .filter(Employee.active_status == "Active")
-            .first()
-        )
-        if sup_employee:
-            supervisor_id = sup_employee.id
+    supervisor_id = _find_supervisor_for(db, current_user)
 
     incident = Incident(
         organisation_id=current_user.org_id,
@@ -358,13 +430,145 @@ def supervisor_pending_review(
     rows = (
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
-        .filter(Incident.workflow_status.in_(["reported", "acknowledged", "under_investigation"]))
+        .filter(Incident.workflow_status.in_(SUPERVISOR_QUEUE_STATUSES))
         .order_by(Incident.reported_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
     return rows
+
+
+@router.get("/next-actions")
+def my_next_actions(
+    mine_only: bool = Query(True, description="Only steps this role actually owns"),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Every open incident waiting on this user, and the exact step it needs.
+
+    The manager dashboard's severity tiles answer "how bad is the estate"; they
+    never answered "what do I do now", which is why an incident could sit in
+    IMPROVE indefinitely with nobody realising a CAPA sign-off was the only
+    thing holding it. This is that missing list.
+
+    Ordered by priority then by how long the step has been outstanding, so the
+    oldest P1 is at the top rather than the most recently touched record.
+    """
+    rows = db.execute(
+        text(
+            "SELECT id, description, incident_type, severity_priority, severity_label, "
+            "       workflow_status, reported_at, created_at, investigation_due_at, "
+            "       is_hipo, is_recurring_pattern, statutory_reportable "
+            "  FROM incidents "
+            " WHERE organisation_id = :org AND workflow_status <> 'closed' "
+            " ORDER BY COALESCE(reported_at, created_at) DESC LIMIT 300"
+        ),
+        {"org": current_user.org_id},
+    ).mappings().all()
+
+    if not rows:
+        return {"count": 0, "items": [], "mine_count": 0}
+
+    # Open CAPA counts in one query, so the IMPROVE rows can name what is
+    # actually outstanding instead of saying "a corrective action".
+    open_capa = db.execute(
+        text(
+            "SELECT c.incident_id, COUNT(*) AS open_count, MIN(c.id) AS first_id, "
+            "       MIN(c.description) AS first_description, MIN(c.due_date) AS first_due "
+            "  FROM capa_actions c "
+            " WHERE c.incident_id IN :ids AND c.status <> 'Completed' "
+            " GROUP BY c.incident_id"
+        ),
+        {"ids": tuple(r["id"] for r in rows)},
+    ).mappings().all()
+    capa_by_incident = {c["incident_id"]: c for c in open_capa}
+
+    now = datetime.utcnow()
+    items = []
+    mine_count = 0
+
+    for r in rows:
+        info = incident_next_action.describe(r["workflow_status"], current_user.role)
+        nxt = info["next_action"]
+        if not nxt:
+            continue
+        if info["is_mine"]:
+            mine_count += 1
+        elif mine_only:
+            continue
+
+        capa = capa_by_incident.get(r["id"])
+        detail = nxt["detail"]
+        subject = None
+        if info["stage"] == workflow_stages.IMPROVE and capa:
+            subject = {
+                "reference": f"CAPA-{capa['first_id']}",
+                "description": (capa["first_description"] or "")[:120],
+                "due_date": capa["first_due"].isoformat() if capa["first_due"] else None,
+                "open_count": int(capa["open_count"]),
+            }
+            detail = (
+                f"{capa['open_count']} corrective action"
+                f"{'s' if capa['open_count'] != 1 else ''} still open."
+            )
+
+        due = r["investigation_due_at"]
+        items.append({
+            "id": r["id"],
+            "reference": f"INC-{r['id']}",
+            "description": (r["description"] or r["incident_type"] or "")[:140],
+            "priority": r["severity_priority"],
+            "severity_label": r["severity_label"],
+            "workflow_status": r["workflow_status"],
+            "stage": info["stage"],
+            "stage_number": info["stage_number"],
+            "stage_label": info["stage_label"],
+            "action": nxt["action"],
+            "detail": detail,
+            "cta": nxt["cta"],
+            "route": nxt["route"],
+            "unblocks": nxt["unblocks"],
+            "owner_role": nxt["owner_role"],
+            "is_mine": info["is_mine"],
+            "can_act": info["can_act"],
+            "subject": subject,
+            "is_hipo": bool(r["is_hipo"]),
+            "is_recurring": bool(r["is_recurring_pattern"]),
+            "statutory_reportable": bool(r["statutory_reportable"]),
+            "is_overdue": bool(due and due < now),
+            "due_at": due.isoformat() if due else None,
+            "waiting_since": (r["reported_at"] or r["created_at"]).isoformat()
+            if (r["reported_at"] or r["created_at"]) else None,
+        })
+
+    # Overdue first, then P1..P5, then longest waiting. An unassessed incident
+    # sorts last on priority but not out of the list — it still needs somebody.
+    items.sort(key=lambda i: (
+        not i["is_overdue"],
+        i["priority"] or "P9",
+        i["waiting_since"] or "9999",
+    ))
+
+    return {"count": len(items[:limit]), "items": items[:limit], "mine_count": mine_count}
+
+
+@router.get("/{incident_id}/next-action")
+def incident_next_step(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage tracker + the one outstanding step, for the incident screen."""
+    incident = _get_incident(db, incident_id, current_user.org_id)
+    info = incident_next_action.describe(incident.workflow_status, current_user.role)
+    return {
+        "incident_id": incident.id,
+        "reference": f"INC-{incident.id}",
+        **info,
+        "track": incident_next_action.stage_track(incident.workflow_status),
+    }
 
 
 @router.post("/{incident_id}/acknowledge", response_model=IncidentWorkflowResponse)
@@ -385,6 +589,46 @@ def supervisor_acknowledge(
     incident.workflow_status = "acknowledged"
     incident.acknowledged_at = now
     incident.investigation_status = "Acknowledged"
+    _stamp_actor(db, incident, "assigned_supervisor_id", current_user)
+
+    db.commit()
+    db.refresh(incident)
+    return incident
+
+
+@router.post("/{incident_id}/start-investigation", response_model=IncidentWorkflowResponse)
+def supervisor_start_investigation(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 03 -> 04. Opens the investigation before any findings exist.
+
+    Without this, `under_investigation` was a status only a manager rejection
+    could produce, so an incident jumped from RESPOND straight to the end of
+    INVESTIGATE and the SLA started by `investigation_due_at` measured a window
+    nothing was ever observed to be in.
+    """
+    _require_role(current_user.role, ALL_ELEVATED_ROLES, "investigate incidents")
+    incident = _get_incident(db, incident_id, current_user.org_id)
+
+    if incident.workflow_status not in ("acknowledged", "reported"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only an acknowledged incident can move into investigation",
+        )
+
+    now = datetime.utcnow()
+    incident.workflow_status = "under_investigation"
+    incident.investigation_status = "In Progress"
+    if not incident.investigation_started_at:
+        incident.investigation_started_at = now
+    # Acknowledgement is a precondition of investigating; a supervisor who goes
+    # straight here has effectively acknowledged, so record it rather than
+    # leaving a hole in the audit trail.
+    if not incident.acknowledged_at:
+        incident.acknowledged_at = now
+    _stamp_actor(db, incident, "assigned_supervisor_id", current_user)
 
     db.commit()
     db.refresh(incident)
@@ -421,6 +665,7 @@ def supervisor_investigate(
     incident.investigation_completed_at = now
     incident.investigation_status = "Completed"
     incident.supervisor_signature = current_user.email
+    _stamp_actor(db, incident, "assigned_supervisor_id", current_user)
 
     # Re-run the decision tree with what the investigation established. This is
     # where P1-P5 usually settles: the reporter rarely knows the treatment level
@@ -472,6 +717,36 @@ def supervisor_investigate(
         db.add(capa)
         incident.capa_generated = "Yes"
 
+        # Send notification
+        try:
+            from app.models.employee import Employee
+            from app.models.notification import Notification
+            # NOT `from datetime import datetime` here. This block is nested
+            # inside supervisor_investigate, and a local import binds the name
+            # for the *whole* function — which made the `now = datetime.utcnow()`
+            # at the top of the function raise UnboundLocalError before this
+            # line ever ran, so submitting an investigation failed outright.
+            # The module already imports datetime at the top.
+
+            emp_name = "Employee"
+            if capa.responsible_person_id:
+                emp = db.query(Employee).filter(Employee.id == capa.responsible_person_id).first()
+                if emp:
+                    emp_name = emp.full_name or f"EMP-{capa.responsible_person_id}"
+
+            notif = Notification(
+                organisation_id=current_user.org_id,
+                title="New CAPA Action Assigned",
+                message=f"A new corrective action (CAPA) has been assigned to {emp_name}: {capa.description}",
+                type="info",
+                target_type="all",
+                status="sent",
+                sent_at=datetime.utcnow()
+            )
+            db.add(notif)
+        except Exception as e:
+            logger.error("Failed to create assignment notification: %s", e)
+
     # Handle escalation
     if payload.escalate:
         incident.workflow_status = "escalated"
@@ -516,6 +791,7 @@ def supervisor_escalate(
     incident.workflow_status = "escalated"
     incident.escalation_reason = payload.escalation_reason
     incident.escalated_at = now
+    _stamp_actor(db, incident, "assigned_supervisor_id", current_user)
 
     if payload.escalated_to_manager_id:
         incident.escalated_to_manager_id = payload.escalated_to_manager_id
@@ -548,13 +824,19 @@ def manager_queue(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Manager sees escalated and pending_approval incidents."""
+    """Every incident waiting on a manager decision, at whichever stage.
+
+    Three of these need an action from the manager — approve the RCA (04),
+    verify the fix (06), close it out (07) — and `capa_open` is here so an
+    incident does not vanish from the manager's view for the length of a CAPA
+    that may run 90 days.
+    """
     _require_role(current_user.role, MANAGER_ROLES, "view manager queue")
 
     rows = (
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
-        .filter(Incident.workflow_status.in_(["escalated", "pending_approval"]))
+        .filter(Incident.workflow_status.in_(MANAGER_QUEUE_STATUSES))
         # MySQL has no NULLS LAST; a DESC sort already orders NULLs last there.
         .order_by(Incident.escalated_at.desc(), Incident.reported_at.desc())
         .offset(skip)
@@ -582,16 +864,84 @@ def manager_approve_investigation(
         raise HTTPException(status_code=400, detail="Decision must be 'approved' or 'rejected'")
 
     now = datetime.utcnow()
+    # Whether approved or sent back, a manager made the call — record which one.
+    _stamp_actor(db, incident, "escalated_to_manager_id", current_user)
 
     if payload.decision == "approved":
         incident.approved_at = now
-        incident.workflow_status = "pending_approval"  # Ready for closure
         incident.investigation_status = "Approved"
+        # Approving the RCA ends stage 04. Where it goes next depends on whether
+        # there is anything to improve: an incident with outstanding corrective
+        # actions belongs in IMPROVE until they are done, one whose actions are
+        # already complete needs its effectiveness confirmed, and one that
+        # produced no action at all has nothing to verify and goes to LEARN.
+        if _has_open_capa(db, incident.id):
+            incident.workflow_status = "capa_open"
+        elif _has_any_capa(db, incident.id):
+            incident.workflow_status = "pending_verification"
+        else:
+            incident.workflow_status = "approved"
     else:
         # Send back to supervisor for re-investigation
         incident.workflow_status = "under_investigation"
         incident.investigation_status = "Rejected - Redo"
         incident.investigation_completed_at = None
+
+    db.commit()
+    db.refresh(incident)
+    return incident
+
+
+@router.post("/{incident_id}/verify-effectiveness", response_model=IncidentWorkflowResponse)
+def manager_verify_effectiveness(
+    incident_id: int,
+    payload: ManagerVerifyEffectiveness,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 06 VERIFY — confirm the corrective action actually worked.
+
+    A negative verification is not a rejection of the paperwork; it means the
+    hazard is still live. The incident goes back to IMPROVE and its CAPAs are
+    reopened, because closing an incident whose fix did not hold is the failure
+    mode this stage exists to prevent.
+    """
+    _require_role(current_user.role, MANAGER_ROLES, "verify corrective actions")
+    incident = _get_incident(db, incident_id, current_user.org_id)
+
+    if incident.workflow_status not in ("pending_verification", "capa_open"):
+        raise HTTPException(
+            status_code=400, detail="Incident has no corrective action awaiting verification"
+        )
+    if incident.workflow_status == "capa_open" and _has_open_capa(db, incident.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Corrective actions are still open — they must be completed before verification",
+        )
+
+    now = datetime.utcnow()
+    emp_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
+    if payload.effective:
+        incident.workflow_status = "approved"
+        incident.capa_verified_by = emp_id
+        incident.capa_verified_at = now
+        incident.capa_verification_notes = payload.verification_notes
+    else:
+        incident.workflow_status = "capa_open"
+        incident.capa_verified_by = None
+        incident.capa_verified_at = None
+        incident.capa_verification_notes = payload.verification_notes
+        incident.capa_verification_failures = (incident.capa_verification_failures or 0) + 1
+        # Reopen the actions. A CAPA that did not work is not a completed CAPA,
+        # and leaving it closed would let the incident walk straight back to
+        # verification with nothing having changed.
+        db.query(CapaAction).filter(
+            CapaAction.incident_id == incident.id,
+            func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"]),
+        ).update({"status": "Open"}, synchronize_session=False)
 
     db.commit()
     db.refresh(incident)
@@ -612,6 +962,23 @@ def manager_close_incident(
     if incident.workflow_status == "closed":
         raise HTTPException(status_code=400, detail="Incident is already closed")
 
+    # Stage 08 is the end of the ring, not a shortcut across it. Closure now
+    # requires the incident to have reached LEARN, which means its RCA was
+    # approved, its corrective actions completed and their effectiveness
+    # verified. Closing straight out of capa_open was how an incident could be
+    # signed off with its fix still outstanding.
+    if incident.workflow_status != "approved":
+        stage = workflow_stages.describe("incident", incident.workflow_status)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Incident is at stage {stage.get('stage_number')} "
+                f"{stage.get('stage_label') or incident.workflow_status} and cannot be closed yet. "
+                "It must clear investigation approval, corrective action and effectiveness "
+                "verification first."
+            ),
+        )
+
     now = datetime.utcnow()
     incident.workflow_status = "closed"
     incident.closed_at = now
@@ -621,6 +988,7 @@ def manager_close_incident(
     incident.communicated_to_teams = payload.communicated_to_teams
     incident.manager_signature = current_user.email
     incident.investigation_status = "Closed"
+    _stamp_actor(db, incident, "escalated_to_manager_id", current_user)
 
     # ── Stage 08 CLOSE · "update everything" ─────────────────────────────────
     # The event goes in this transaction (outbox): if the close rolls back, so
@@ -786,15 +1154,21 @@ def auditor_closeout_list(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """
-    Incidents the auditor validates close-out on: investigation finished or the
-    incident already closed. Returns the completeness signals the spec asks the
-    auditor to check rather than making them open each record.
+    Closed incidents the auditor reviews the close-out of. Returns the
+    completeness signals the spec asks the auditor to check rather than making
+    them open each record.
+
+    Closed only. This used to include "approved" and "investigated", which was
+    harmless while nothing set them — but "approved" is now a live pre-closure
+    status (stage 07 LEARN), and a close-out review of an incident that has not
+    been closed is reviewing something that does not exist yet. The auditor sits
+    outside the workflow: they look at finished work.
     """
     rows = (
         db.query(Incident)
         .filter(
             Incident.organisation_id == current_user.org_id,
-            Incident.workflow_status.in_(["closed", "approved", "investigated"]),
+            Incident.workflow_status == "closed",
         )
         .order_by(Incident.closed_at.desc(), Incident.id.desc())
         .limit(100)
@@ -859,8 +1233,61 @@ def get_incident_detail(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Get full incident detail with all workflow fields."""
+    """Get full incident detail with all workflow fields.
+
+    The record stores `location_station_id`, `hazard_id` and `reported_by` as
+    foreign keys. The supervisor reviewing the report needs the names — "Heavy
+    Assembly Station 1", not "84" — so they are resolved here rather than making
+    every client fetch three lookup tables and join them itself.
+    """
     incident = _get_incident(db, incident_id, current_user.org_id)
+
+    def _scalar(sql: str, key: Optional[int]) -> Optional[str]:
+        if not key:
+            return None
+        return db.execute(text(sql), {"id": key}).scalar()
+
+    # Attached, not stored: these are display labels derived on read, so they
+    # cannot go stale against the tables they came from.
+    incident.location_station_name = _scalar(
+        "SELECT station_name FROM working_stations WHERE id = :id", incident.location_station_id
+    )
+    incident.hazard_name = _scalar(
+        "SELECT hazard_name FROM hazards WHERE id = :id", incident.hazard_id
+    )
+    incident.reported_by_name = _scalar(
+        "SELECT full_name FROM employees WHERE id = :id", incident.reported_by
+    )
+    incident.supervisor_name = _scalar(
+        "SELECT full_name FROM employees WHERE id = :id", incident.assigned_supervisor_id
+    )
+
+    # The corrective actions the supervisor raised. The manager is approving an
+    # investigation whose whole point is the CAPA, so it has to travel with the
+    # record — `capa_generated` was a bare Yes/No, which told the approver that
+    # an action exists but not what it is, who owns it or when it is due.
+    incident.capa_actions = [
+        {
+            "id": r.id,
+            "description": r.description,
+            "action_type": r.action_type,
+            "root_cause_addressed": r.root_cause_addressed,
+            "responsible_person_id": r.responsible_person_id,
+            "responsible_person_name": _scalar(
+                "SELECT full_name FROM employees WHERE id = :id", r.responsible_person_id
+            ),
+            "due_date": r.due_date.isoformat() if r.due_date else None,
+            "status": r.status,
+            "priority_band": r.priority_band,
+            "capa_type_label": r.capa_type_label,
+            "evidence_required": r.evidence_required,
+            "effectiveness_rating": r.effectiveness_rating,
+        }
+        for r in db.query(CapaAction)
+        .filter(CapaAction.incident_id == incident.id)
+        .order_by(CapaAction.id.desc())
+        .all()
+    ]
     return incident
 
 
@@ -898,21 +1325,83 @@ def workflow_stats(
 # The website's CAPA Closure Rate can only change through this endpoint.
 # ══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/capa/my-actions")
-def my_capa_actions(
+@router.get("/capa/assignable-owners")
+def capa_assignable_owners(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """CAPA actions assigned to the current user (or all open ones for a supervisor/manager)."""
+    """Who a corrective action can be assigned to.
+
+    Supervisors, not workers. A CAPA is a control change — refit a guard, rewrite
+    a procedure, retrain a crew — and the accountable person is the supervisor
+    who owns that area. `/assigned-tasks/assignable-workers` deliberately lists
+    only `operator` logins and is the wrong list for this: it is for handing a
+    worker a task, not for owning a corrective action.
+
+    Scoped by the *user's* organisation, not the employee's. In this database
+    the two disagree — supervisor01's login is org 4 while employee 103 is org 1
+    — and the login is what determines the tenant a person actually works in.
+    Filtering on the employee row would return an empty list here.
+    """
+    rows = db.execute(
+        text(
+            "SELECT e.id, e.full_name, d.department_name AS department, ar.name AS role_name "
+            "FROM users u "
+            "JOIN employees e ON e.id = u.employee_id "
+            "JOIN app_roles ar ON ar.id = u.app_role_id "
+            "LEFT JOIN departments d ON e.department_id = d.id "
+            "WHERE u.organisation_id = :org "
+            "AND u.is_active = 1 "
+            "AND (e.active_status IS NULL OR e.active_status = 'Active') "
+            "AND LOWER(ar.name) IN ('supervisor', 'safety_manager') "
+            "ORDER BY e.full_name"
+        ),
+        {"org": current_user.org_id},
+    ).mappings().all()
+
+    return [
+        {
+            "employee_id": r["id"],
+            "name": r["full_name"],
+            "department": r["department"] or "",
+            "role": r["role_name"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/capa/my-actions")
+def my_capa_actions(
+    mine: Optional[bool] = Query(
+        None, description="Only actions I own. Defaults to true for everyone except managers."
+    ),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Open corrective actions, scoped to what this role is responsible for.
+
+    Corrective actions are owned by supervisors, so a supervisor opening this
+    list needs *their* actions — the ones they have to go and do. It previously
+    returned every open CAPA in the organisation to anyone elevated, which meant
+    the person accountable for three actions saw a list of forty and had no way
+    to tell which were theirs.
+
+    Managers keep the full list: they are monitoring completion, not doing it.
+    `mine` overrides either default.
+    """
     emp_id = db.execute(
         text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
     ).scalar()
 
-    q = db.query(CapaAction).filter(CapaAction.organisation_id == current_user.org_id)
-    if _role_matches(current_user.role, ALL_ELEVATED_ROLES):
-        q = q.filter(CapaAction.status != "Completed")
-    else:
-        q = q.filter(CapaAction.responsible_person_id == emp_id, CapaAction.status != "Completed")
+    only_mine = mine if mine is not None else not _role_matches(current_user.role, MANAGER_ROLES)
+
+    q = (
+        db.query(CapaAction)
+        .filter(CapaAction.organisation_id == current_user.org_id)
+        .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
+    )
+    if only_mine:
+        q = q.filter(CapaAction.responsible_person_id == emp_id)
     rows = q.order_by(CapaAction.id.desc()).limit(100).all()
     return [
         {
@@ -921,8 +1410,15 @@ def my_capa_actions(
             "action_type": c.action_type,
             "description": c.description,
             "responsible_person_id": c.responsible_person_id,
+            # Who owns it. A manager looking at the full list needs the name to
+            # chase it; the id alone is not actionable.
+            "responsible_person_name": db.execute(
+                text("SELECT full_name FROM employees WHERE id = :id"),
+                {"id": c.responsible_person_id},
+            ).scalar() if c.responsible_person_id else None,
             "due_date": c.due_date.isoformat() if c.due_date else None,
             "status": c.status,
+            "priority_band": c.priority_band,
         }
         for c in rows
     ]
@@ -952,10 +1448,27 @@ def complete_capa_action(
     capa.status = "Completed"
     if payload.effectiveness_rating is not None:
         capa.effectiveness_rating = payload.effectiveness_rating
+    db.flush()
+
+    # Stage 05 -> 06. The incident leaves IMPROVE when its last outstanding
+    # action closes, not when any one of them does — a partly-actioned incident
+    # has not been improved yet.
+    advanced_to = None
+    if capa.incident_id:
+        parent = db.query(Incident).filter(Incident.id == capa.incident_id).first()
+        if (
+            parent is not None
+            and parent.workflow_status == "capa_open"
+            and not _has_open_capa(db, parent.id)
+        ):
+            parent.workflow_status = "pending_verification"
+            advanced_to = parent.workflow_status
+
     db.commit()
     db.refresh(capa)
     return {
         "id": capa.id,
         "status": capa.status,
         "effectiveness_rating": capa.effectiveness_rating,
+        "incident_advanced_to": advanced_to,
     }

@@ -69,6 +69,14 @@ class ReportWorkflowMixin:
     assessment_trace = Column(Text, nullable=True)
     assessed_at = Column(DateTime, nullable=True)
 
+    # ── Stage 06 VERIFY · did the corrective action hold? (migration 057) ─────
+    # The manager's in-workflow sign-off. Kept separate from the auditor trio
+    # below, which is a post-closure review and gates nothing.
+    capa_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    capa_verified_at = Column(DateTime, nullable=True)
+    capa_verification_notes = Column(Text, nullable=True)
+    capa_verification_failures = Column(Integer, default=0)
+
     auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     auditor_verified_at = Column(DateTime, nullable=True)
     verification_result = Column(String(50), nullable=True)

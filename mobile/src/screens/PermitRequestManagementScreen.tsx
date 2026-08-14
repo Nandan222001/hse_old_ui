@@ -7,7 +7,16 @@ import { permitWorkflowService } from '../services/permitWorkflowService';
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   requested:    { label: 'Awaiting your acknowledgement', color: '#F97316', bg: '#FFF7ED' },
   acknowledged: { label: 'Acknowledged — forwarded to Manager', color: '#2563EB', bg: '#EFF6FF' },
-  approved:     { label: 'Approved — active on site', color: '#16A34A', bg: '#F0FDF4' },
+  gate_blocked: { label: 'Blocked by the gate engine', color: '#B91C1C', bg: '#FEF2F2' },
+  // `approved` is the legacy value; the manager now sets `issued`. Both are
+  // stage 05 — granted, controls attached, work not yet started.
+  approved:     { label: 'Issued — not yet started', color: '#C2410C', bg: '#FFF7ED' },
+  issued:       { label: 'Issued — not yet started', color: '#C2410C', bg: '#FFF7ED' },
+  active:       { label: 'Active — work in progress', color: '#16A34A', bg: '#F0FDF4' },
+  suspended:    { label: 'Suspended — work stopped', color: '#B91C1C', bg: '#FEF2F2' },
+  expired:      { label: 'Work complete — awaiting close-out', color: '#2563EB', bg: '#EFF6FF' },
+  closed:       { label: 'Closed', color: '#64748B', bg: '#F1F5F9' },
+  cancelled:    { label: 'Cancelled', color: '#64748B', bg: '#F1F5F9' },
   rejected:     { label: 'Rejected', color: '#EF4444', bg: '#FEF2F2' },
 };
 
@@ -29,38 +38,101 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
     );
   }
 
-  const ws = String(permit.workflow_status || 'requested').toLowerCase();
+  // The eight stages ride on workflow_status, so every decision below reads it.
+  const [ws, setWs] = useState(String(permit.workflow_status || 'requested').toLowerCase());
   const meta = STATUS_META[ws] || STATUS_META.requested;
-  const canAcknowledge = ws === 'requested';
-  const canClose = ws === 'approved';
 
-  const acknowledge = async () => {
+  /**
+   * Run one transition and take the server's word for the resulting status.
+   *
+   * Each of these is gated backend-side — activation only from issued, close
+   * only once the work is complete — so the screen never predicts where the
+   * permit lands, it reads it back.
+   */
+  const act = async (
+    fn: () => Promise<any>,
+    successTitle: string,
+    successBody: string,
+    goBack = false,
+  ) => {
     try {
       setSubmitting(true);
-      await permitWorkflowService.acknowledge(Number(permit.id));
-      Alert.alert('Acknowledged', 'Permit acknowledged and forwarded to the Manager for approval.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      const updated = await fn();
+      const next = String(updated?.workflow_status || '').toLowerCase();
+      if (next) setWs(next);
+      Alert.alert(successTitle, successBody, [
+        { text: 'OK', onPress: goBack ? () => navigation.goBack() : undefined },
       ]);
     } catch (e: any) {
-      Alert.alert('Failed', e?.response?.data?.detail || 'Could not acknowledge this permit.');
+      const d = e?.response?.data?.detail;
+      const msg = typeof d === 'string' ? d : (d?.message || 'The permit could not be updated.');
+      Alert.alert('Failed', msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const closePermit = async () => {
-    try {
-      setSubmitting(true);
-      await permitWorkflowService.close(Number(permit.id), 'Work completed, permit closed from mobile.');
-      Alert.alert('Permit Closed', 'This permit has been marked complete and closed out.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } catch (e: any) {
-      Alert.alert('Failed', e?.response?.data?.detail || 'Could not close this permit.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const acknowledge = () =>
+    act(
+      () => permitWorkflowService.acknowledge(Number(permit.id)),
+      'Acknowledged',
+      'Permit acknowledged and forwarded to the Manager for approval.',
+      true,
+    );
+
+  const activate = () =>
+    act(
+      () => permitWorkflowService.activate(Number(permit.id)),
+      'Permit active',
+      'Work has started under this permit. It is now stage 06 — its controls are being relied on.',
+    );
+
+  const suspend = () =>
+    Alert.prompt
+      ? Alert.prompt('Suspend permit', 'Why is work stopping?', (reason?: string) => {
+          if (!reason?.trim()) return;
+          act(
+            () => permitWorkflowService.suspend(Number(permit.id), reason.trim()),
+            'Work stopped',
+            'The permit is suspended at stage 04 while the cause is established.',
+          );
+        })
+      : // Alert.prompt is iOS-only. On Android a fixed reason is recorded rather
+        // than blocking the supervisor from stopping unsafe work.
+        act(
+          () => permitWorkflowService.suspend(Number(permit.id), 'Suspended from mobile by the supervisor'),
+          'Work stopped',
+          'The permit is suspended at stage 04 while the cause is established.',
+        );
+
+  const resume = () =>
+    act(
+      () => permitWorkflowService.resume(Number(permit.id)),
+      'Work resumed',
+      'The permit is live again.',
+    );
+
+  const completeWork = () =>
+    act(
+      () => permitWorkflowService.completeWork(Number(permit.id)),
+      'Work complete',
+      'The permit is spent and ready for close-out.',
+    );
+
+  const closePermit = () =>
+    act(
+      // The real close payload. This used to pass a bare string, which reached
+      // the API as an unparseable body — it only ever appeared to work because
+      // a duplicate service declaration hid the mismatch from the compiler.
+      () => permitWorkflowService.close(Number(permit.id), {
+        deviation_reported: 'No',
+        incident_occurred: 'No',
+        supervisor_notes: 'Closed out from mobile.',
+      }),
+      'Permit closed',
+      'This permit has been closed out.',
+      true,
+    );
 
   return (
     <SafeAreaView style={styles.root}>
@@ -88,38 +160,65 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
           )}
         </View>
 
-        {canAcknowledge ? (
-          <TouchableOpacity
-            style={[styles.ackBtn, submitting && { opacity: 0.6 }]}
-            onPress={acknowledge}
-            disabled={submitting}
-            activeOpacity={0.85}
-          >
-            {submitting ? <ActivityIndicator color="#fff" /> : (
-              <>
+        {/* One action per stage, chosen by the status the server last reported.
+            The old screen offered only acknowledge and close, so a permit could
+            not be activated, stopped or restarted from the app at all. */}
+        {submitting ? (
+          <ActivityIndicator color="#0B3D91" style={{ marginTop: 20 }} />
+        ) : (
+          <>
+            {ws === 'requested' && (
+              <TouchableOpacity style={styles.ackBtn} onPress={acknowledge} activeOpacity={0.85}>
                 <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
                 <Text style={styles.ackBtnText}>Acknowledge &amp; Forward to Manager</Text>
-              </>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-        ) : canClose ? (
-          <TouchableOpacity
-            style={[styles.ackBtn, submitting && { opacity: 0.6 }]}
-            onPress={closePermit}
-            disabled={submitting}
-            activeOpacity={0.85}
-          >
-            {submitting ? <ActivityIndicator color="#fff" /> : (
+
+            {ws === 'gate_blocked' && (
+              <Text style={styles.doneNote}>
+                Blocked by the gate engine. Clear the blocking condition — a missing risk
+                assessment, an expired competence — then ask the Manager to approve again.
+              </Text>
+            )}
+
+            {(ws === 'issued' || ws === 'approved') && (
+              <TouchableOpacity style={styles.ackBtn} onPress={activate} activeOpacity={0.85}>
+                <Ionicons name="play-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.ackBtnText}>Activate — Work Starting</Text>
+              </TouchableOpacity>
+            )}
+
+            {ws === 'active' && (
               <>
-                <Ionicons name="checkmark-done-circle" size={18} color="#FFFFFF" />
-                <Text style={styles.ackBtnText}>Close Permit — Work Complete</Text>
+                <TouchableOpacity style={styles.ackBtn} onPress={completeWork} activeOpacity={0.85}>
+                  <Ionicons name="checkmark-done-circle" size={18} color="#FFFFFF" />
+                  <Text style={styles.ackBtnText}>Work Complete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.ackBtn, styles.dangerBtn]} onPress={suspend} activeOpacity={0.85}>
+                  <Ionicons name="hand-left" size={18} color="#FFFFFF" />
+                  <Text style={styles.ackBtnText}>Stop Work — Suspend</Text>
+                </TouchableOpacity>
               </>
             )}
-          </TouchableOpacity>
-        ) : (
-          <Text style={styles.doneNote}>
-            No action needed — this permit has already moved past supervisor review.
-          </Text>
+
+            {ws === 'suspended' && (
+              <TouchableOpacity style={styles.ackBtn} onPress={resume} activeOpacity={0.85}>
+                <Ionicons name="refresh-circle" size={18} color="#FFFFFF" />
+                <Text style={styles.ackBtnText}>Cause Established — Resume Work</Text>
+              </TouchableOpacity>
+            )}
+
+            {ws === 'expired' && (
+              <TouchableOpacity style={[styles.ackBtn, styles.successBtn]} onPress={closePermit} activeOpacity={0.85}>
+                <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+                <Text style={styles.ackBtnText}>Close Out Permit</Text>
+              </TouchableOpacity>
+            )}
+
+            {['closed', 'rejected', 'cancelled'].includes(ws) && (
+              <Text style={styles.doneNote}>This permit is closed. No further action.</Text>
+            )}
+          </>
         )}
         <Text style={styles.hint}>
           As Supervisor you acknowledge that you have reviewed this request. Final approval is done by the HSE Manager.
@@ -143,7 +242,9 @@ const styles = StyleSheet.create({
   ref: { fontSize: 12, color: '#94A3B8', fontWeight: '600', marginTop: 2, marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   meta: { fontSize: 13, color: '#434655', flex: 1 },
-  ackBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#004AC6', borderRadius: 12, paddingVertical: 15 },
+  ackBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#004AC6', borderRadius: 12, paddingVertical: 15, marginBottom: 10 },
+  dangerBtn: { backgroundColor: '#B91C1C' },
+  successBtn: { backgroundColor: '#059669' },
   ackBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
   doneNote: { textAlign: 'center', color: '#64748B', fontSize: 13, paddingVertical: 12 },
   hint: { fontSize: 12, color: '#94A3B8', marginTop: 16, lineHeight: 17, textAlign: 'center' },

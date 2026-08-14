@@ -1,15 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
 import { EmptyState } from '../feedback/EmptyState';
@@ -42,11 +35,22 @@ const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   critical: { bg: Colors.criticalBg, fg: Colors.critical },
 };
 
-/** What the supervisor can do next, given where the report currently sits. */
+/** What the supervisor can do next, given where the report currently sits.
+ *
+ * `under_investigation` used to read "sent back by manager — redo" because a
+ * manager rejection was the only thing that could produce it. Starting an
+ * investigation now sets it too, so the label describes the state rather than
+ * guessing how the record got there. */
 const STATUS_LABEL: Record<string, string> = {
   reported: 'New — needs acknowledgement',
   acknowledged: 'Acknowledged — investigate next',
-  under_investigation: 'Sent back by manager — redo',
+  under_investigation: 'Under investigation',
+  pending_approval: 'Investigation submitted — with the manager',
+  escalated: 'Escalated to the manager',
+  capa_open: 'Corrective action outstanding',
+  pending_verification: 'Awaiting effectiveness verification',
+  approved: 'Verified — awaiting closure',
+  closed: 'Closed',
 };
 
 function timeAgo(iso: string | null): string {
@@ -66,7 +70,7 @@ export function ReportWorkflowList({
   emptyTitle,
   emptyIcon = 'shield-checkmark-outline',
 }: Props) {
-  const { queue, isLoading, busyId, error, refresh, acknowledge, investigate, escalate } =
+  const { queue, isLoading, busyId, error, refresh, acknowledge, startInvestigation, investigate, escalate } =
     useReportWorkflow(reportType, 'supervisor');
   const [expandedId, setExpanded] = useState<number | null>(null);
   const [investigating, setInvestigating] = useState<ReportListItem | null>(null);
@@ -122,6 +126,7 @@ export function ReportWorkflowList({
           #{item.id} · {STATUS_LABEL[status] ?? status} · {timeAgo(item.reported_at ?? item.created_at)}
         </Text>
 
+
         {isBusy ? (
           <ActivityIndicator style={styles.busy} color={Colors.primary} />
         ) : (
@@ -136,7 +141,20 @@ export function ReportWorkflowList({
               </TouchableOpacity>
             )}
 
-            {(status === 'acknowledged' || status === 'under_investigation') && (
+            {/* Stage 03 -> 04. Distinct from completing the investigation:
+                opening it is what puts the record visibly in INVESTIGATE while
+                the work is happening. */}
+            {status === 'acknowledged' && (
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => startInvestigation(item.id)}
+              >
+                <Ionicons name="play-circle-outline" size={16} color={Colors.white} />
+                <Text style={styles.btnPrimaryText}>Start investigation</Text>
+              </TouchableOpacity>
+            )}
+
+            {status === 'under_investigation' && (
               <TouchableOpacity
                 style={[styles.btn, styles.btnPrimary]}
                 onPress={() => setInvestigating(item)}

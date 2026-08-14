@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert, Image, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { incidentWorkflowService, type CapaAction } from '../services/incidentWorkflowService';
+import { IncidentRecordCard } from '../components/workflow/IncidentRecordCard';
+import { API_BASE_URL } from '../constants/config';
 import { Colors } from '../theme/colors';
+import { DateTimePickerModal } from '../worker/components/inputs/DateTimePickerModal';
+
+/**
+ * Evidence is stored as a server path (/uploads/incidents/<uuid>.jpg), not a
+ * full URL, so it survives the host changing. The image host is the API host
+ * minus the /api/v1 suffix — the files are mounted at the server root, outside
+ * the API prefix.
+ */
+
 
 // WF-03 Q2 — the treatment levels the backend's decision tree understands.
 type TreatmentLevel = 'none' | 'first_aid' | 'medical_treatment' | 'hospitalisation' | 'fatality';
@@ -73,7 +84,7 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   // overdue. Left blank the backend applies the WF-04 rule instead: P1 24h,
   // P2 7 days, P3 30 days, P4 60 days, P5 90 days from the CAPA's type.
   const [capaDueDate, setCapaDueDate] = useState('');
-  const [aiDrafting, setAiDrafting] = useState(false);
+  const [dueDatePickerVisible, setDueDatePickerVisible] = useState(false);
 
   // ── WF-03 decision tree · Q2-Q4 ────────────────────────────────────────────
   // The reporter rarely knows the clinical outcome, so the investigation is
@@ -150,40 +161,22 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   };
 
   /**
-   * Prefill the investigation from what the reporter actually recorded.
-   *
-   * This used to be an "AI Draft" button that wrote one of two hardcoded
-   * scenarios — a generator oil spill or a walkway trip — with no reference to
-   * the real incident. Tapping it on a machine-guarding injury filled the form
-   * with a fictional trip hazard, and a supervisor who accepted it would file a
-   * false root cause and a CAPA that fixes nothing. Nothing about it was AI and
-   * nothing about it was grounded.
-   *
-   * It now copies only fields the incident itself carries, and leaves every
-   * analytical field blank: the 5-Whys and the corrective action are the
-   * investigator's judgement and must not be pre-answered by the app.
-   *
-   * If a genuine drafting assistant is wanted later, the grounded path is
-   * POST /ai/capabilities/CAP-RCA-001/invoke — it is registered, requires human
-   * review before use, and writes to the AI decision log.
+   * Stage 03 -> 04. Opening the investigation is a distinct act from
+   * submitting its findings: it starts the SLA the WF-03 classification set and
+   * puts the incident visibly in INVESTIGATE while the work is happening.
    */
-  const handlePrefillFromReport = () => {
-    if (!incident) return;
-    setAiDrafting(true);
-
-    const reported = [
-      incident.description && `Reported: ${incident.description}`,
-      incident.injured_body_part && `Injury: ${incident.injured_body_part}`,
-    ].filter(Boolean).join('\n');
-
-    // Why 1 asks for the direct cause. The reporter's own account is the best
-    // available starting point — but it is their words, marked as such, not an
-    // answer the app invented.
-    setWhy1(reported ? `${reported}\n(confirm or replace with the investigated direct cause)` : '');
-    setImmediateCause(incident.immediate_cause || '');
-    setImmediateActions(incident.immediate_actions_taken || '');
-
-    setAiDrafting(false);
+  const handleStartInvestigation = async () => {
+    setSubmitting(true);
+    try {
+      await incidentWorkflowService.startInvestigation(incidentId);
+      fetchIncidentDetails();
+    } catch (e: any) {
+      const detail = e.response?.data?.detail;
+      const errMsg = typeof detail === 'string' ? detail : (e.message || 'Unknown error');
+      Alert.alert('Error', `Could not open the investigation: ${errMsg}`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmitInvestigation = async () => {
@@ -324,37 +317,12 @@ export function CAPAManagementScreen({ route, navigation }: any) {
                   </Text>
                 </View>
               </View>
+
               <Text style={styles.detailType}>Type: {incident.incident_type?.toUpperCase()}</Text>
               <Text style={styles.detailDesc}>Description: {incident.description || 'No description provided.'}</Text>
-              
-              {incident.immediate_cause ? (
-                <Text style={styles.detailReason}>Reason / Cause: {incident.immediate_cause}</Text>
-              ) : null}
 
-              {incident.anyone_injured === 'Yes' && (
-                <Text style={styles.detailInjured}>⚠️ Injured Person: {incident.injured_person_name}</Text>
-              )}
+              <IncidentRecordCard incident={incident} />
 
-              {(() => {
-                try {
-                  const photos = typeof incident.evidence_json === 'string'
-                    ? JSON.parse(incident.evidence_json)
-                    : incident.evidence_json;
-                  if (Array.isArray(photos) && photos.length > 0) {
-                    return (
-                      <View style={styles.photosWrapper}>
-                        <Text style={styles.photosTitle}>Evidence Photos:</Text>
-                        <View style={styles.photosRow}>
-                          {photos.map((p: string, idx: number) => (
-                            <Text key={idx} style={styles.photoTag}>📸 {p}</Text>
-                          ))}
-                        </View>
-                      </View>
-                    );
-                  }
-                } catch (e) {}
-                return null;
-              })()}
             </View>
           )}
 
@@ -376,26 +344,55 @@ export function CAPAManagementScreen({ route, navigation }: any) {
             </View>
           )}
 
-          {/* Action Step 2: Investigation & CAPA Form */}
-          {incident && incident.workflow_status !== 'reported' && (
+          {/* Action Step 2: open the investigation (stage 03 -> 04) */}
+          {incident && incident.workflow_status === 'acknowledged' && (
+            <View style={styles.actionSection}>
+              <Text style={styles.sectionHeading}>Step 2: Open Investigation</Text>
+              <Text style={styles.sectionDesc}>
+                Starts the investigation clock. The root cause form opens once this incident is
+                formally under investigation.
+              </Text>
+              <TouchableOpacity style={styles.actionButton} onPress={handleStartInvestigation} disabled={submitting}>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="search-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.actionButtonText}>Start Investigation</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Past the supervisor's hands — say who has it rather than showing a
+              form the backend will reject. */}
+          {incident && ['pending_approval', 'escalated', 'capa_open', 'pending_verification', 'approved', 'closed'].includes(incident.workflow_status) && (
+            <View style={styles.actionSection}>
+              <Text style={styles.sectionHeading}>
+                {incident.workflow_status === 'capa_open'
+                  ? 'Corrective action in progress'
+                  : incident.workflow_status === 'closed'
+                    ? 'Closed'
+                    : 'With the manager'}
+              </Text>
+              <Text style={styles.sectionDesc}>
+                {incident.stage?.stage_description ||
+                  'This incident has moved past the investigation step.'}
+              </Text>
+            </View>
+          )}
+
+          {/* Action Step 3: Investigation & CAPA Form.
+              `under_investigation` only. The backend also accepts an
+              investigation from `acknowledged`, but showing the form there put
+              it on screen next to the Step 2 button telling the supervisor it
+              would open once the investigation was started — two contradictory
+              instructions at once. Later statuses are excluded because the
+              backend rejects them outright with a 400. */}
+          {incident && incident.workflow_status === 'under_investigation' && (
             <View style={styles.formContainer}>
-              <View style={styles.formHeaderRow}>
-                <Text style={styles.sectionHeading}>Step 2: Root Cause & CAPA Plan</Text>
-                {/* Labelled for what it does. It copies the reporter's own
-                    words across — it does not analyse the incident, so calling
-                    it "AI" invited investigators to trust content the app made
-                    up. */}
-                <TouchableOpacity style={styles.aiBtn} onPress={handlePrefillFromReport} disabled={aiDrafting}>
-                  {aiDrafting ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <>
-                      <Ionicons name="document-text-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
-                      <Text style={styles.aiBtnText}>Prefill from report</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.sectionHeading}>Step 3: Root Cause & CAPA Plan</Text>
 
               {/* ── WF-03 severity classification ────────────────────────────
                   These decide P1-P5, the investigation SLA and whether a
@@ -444,18 +441,18 @@ export function CAPAManagementScreen({ route, navigation }: any) {
 
               {/* 5 Whys Form */}
               <Text style={styles.label}>5 Whys Analysis</Text>
-              <TextInput style={styles.input} placeholder="Why 1: What was the direct cause?" value={why1} onChangeText={setWhy1} />
-              <TextInput style={styles.input} placeholder="Why 2: Why did that occur?" value={why2} onChangeText={setWhy2} />
-              <TextInput style={styles.input} placeholder="Why 3: Why was that the case?" value={why3} onChangeText={setWhy3} />
-              <TextInput style={styles.input} placeholder="Why 4: What is the underlying reason?" value={why4} onChangeText={setWhy4} />
-              <TextInput style={styles.input} placeholder="Why 5: What is the root cause?" value={why5} onChangeText={setWhy5} />
+              <TextInput style={styles.input} placeholder="Why 1: What was the direct cause?" placeholderTextColor="#94A3B8" value={why1} onChangeText={setWhy1} />
+              <TextInput style={styles.input} placeholder="Why 2: Why did that occur?" placeholderTextColor="#94A3B8" value={why2} onChangeText={setWhy2} />
+              <TextInput style={styles.input} placeholder="Why 3: Why was that the case?" placeholderTextColor="#94A3B8" value={why3} onChangeText={setWhy3} />
+              <TextInput style={styles.input} placeholder="Why 4: What is the underlying reason?" placeholderTextColor="#94A3B8" value={why4} onChangeText={setWhy4} />
+              <TextInput style={styles.input} placeholder="Why 5: What is the root cause?" placeholderTextColor="#94A3B8" value={why5} onChangeText={setWhy5} />
 
               {/* Causes */}
               <Text style={styles.label}>Immediate Cause</Text>
-              <TextInput style={styles.input} placeholder="e.g. Loose seal / Broken bolt" value={immediateCause} onChangeText={setImmediateCause} />
+              <TextInput style={styles.input} placeholder="e.g. Loose seal / Broken bolt" placeholderTextColor="#94A3B8" value={immediateCause} onChangeText={setImmediateCause} />
               
               <Text style={styles.label}>Immediate Actions Taken</Text>
-              <TextInput style={styles.input} placeholder="e.g. Area cordoned off" value={immediateActions} onChangeText={setImmediateActions} />
+              <TextInput style={styles.input} placeholder="e.g. Area cordoned off" placeholderTextColor="#94A3B8" value={immediateActions} onChangeText={setImmediateActions} />
 
               {/* CAPA Setup */}
               <Text style={styles.sectionHeading}>Corrective Action (CAPA)</Text>
@@ -496,13 +493,14 @@ export function CAPAManagementScreen({ route, navigation }: any) {
               <TextInput style={styles.input} value={capaAssigneeId} onChangeText={setCapaAssigneeId} keyboardType="numeric" />
 
               <Text style={styles.label}>CAPA Due Date (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Leave blank to apply the WF-04 rule"
-                placeholderTextColor="#94A3B8"
-                value={capaDueDate}
-                onChangeText={setCapaDueDate}
-              />
+              <TouchableOpacity
+                style={[styles.input, { justifyContent: 'center', height: 40 }]}
+                onPress={() => setDueDatePickerVisible(true)}
+              >
+                <Text style={{ fontSize: 13, color: capaDueDate ? '#2D3748' : '#94A3B8' }}>
+                  {capaDueDate || 'Select due date'}
+                </Text>
+              </TouchableOpacity>
               <Text style={styles.hint}>
                 Left blank the due date follows the CAPA type: P1 24 h, P2 7 days, P3 30 days, P4 60 days, P5 90 days.
               </Text>
@@ -522,6 +520,19 @@ export function CAPAManagementScreen({ route, navigation }: any) {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      <DateTimePickerModal
+        visible={dueDatePickerVisible}
+        value={capaDueDate ? `${capaDueDate} 00:00` : null}
+        title="CAPA Due Date"
+        minToday={true}
+        onCancel={() => setDueDatePickerVisible(false)}
+        onConfirm={(val) => {
+          const datePart = val.split(' ')[0]; // Extract "YYYY-MM-DD"
+          setCapaDueDate(datePart);
+          setDueDatePickerVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -554,9 +565,6 @@ const styles = StyleSheet.create({
   actionButton: { backgroundColor: '#004AC6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, width: '100%' },
   actionButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   formContainer: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  formHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  aiBtn: { backgroundColor: '#8B5CF6', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  aiBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   chip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#FFFFFF' },
   chipOn: { borderColor: Colors.primary, backgroundColor: '#EFF6FF' },
@@ -571,8 +579,4 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   detailReason: { fontSize: 13, color: '#334155', marginTop: 6, fontWeight: '600' },
   detailInjured: { fontSize: 13, color: '#EF4444', marginTop: 6, fontWeight: '700' },
-  photosWrapper: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 8 },
-  photosTitle: { fontSize: 12, fontWeight: '700', color: '#4A5568', marginBottom: 6 },
-  photosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  photoTag: { backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, color: '#334155', fontWeight: '600' }
 });

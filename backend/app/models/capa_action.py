@@ -6,7 +6,15 @@ class CapaAction(Base):
     __tablename__ = "capa_actions"
 
     organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
+    # Kept and still populated for incidents: fourteen aggregate queries filter
+    # or join on it. New families use subject_family/subject_id below.
     incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=True)
+
+    # Polymorphic parent (migration 056). Without this only incidents could
+    # raise a corrective action, which is what made stages 05 IMPROVE and
+    # 06 VERIFY unreachable for every other family.
+    subject_family = Column(String(20), nullable=True)
+    subject_id = Column(Integer, nullable=True)
     action_type = Column(String(100))
     description = Column(Text)
     root_cause_addressed = Column(String(255))

@@ -15,6 +15,13 @@ interface HazardRow {
   probability: string | null;
   register_status: string | null;
   controls: string | null;
+  // Derived server-side from register_status. Kept on the type because the
+  // API returns it, even though the stage rail is not rendered.
+  stage?: string | null;
+  stage_number?: number | null;
+  stage_label?: string | null;
+  completed_stages?: string[];
+  total_stages?: number | null;
 }
 
 interface Station { id: number; station_name: string }

@@ -69,12 +69,15 @@ export function useReportWorkflow(type: ReportType, stage: 'supervisor' | 'manag
 
     // Supervisor
     acknowledge: (id: number, notes?: string) => run(id, () => service.acknowledge(id, notes)),
+    startInvestigation: (id: number) => run(id, () => service.startInvestigation(id)),
     investigate: (id: number, payload: InvestigatePayload) =>
       run(id, () => service.investigate(id, payload)),
     escalate: (id: number, reason: string) => run(id, () => service.escalate(id, reason)),
 
     // Manager
     approve: (id: number, approved = true) => run(id, () => service.approveInvestigation(id, approved)),
+    verifyEffectiveness: (id: number, effective: boolean, notes?: string) =>
+      run(id, () => service.verifyEffectiveness(id, effective, notes)),
     close: (id: number, payload: ClosePayload) => run(id, () => service.close(id, payload)),
   };
 }

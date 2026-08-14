@@ -1,18 +1,40 @@
-"""Permit to Work workflow (flow 6): Worker → Supervisor → Manager → Auditor.
+"""Permit to Work workflow (flow 6), on the same eight stages as every other
+safety event.
+
+    01 RECORD      a draft in event_drafts (family `permit`)
+    02 ASSESS      requested | acknowledged — awaiting review and the gate check
+    03 RESPOND     gate_blocked   — a hard gate failed; fix it before issue
+    04 INVESTIGATE suspended      — work stopped, cause being established
+    05 IMPROVE     issued         — granted, controls attached, work not started
+    06 VERIFY      active         — live work relying on those controls
+    07 LEARN       expired        — work finished, close-out lesson owed
+    08 CLOSE       closed | rejected | cancelled
 
     worker    POST /permit-workflow/request            → requested
     worker    GET  /permit-workflow/my-permits
     supr      GET  /permit-workflow/pending-review      (requested)
     supr      POST /{id}/acknowledge                    → acknowledged
     mgr       GET  /permit-workflow/manager-queue       (requested | acknowledged)
-    mgr       POST /{id}/approve                        → approved   (status='Active')
-    mgr       POST /{id}/reject                         → rejected   (status='Rejected')
+    mgr       POST /{id}/approve                        → issued    (status='Active')
+    mgr       POST /{id}/reject                         → rejected  (status='Rejected')
+    worker    POST /{id}/activate                       → active
+    supr      POST /{id}/suspend                        → suspended
+    supr      POST /{id}/resume                         → active
+    worker    POST /{id}/complete-work                  → expired
+    supr      POST /{id}/close                          → closed
     mgr       GET  /permit-workflow/active              (monitoring)
     auditor   GET  /permit-workflow/audit-list          (active permits to verify)
     auditor   POST /{id}/verify                         → records on-site verification
 
-Writes to permits_to_work. The website's dashboard counts status='Active', so approval
-sets BOTH workflow_status='approved' and status='Active'; nothing else touches status.
+Writes to permits_to_work. Two status columns, deliberately:
+
+  `status`          the website's business state (Pending / Active / Suspended /
+                    Rejected / Closed). Six analytics aggregates count
+                    status='Active' to mean "live permit", so its meaning is
+                    left exactly as it was.
+  `workflow_status` the permit's own state machine, and the column the eight
+                    stages are derived from. Read outside this controller only by
+                    gate_engine and one `requested` count in stubs.py.
 """
 from datetime import date, datetime
 from typing import List, Optional
@@ -34,6 +56,7 @@ from app.controllers.workflow_common import (
     station_id_for,
 )
 from app.models.permit_to_work import PermitToWork
+from app.services import workflow_stages
 from app.services.gate_engine import evaluate_permit_gates
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
@@ -42,6 +65,7 @@ from app.schemas.permit_workflow import (
     PermitListItem,
     PermitReject,
     PermitRequest,
+    PermitSuspend,
     PermitClose,
     PermitVerify,
     PermitWorkflowResponse,
@@ -81,11 +105,20 @@ def _resolve_permit_type_id(db: Session, data: dict, org_id: Optional[int]) -> O
 
 
 def _respond(row) -> PermitWorkflowResponse:
+    # Derived from workflow_status on the way out, never stored — see
+    # PERMIT_STATUS_STAGE for why the stage rides on workflow_status and not on
+    # the `status` column the dashboards count.
+    _stage = workflow_stages.describe("permit", row.workflow_status)
     return PermitWorkflowResponse(
         id=row.id,
         permit_ref=_permit_ref(row),
         permit_type_id=row.permit_type_id,
         workflow_status=row.workflow_status,
+        stage=_stage.get("stage"),
+        stage_number=_stage.get("stage_number"),
+        stage_label=_stage.get("stage_label"),
+        completed_stages=_stage.get("completed_stages") or [],
+        total_stages=_stage.get("total_stages"),
         status=row.status,
         work_description=row.work_description,
         location_station_id=row.location_station_id,
@@ -110,8 +143,10 @@ def _respond(row) -> PermitWorkflowResponse:
 
 
 def _list(rows) -> List[PermitListItem]:
-    return [
-        PermitListItem(
+    out = []
+    for r in rows:
+        st = workflow_stages.describe("permit", r.workflow_status)
+        out.append(PermitListItem(
             id=r.id,
             permit_ref=_permit_ref(r),
             permit_type_id=r.permit_type_id,
@@ -122,9 +157,13 @@ def _list(rows) -> List[PermitListItem]:
             requested_by=r.requested_by,
             requested_at=r.requested_at,
             validity_end=r.validity_end,
-        )
-        for r in rows
-    ]
+            stage=st.get("stage"),
+            stage_number=st.get("stage_number"),
+            stage_label=st.get("stage_label"),
+            completed_stages=st.get("completed_stages") or [],
+            total_stages=st.get("total_stages"),
+        ))
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -276,6 +315,10 @@ def manager_approve(
     row.gate_blocked_reason = "; ".join(evaluation.blocked_reasons) or None
 
     if evaluation.overall == "block":
+        # Stage 03 RESPOND. A hard gate failure is a control problem someone has
+        # to fix before the work can be granted — the permit is not simply still
+        # "requested", it is waiting on a corrective response.
+        row.workflow_status = "gate_blocked"
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -290,7 +333,10 @@ def manager_approve(
             },
         )
 
-    row.workflow_status = "approved"
+    # Stage 05 IMPROVE — granted, with its control set attached, but nobody is
+    # working under it yet. Activation (stage 06) is the separate act of
+    # starting the job.
+    row.workflow_status = "issued"
     row.status = "Active"  # website dashboard counts active permits by this field
     row.approved_at = datetime.now()
     row.approved_by = employee_id_for(db, current_user.user_id)
@@ -298,6 +344,98 @@ def manager_approve(
         row.validity_start = payload.validity_start
     if payload.validity_end is not None:
         row.validity_end = payload.validity_end
+    db.commit()
+    db.refresh(row)
+    return _respond(row)
+
+
+@router.post("/{permit_id}/activate", response_model=PermitWorkflowResponse)
+def activate_permit(
+    permit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 05 -> 06. Work starts under the permit.
+
+    An issued permit and one being worked under are different things: the first
+    is a granted authorisation, the second is live work whose controls are being
+    relied on right now. Stage 06 VERIFY is the second.
+    """
+    row = _get(db, permit_id, current_user.org_id)
+    if row.workflow_status not in ("issued", "approved"):
+        raise HTTPException(
+            status_code=400, detail="Only an issued permit can be activated"
+        )
+    row.workflow_status = "active"
+    row.status = "Active"
+    db.commit()
+    db.refresh(row)
+    return _respond(row)
+
+
+@router.post("/{permit_id}/suspend", response_model=PermitWorkflowResponse)
+def suspend_permit(
+    permit_id: int,
+    payload: PermitSuspend,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 06 -> 04. Work stops and the cause is established.
+
+    This is the permit's genuine INVESTIGATE state. The gate evaluation before
+    issue is triage, not investigation — this is the case where something went
+    wrong under a live permit and nobody goes back in until it is understood.
+    """
+    require_role(current_user.role, ALL_ELEVATED_ROLES, "suspend permits")
+    row = _get(db, permit_id, current_user.org_id)
+    if row.workflow_status not in ("active", "issued"):
+        raise HTTPException(
+            status_code=400, detail="Only a live permit can be suspended"
+        )
+    row.workflow_status = "suspended"
+    row.status = "Suspended"
+    row.suspension_reason = payload.reason
+    db.commit()
+    db.refresh(row)
+    return _respond(row)
+
+
+@router.post("/{permit_id}/resume", response_model=PermitWorkflowResponse)
+def resume_permit(
+    permit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 04 -> 06. The cause was established and work may restart."""
+    require_role(current_user.role, ALL_ELEVATED_ROLES, "resume permits")
+    row = _get(db, permit_id, current_user.org_id)
+    if row.workflow_status != "suspended":
+        raise HTTPException(status_code=400, detail="Permit is not suspended")
+    row.workflow_status = "active"
+    row.status = "Active"
+    db.commit()
+    db.refresh(row)
+    return _respond(row)
+
+
+@router.post("/{permit_id}/complete-work", response_model=PermitWorkflowResponse)
+def complete_permit_work(
+    permit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 06 -> 07. Work is finished; the permit is spent and owes its lesson.
+
+    Named for what the holder does. The status is `expired` because that is what
+    a permit becomes once its work is done — it is no longer an authorisation
+    anyone can rely on, but it is not closed out either.
+    """
+    row = _get(db, permit_id, current_user.org_id)
+    if row.workflow_status not in ("active", "issued"):
+        raise HTTPException(
+            status_code=400, detail="Only a live permit can be completed"
+        )
+    row.workflow_status = "expired"
     db.commit()
     db.refresh(row)
     return _respond(row)
@@ -399,6 +537,23 @@ def supervisor_close(
     """
     require_role(current_user.role, SUPERVISOR_ROLES | MANAGER_ROLES, "close permits")
     row = _get(db, permit_id, current_user.org_id)
+
+    if row.workflow_status == "closed":
+        raise HTTPException(status_code=400, detail="Permit is already closed")
+
+    # Stage 08 is the end of the ring. A permit still being worked under has not
+    # reached LEARN, and closing it out would record a close-out for work that is
+    # still happening. Rejected permits are already terminal and skip this.
+    if row.workflow_status not in ("expired", "rejected", "cancelled"):
+        st = workflow_stages.describe("permit", row.workflow_status)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Permit is at stage {st.get('stage_number')} "
+                f"{st.get('stage_label') or row.workflow_status} and cannot be closed yet. "
+                "Complete the work first so the permit reaches close-out."
+            ),
+        )
 
     def _yes_no(value: str) -> str:
         return "Yes" if str(value or "").strip().lower() in ("yes", "true", "1") else "No"

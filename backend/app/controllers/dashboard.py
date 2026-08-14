@@ -77,7 +77,9 @@ def get_dashboard_stats(
         return _date_filter(_org_filter(db.query(CapaAction), CapaAction, org_id), CapaAction.due_date, start_date, end_date)
 
     total_incidents = inc_q().count()
-    open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status != "Completed").count()
+    open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
+        (CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])
+    ).count()
     # CAPA data already carries a real "Overdue" status (client's own Excel spec counts
     # it the same way: COUNTIF Status = "Overdue"). Recomputing via due_date < today
     # was comparing seed due-dates from 2024-2025 against a 2026 system clock, so it
@@ -106,7 +108,9 @@ def get_dashboard_stats(
     ).count()
 
     # capa_completion_rate is org-wide (not date filtered) — it's a point-in-time health metric
-    capa_completed = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(CapaAction.status == "Completed").count()
+    capa_completed = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
+        func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"])
+    ).count()
     capa_total = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
     capa_completion_rate = round((capa_completed / capa_total * 100) if capa_total else 0, 1)
 
@@ -410,7 +414,7 @@ def get_ranked_capa_actions(
     org_id = current_user.org_id
     q = _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)\
         .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)\
-        .filter(CapaAction.status != "Completed")
+        .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
     if start_date:
         q = q.filter(func.date(CapaAction.due_date) >= start_date)
     if end_date:

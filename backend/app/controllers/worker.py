@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.services import media_storage
 
 router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
 
@@ -585,14 +586,60 @@ def shift_check_in(
 
 # ─── Incidents Endpoints ──────────────────────────────────────────────────────
 
+async def _body_and_photos(request: Request) -> tuple[dict, list[str]]:
+    """Read the report body, whether it arrived as JSON or as multipart.
+
+    The mobile app already builds a multipart body when the worker attached
+    photos — `data` holds the JSON report and `photo_0..n` hold the files — but
+    this endpoint only ever accepted a JSON dict, so any request carrying real
+    photos was rejected outright. Both shapes are handled here so a report with
+    no photos keeps taking the cheaper JSON path.
+
+    Returns the report dict and the URLs of any images written to disk.
+    """
+    content_type = (request.headers.get("content-type") or "").lower()
+
+    if not content_type.startswith("multipart/form-data"):
+        payload = await request.json()
+        return payload.get("data", payload), []
+
+    form = await request.form()
+
+    raw = form.get("data")
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else (raw or {})
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"`data` is not valid JSON: {exc}")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="`data` must be a JSON object")
+
+    urls: list[str] = []
+    for key in sorted(k for k in form.keys() if k.startswith("photo_")):
+        upload = form[key]
+        if not hasattr(upload, "read"):
+            continue
+        try:
+            urls.append(
+                media_storage.save_image(
+                    await upload.read(),
+                    getattr(upload, "filename", None),
+                    getattr(upload, "content_type", None),
+                )
+            )
+        except media_storage.MediaRejected as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    return data, urls
+
+
 @router.post("/incidents")
-def report_incident(
-    payload: dict,
+async def report_incident(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    data = payload.get("data", payload)
-    
+    data, photo_urls = await _body_and_photos(request)
+
     # Find employee linked to this user
     user_row = db.execute(
         text("SELECT employee_id FROM users WHERE id = :uid"),
@@ -666,7 +713,13 @@ def report_incident(
             "hazard_still_present": _yes_no("hazard_still_present"),
             "immediate_actions_taken": data.get("immediate_actions_taken") or None,
             "witnesses_json": json.dumps(data.get("witnesses", [])),
-            "evidence_json": json.dumps(data.get("photos") or data.get("mockPhotos") or []),
+            # Real uploaded images win. `photos`/`mockPhotos` in the JSON body
+            # are the older clients' shape — a list of bare filenames that point
+            # at nothing — so they are only used when nothing was actually
+            # uploaded.
+            "evidence_json": json.dumps(
+                photo_urls or data.get("photos") or data.get("mockPhotos") or []
+            ),
             "gps_latitude": data.get("gps_latitude"),
             "gps_longitude": data.get("gps_longitude"),
             "investigation_status": "open",

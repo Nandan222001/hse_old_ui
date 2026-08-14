@@ -24,6 +24,7 @@ class IncidentBase(BaseModel):
     capa_generated: Optional[str] = None
     days_away: Optional[int] = None
     root_cause_category: Optional[str] = None
+    source: Optional[str] = None
 
 
 class IncidentCreate(IncidentBase):

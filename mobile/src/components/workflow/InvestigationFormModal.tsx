@@ -9,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
@@ -40,6 +41,14 @@ const WHY_LABELS = [
   'And why was that?',
   'And why was that?',
   'Root of the chain',
+];
+
+const WHY_PLACEHOLDERS = [
+  'e.g., Why did the worker fall? (Because the ladder slipped)',
+  'e.g., Why did the ladder slip? (Because it was not secured)',
+  'e.g., Why was it not secured? (Because there was no strap)',
+  'e.g., Why was there no strap? (Because toolbox lacked gear)',
+  'e.g., Why was gear missing? (Because no monthly checks were done)',
 ];
 
 interface Props {
@@ -82,14 +91,19 @@ export function InvestigationFormModal({
   const reset = () => {
     setRootCause('');
     setActions('');
+    const s = (initialSeverity ?? '').toLowerCase() as Severity;
+    setSeverity(SEVERITIES.includes(s) ? s : 'low');
     setWhys(['', '', '', '', '']);
-    setShowWhys(false);
+    setShowWhys(true);
     setTouched(false);
   };
 
   const handleSubmit = () => {
     setTouched(true);
-    if (!rootCause.trim()) return;
+    if (!rootCause.trim()) {
+      Alert.alert('Required field', 'Root cause is required.');
+      return;
+    }
 
     // Backend stores five_why_analysis as a JSON object; only send the boxes filled in.
     const fiveWhy = whys.reduce<Record<string, string>>((acc, val, i) => {
@@ -117,7 +131,7 @@ export function InvestigationFormModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
           <View style={styles.header}>
@@ -138,14 +152,16 @@ export function InvestigationFormModal({
               onChangeText={setRootCause}
               minHeight={80}
               error={rootCauseError}
+              placeholderTextColor="#94A3B8"
             />
 
             <TextArea
               label="Immediate actions taken"
-              placeholder="What did you do on site right away?"
+              placeholder="Describe containment or cleanup actions…"
               value={actions}
               onChangeText={setActions}
               minHeight={70}
+              placeholderTextColor="#94A3B8"
             />
 
             {/* Optional, and collapsed by default so the required field stays in view. */}
@@ -165,10 +181,11 @@ export function InvestigationFormModal({
                 <TextArea
                   key={i}
                   label={`${i + 1}. ${WHY_LABELS[i]}`}
-                  placeholder="Because…"
+                  placeholder={WHY_PLACEHOLDERS[i]}
                   value={val}
                   onChangeText={(t) => setWhys((prev) => prev.map((p, j) => (j === i ? t : p)))}
                   minHeight={54}
+                  placeholderTextColor="#94A3B8"
                 />
               ))}
 

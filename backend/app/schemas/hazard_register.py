@@ -7,7 +7,7 @@ Separate from schemas/hazard.py (the website's catalog CRUD) so the register wor
 cannot alter the catalog contract.
 """
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,17 @@ class HazardVerify(BaseModel):
     verification_notes: Optional[str] = None
 
 
+class HazardVerifyControls(BaseModel):
+    """Stage 06 VERIFY — did the permanent control hold?
+
+    Distinct from HazardVerify above, which is the auditor's assurance check and
+    gates nothing. This one moves the hazard between stages 05 and 07.
+    """
+
+    effective: bool = Field(..., description="Did the control work?")
+    verification_notes: Optional[str] = Field(None, description="What was checked, and how")
+
+
 class HazardRegisterResponse(BaseModel):
     id: int
     hazard_name: Optional[str] = None
@@ -60,5 +71,13 @@ class HazardRegisterResponse(BaseModel):
     auditor_verified_by: Optional[int] = None
     auditor_verified_at: Optional[datetime] = None
     verification_notes: Optional[str] = None
+
+    # Position on the eight stages, derived from register_status by
+    # workflow_stages.describe("hazard_register", ...) — never stored.
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
 
     model_config = {"from_attributes": True}

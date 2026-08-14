@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, StatusBar, SafeAreaView,
-  ActivityIndicator, RefreshControl, TouchableOpacity,
+  View, Text, ScrollView, StyleSheet, StatusBar, ActivityIndicator, RefreshControl, TouchableOpacity,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { auditService, Audit } from '../services/auditService';
 

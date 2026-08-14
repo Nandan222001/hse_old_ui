@@ -14,6 +14,7 @@ interface RecentIncident {
   investigation_status: string | null;
   incident_date_time: string | null;
   report_date: string | null;
+  source?: string | null;
 }
 
 function CardHeader({ icon: Icon, title }: Readonly<{ icon: LucideIcon; title: string }>) {
@@ -317,7 +318,7 @@ export function ViolationsPage() {
             <table className="w-full min-w-[640px]">
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
-                  {["Incident ID", "Type", "Severity", "Status", "Date"].map(h => (
+                  {["Incident ID", "Type", "Severity", "Status", "Source", "Date"].map(h => (
                     <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: '#64748B', fontWeight: 700 }}>{h}</th>
                   ))}
                 </tr>
@@ -334,6 +335,17 @@ export function ViolationsPage() {
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.incident_type || '—'}</td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.severity || '—'}</td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.investigation_status || 'Pending'}</td>
+                    <td className="px-3 py-2 text-[13px]">
+                      {inc.source === 'Mobile App' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          📱 Mobile
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-100">
+                          💻 Web
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-[13px]" style={{ color: '#64748B' }}>
                       {inc.incident_date_time ? new Date(inc.incident_date_time).toLocaleDateString() : (inc.report_date || '—')}
                     </td>

@@ -36,7 +36,13 @@ _SOURCES: Dict[str, tuple] = {
     "near_miss": ("near_misses", "assessed_priority", "workflow_status"),
     "unsafe_act": ("unsafe_acts", "assessed_priority", "workflow_status"),
     "hazard": ("risk_reports", "assessed_priority", "workflow_status"),
-    "permit": ("permits_to_work", None, "status"),
+    # The standing register is a different thing from the worker-reported hazard
+    # above: its own table, its own status column, its own mapping.
+    "hazard_register": ("hazards", None, "register_status"),
+    # workflow_status, not status: `status` is the website's business state and
+    # is counted as 'Active' by the analytics dashboards, so the lifecycle rides
+    # on workflow_status instead. See PERMIT_STATUS_STAGE.
+    "permit": ("permits_to_work", None, "workflow_status"),
     "audit": ("audits", None, "status"),
 }
 

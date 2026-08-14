@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
-  SafeAreaView, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { auditService, Audit } from '../services/auditService';
 
 const STATUS_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
   scheduled: { bg: '#EFF6FF', fg: '#3B82F6', label: 'Scheduled' },
   in_progress: { bg: '#F5F3FF', fg: '#8B5CF6', label: 'In Progress' },
+  // Stop-work: a critical finding has to be contained before the audit resumes.
+  immediate_action: { bg: '#FEE2E2', fg: '#B91C1C', label: 'Stop Work' },
+  fieldwork: { bg: '#F5F3FF', fg: '#8B5CF6', label: 'Fieldwork' },
+  findings_raised: { bg: '#FFF7ED', fg: '#C2410C', label: 'Findings Raised' },
+  capa_open: { bg: '#FFF7ED', fg: '#C2410C', label: 'Actions Open' },
+  pending_review: { bg: '#EFF6FF', fg: '#2563EB', label: 'Awaiting Verification' },
+  verified: { bg: '#ECFDF5', fg: '#059669', label: 'Verified' },
   overdue: { bg: '#FEE2E2', fg: '#EF4444', label: 'Overdue' },
   completed: { bg: '#DCFCE7', fg: '#16A34A', label: 'Completed' },
 };
@@ -38,6 +45,45 @@ export function AuditDetailScreen({ route, navigation }: any) {
   const passed = findings.filter((f: any) => (f.response || '').toLowerCase() === 'pass').length;
   const failed = findings.filter((f: any) => (f.response || '').toLowerCase() === 'fail').length;
   const done = audit.status === 'completed';
+
+  /**
+   * Run one lifecycle transition and take the server's word for the result.
+   *
+   * Every one of these is gated backend-side — the checklist decides whether a
+   * submit lands in stop-work, findings or straight to verification, and close
+   * is refused until the findings are verified. So the screen never predicts the
+   * next status, it re-reads it.
+   */
+  const [busy, setBusy] = useState(false);
+  const act = async (fn: () => Promise<Audit>, failureTitle: string) => {
+    try {
+      setBusy(true);
+      setAudit(await fn());
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      Alert.alert(failureTitle, typeof d === 'string' ? d : (e?.message || 'Unknown error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmVerify = () =>
+    Alert.alert(
+      'Did the findings get resolved?',
+      'Answering no returns the audit to its corrective actions.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Not resolved',
+          style: 'destructive',
+          onPress: () => act(() => auditService.verify(audit.id, false), 'Verification failed'),
+        },
+        {
+          text: 'Resolved',
+          onPress: () => act(() => auditService.verify(audit.id, true), 'Verification failed'),
+        },
+      ],
+    );
 
   const timeline = [
     { label: 'Scheduled', date: fmt(audit.scheduled_date), state: 'done' },
@@ -71,11 +117,64 @@ export function AuditDetailScreen({ route, navigation }: any) {
           </View>
         </View>
 
-        {!done && (
-          <TouchableOpacity style={styles.conductBtn} onPress={() => navigation.navigate('AuditChecklist', { audit })} activeOpacity={0.9}>
-            <Ionicons name="play" size={16} color="#FFFFFF" />
-            <Text style={styles.conductBtnText}>Conduct Audit</Text>
-          </TouchableOpacity>
+
+        {/* One action at a time — whichever stage the audit is actually waiting
+            on. Showing "Conduct Audit" at every status was how a submitted
+            audit still invited you to walk it again. */}
+        {busy ? (
+          <ActivityIndicator color="#2563EB" style={{ marginVertical: 16 }} />
+        ) : (
+          <>
+            {['scheduled', 'planned', 'draft', 'overdue'].includes(audit.status) && (
+              <TouchableOpacity style={styles.conductBtn} onPress={() => act(() => auditService.start(audit.id), 'Could not start')} activeOpacity={0.9}>
+                <Ionicons name="play" size={16} color="#FFFFFF" />
+                <Text style={styles.conductBtnText}>Start Audit</Text>
+              </TouchableOpacity>
+            )}
+
+            {audit.status === 'in_progress' && (
+              <TouchableOpacity style={styles.conductBtn} onPress={() => act(() => auditService.beginFieldwork(audit.id), 'Could not begin fieldwork')} activeOpacity={0.9}>
+                <Ionicons name="walk" size={16} color="#FFFFFF" />
+                <Text style={styles.conductBtnText}>Begin Fieldwork</Text>
+              </TouchableOpacity>
+            )}
+
+            {audit.status === 'immediate_action' && (
+              <>
+                <View style={styles.stopWork}>
+                  <Text style={styles.stopWorkTitle}>Stop work — critical finding</Text>
+                  <Text style={styles.stopWorkText}>
+                    Contain the hazard before the audit continues. Resume fieldwork once it is made safe.
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.conductBtn} onPress={() => act(() => auditService.beginFieldwork(audit.id), 'Could not resume')} activeOpacity={0.9}>
+                  <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                  <Text style={styles.conductBtnText}>Contained — Resume Fieldwork</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {audit.status === 'fieldwork' && (
+              <TouchableOpacity style={styles.conductBtn} onPress={() => navigation.navigate('AuditChecklist', { audit })} activeOpacity={0.9}>
+                <Ionicons name="clipboard" size={16} color="#FFFFFF" />
+                <Text style={styles.conductBtnText}>Conduct Audit</Text>
+              </TouchableOpacity>
+            )}
+
+            {['pending_review', 'findings_raised', 'capa_open'].includes(audit.status) && (
+              <TouchableOpacity style={styles.conductBtn} onPress={confirmVerify} activeOpacity={0.9}>
+                <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
+                <Text style={styles.conductBtnText}>Verify Findings</Text>
+              </TouchableOpacity>
+            )}
+
+            {audit.status === 'verified' && (
+              <TouchableOpacity style={[styles.conductBtn, styles.closeBtn]} onPress={() => act(() => auditService.close(audit.id), 'Could not close')} activeOpacity={0.9}>
+                <Ionicons name="lock-closed" size={16} color="#FFFFFF" />
+                <Text style={styles.conductBtnText}>Close Audit</Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
 
         {loading && <ActivityIndicator color="#2563EB" style={{ marginTop: 16 }} />}
@@ -147,6 +246,10 @@ const styles = StyleSheet.create({
   dateChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   dateChipText: { fontSize: 11, color: '#475569', fontWeight: '600' },
   conductBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1D4ED8', borderRadius: 12, height: 48, marginTop: 16 },
+  closeBtn: { backgroundColor: '#059669' },
+  stopWork: { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 16 },
+  stopWorkTitle: { fontSize: 13, fontWeight: '800', color: '#B91C1C', marginBottom: 4 },
+  stopWorkText: { fontSize: 12, color: '#7F1D1D', lineHeight: 17 },
   conductBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, marginTop: 16 },
   cardHeading: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 12 },

@@ -192,6 +192,7 @@ export interface ViolationDetail {
   timeline: { action: string; user: string; time: string; type: string }[];
   assignee: { name: string; role: string } | null;
   due_date: string | null;
+  source?: string;
 }
 
 export const getViolationDetail = (incidentId: number) =>

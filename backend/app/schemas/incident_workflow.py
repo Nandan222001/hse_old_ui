@@ -9,7 +9,9 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from app.services import workflow_stages
 
 
 # ── Worker: Report Incident ───────────────────────────────────────────────────
@@ -111,6 +113,18 @@ class ManagerApproveInvestigation(BaseModel):
     notes: Optional[str] = None
 
 
+# ── Manager: Verify CAPA effectiveness (stage 06) ─────────────────────────────
+
+class ManagerVerifyEffectiveness(BaseModel):
+    """Stage 06 VERIFY — did the corrective action actually work?
+
+    `effective=False` sends the incident back to IMPROVE: an action that did not
+    work means the problem is still live, and closing it would be a lie.
+    """
+    effective: bool = Field(..., description="Did the CAPA hold?")
+    verification_notes: Optional[str] = Field(None, description="What was checked, and how")
+
+
 # ── Manager: Close Incident ───────────────────────────────────────────────────
 
 class ManagerCloseIncident(BaseModel):
@@ -130,7 +144,40 @@ class CapaComplete(BaseModel):
 
 # ── Response Schemas ──────────────────────────────────────────────────────────
 
-class IncidentWorkflowResponse(BaseModel):
+class StageInfo(BaseModel):
+    """Where this incident sits on the eight-stage lifecycle.
+
+    Derived from workflow_status on the way out rather than stored, so it can
+    never disagree with the status the rest of the system reads.
+    """
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    stage_description: Optional[str] = None
+    total_stages: int = 8
+    completed_stages: List[str] = Field(default_factory=list)
+    is_closed: bool = False
+
+
+class _StageMixin(BaseModel):
+    """Adds the derived `stage` block to any response carrying a status."""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def stage(self) -> StageInfo:
+        d = workflow_stages.describe("incident", getattr(self, "workflow_status", None))
+        return StageInfo(
+            stage=d["stage"],
+            stage_number=d["stage_number"],
+            stage_label=d["stage_label"],
+            stage_description=d["stage_description"],
+            total_stages=d["total_stages"],
+            completed_stages=d["completed_stages"],
+            is_closed=d["is_closed"],
+        )
+
+
+class IncidentWorkflowResponse(_StageMixin):
     """Full incident response with workflow fields."""
     id: int
     organisation_id: Optional[int] = None
@@ -176,6 +223,18 @@ class IncidentWorkflowResponse(BaseModel):
     communicated_to_teams: Optional[str] = None
     manager_signature: Optional[str] = None
 
+    # Display labels for the foreign keys above, resolved on read by
+    # get_incident_detail. A reviewer needs the station's name, not its id.
+    location_station_name: Optional[str] = None
+    hazard_name: Optional[str] = None
+    reported_by_name: Optional[str] = None
+    supervisor_name: Optional[str] = None
+
+    # The corrective actions raised during the investigation. Travels with the
+    # record so an approver can see what they are signing off, not just that
+    # something exists.
+    capa_actions: List[dict] = Field(default_factory=list)
+
     # Worker extras
     anyone_injured: Optional[str] = None
     injured_person_name: Optional[str] = None
@@ -217,6 +276,13 @@ class IncidentWorkflowResponse(BaseModel):
     statutory_authorised_at: Optional[datetime] = None
     statutory_reference: Optional[str] = None
 
+    # Stage 06 VERIFY — the manager's confirmation that the CAPA held. Kept
+    # separate from the auditor trio below, which is a post-closure review.
+    capa_verified_by: Optional[int] = None
+    capa_verified_at: Optional[datetime] = None
+    capa_verification_notes: Optional[str] = None
+    capa_verification_failures: Optional[int] = None
+
     # Auditor close-out (stage 08). These were written by POST /{id}/verify but
     # never exposed here, so the detail endpoint the app reads reported an
     # audited incident as unverified.
@@ -227,7 +293,7 @@ class IncidentWorkflowResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class IncidentListItem(BaseModel):
+class IncidentListItem(_StageMixin):
     """Lighter response for list views."""
     id: int
     incident_date_time: Optional[datetime] = None

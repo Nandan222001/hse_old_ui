@@ -11,6 +11,11 @@ export interface HazardOption {
   hazard_name: string;
 }
 
+export interface EmployeeOption {
+  id: number;
+  full_name: string;
+}
+
 /**
  * Reference data for the FK pickers on the report forms. Report screens used to
  * post station *names* as free text, which meant location_station_id was always
@@ -24,6 +29,11 @@ export const lookupService = {
 
   async hazards(): Promise<HazardOption[]> {
     const { data } = await apiClient.get<HazardOption[]>(ENDPOINTS.HAZARDS.LIST);
+    return Array.isArray(data) ? data : [];
+  },
+
+  async employees(): Promise<EmployeeOption[]> {
+    const { data } = await apiClient.get<EmployeeOption[]>(ENDPOINTS.LOOKUPS.EMPLOYEES);
     return Array.isArray(data) ? data : [];
   },
 };

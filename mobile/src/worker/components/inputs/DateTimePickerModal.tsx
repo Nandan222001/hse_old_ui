@@ -30,6 +30,16 @@ interface DateTimePickerModalProps {
   minToday?: boolean;
   /** How many years into the future to offer. Default 3. */
   futureYears?: number;
+  /**
+   * Disallow dates after today. Default false.
+   *
+   * Set for things that have already happened — an incident cannot occur in the
+   * future, and a future date there would corrupt both the investigation SLA
+   * and the statutory notification clock, which count from the event time.
+   */
+  maxToday?: boolean;
+  /** How many years into the past to offer. Default 0 (today onwards only). */
+  pastYears?: number;
 }
 
 type Step = 'year' | 'month' | 'day' | 'time';
@@ -41,12 +51,12 @@ type Step = 'year' | 'month' | 'day' | 'time';
  */
 export function DateTimePickerModal({
   visible, value, onCancel, onConfirm, title = 'Select date & time',
-  minToday = true, futureYears = 3,
+  minToday = true, futureYears = 3, maxToday = false, pastYears = 0,
 }: DateTimePickerModalProps) {
   const now = new Date();
   const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const loYear = now.getFullYear();
-  const hiYear = loYear + futureYears;
+  const loYear = now.getFullYear() - pastYears;
+  const hiYear = now.getFullYear() + (maxToday ? 0 : futureYears);
 
   const parsed = useMemo(() => {
     if (value) {
@@ -95,6 +105,15 @@ export function DateTimePickerModal({
   const isPastDay = (d: number) => minToday && new Date(year, month, d) < nowMidnight;
   const isPastMonth = (mi: number) =>
     minToday && new Date(year, mi, 1) < new Date(nowMidnight.getFullYear(), nowMidnight.getMonth(), 1);
+
+  // Mirror images of the two above, for events that have already happened.
+  const isFutureDay = (d: number) => maxToday && new Date(year, month, d) > nowMidnight;
+  const isFutureMonth = (mi: number) =>
+    maxToday && new Date(year, mi, 1) > new Date(nowMidnight.getFullYear(), nowMidnight.getMonth(), 1);
+
+  /** A day the user must not pick, in either direction. */
+  const isDisabledDay = (d: number) => isPastDay(d) || isFutureDay(d);
+  const isDisabledMonth = (mi: number) => isPastMonth(mi) || isFutureMonth(mi);
 
   const confirm = () => {
     const clamped = Math.min(day, daysInMonth(year, month));
@@ -151,7 +170,7 @@ export function DateTimePickerModal({
             {step === 'month' && (
               <View style={styles.monthGrid}>
                 {MONTHS.map((m, i) => {
-                  const disabled = isPastMonth(i);
+                  const disabled = isDisabledMonth(i);
                   return (
                     <TouchableOpacity
                       key={m}
@@ -178,7 +197,7 @@ export function DateTimePickerModal({
                 <View style={styles.dayGrid}>
                   {grid.map((d, i) => {
                     if (d === null) return <View key={`b${i}`} style={styles.dayCell} />;
-                    const disabled = isPastDay(d);
+                    const disabled = isDisabledDay(d);
                     return (
                       <TouchableOpacity
                         key={d}

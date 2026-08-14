@@ -71,35 +71,60 @@ STAGE_ORDER: Dict[str, int] = {s.key: s.number for s in STAGES}
 
 # Incidents, near misses, unsafe acts and risk reports. These already share the
 # ReportWorkflowMixin status set, so one mapping covers all four.
+#
+# A status names the state the record is *waiting in*, so it maps to the stage
+# whose action is still outstanding. "acknowledged" means triage is done and
+# containment is what is now owed, which is why it reads RESPOND rather than
+# ASSESS. Read the mapping as "what has to happen next", not "what just
+# happened", or the whole thing looks off by one.
+# RECORD is held by a row in `event_drafts`, not by a status here — see
+# migration 055. Writing unsubmitted drafts into `incidents` / `near_misses`
+# would put them in front of the recurrence lookup, the SPS engine, contractor
+# risk and every dashboard, all of which count those tables unconditionally.
+# `draft` is listed so a draft can be described through the same call.
 REPORT_STATUS_STAGE: Dict[str, str] = {
-    "reported": ASSESS,              # recorded — awaiting triage
+    "draft": RECORD,                 # captured in event_drafts, not yet submitted
+    "reported": ASSESS,              # recorded — awaiting human triage of the AI's P1-P5
     "acknowledged": RESPOND,         # supervisor has taken control
     "under_investigation": INVESTIGATE,
     "escalated": INVESTIGATE,        # still being investigated, one level up
-    "pending_approval": VERIFY,      # investigation done, manager confirming
-    "approved": LEARN,               # confirmed, lesson to be captured on close
-    "investigated": VERIFY,
+    # Approving an RCA is the tail of the investigation, not proof the fix
+    # worked. Verification is its own stage now and happens after the CAPA
+    # closes, per the workflow slide's 05 -> 06 order.
+    "pending_approval": INVESTIGATE,
+    "capa_open": IMPROVE,            # corrective actions outstanding
+    "pending_verification": VERIFY,  # CAPA done, effectiveness unconfirmed
+    "investigated": VERIFY,          # legacy alias for pending_verification
+    "approved": LEARN,               # confirmed effective, lesson owed before closure
     "closed": CLOSE,
 }
 
-# Permit-to-work. A permit's "investigation" is its gate evaluation and its
-# "improve" step is the control set attached before issue.
+# Permit-to-work, read from `permits_to_work.workflow_status`.
 #
-# Read from `permits_to_work.status`, not `workflow_status`: `status` carries
-# the actual permit lifecycle (Pending → Active → Expired → Closed) while
-# `workflow_status` only tracks the approval chain. Keys are lowercase because
-# stage_for() lowercases before lookup — the column stores Title Case.
+# NOT from `status`: that column is the website's business state
+# (Pending → Active → Rejected → Closed) and six analytics aggregates count
+# `status == 'Active'` to mean "live permit". Driving the stage from it would
+# have meant re-pointing all of those, and any miss would silently zero a
+# dashboard. `workflow_status` is the permit's own state machine, read outside
+# this controller only by gate_engine (which already expects `active`) and one
+# `requested` count in stubs.py, so it can carry the full lifecycle safely.
 PERMIT_STATUS_STAGE: Dict[str, str] = {
     "draft": RECORD,
+    "requested": ASSESS,             # awaiting supervisor pickup / manager decision
+    "acknowledged": ASSESS,
     "submitted": ASSESS,
     "pending": ASSESS,
     "pending_approval": ASSESS,
     "gate_check": ASSESS,
     "gate_blocked": RESPOND,         # a failed gate is a control problem to fix
-    "approved": IMPROVE,
+    # Stage 04 for a permit: work has stopped because something went wrong under
+    # it, and the cause is established before anyone goes back in. This is the
+    # one genuine "investigate" state a permit has — the gate evaluation before
+    # issue is triage (02), not investigation.
+    "suspended": INVESTIGATE,
+    "approved": IMPROVE,             # granted; controls attached before issue
     "issued": IMPROVE,
     "active": VERIFY,                # live work under verification
-    "suspended": RESPOND,
     "expired": LEARN,
     "closed": CLOSE,
     "cancelled": CLOSE,
@@ -108,9 +133,14 @@ PERMIT_STATUS_STAGE: Dict[str, str] = {
 
 # Audits and inspections. Findings are the investigation, CAPAs the improvement.
 AUDIT_STATUS_STAGE: Dict[str, str] = {
+    "draft": RECORD,
     "scheduled": RECORD,
     "planned": RECORD,
     "in_progress": ASSESS,
+    # Stage 03 for an audit: a checklist item flagged as imminent danger stops
+    # the job. Containment happens before the audit carries on, which is exactly
+    # what RESPOND means everywhere else.
+    "immediate_action": RESPOND,
     "fieldwork": INVESTIGATE,
     "findings_raised": IMPROVE,
     "capa_open": IMPROVE,
@@ -120,13 +150,34 @@ AUDIT_STATUS_STAGE: Dict[str, str] = {
     "closed": CLOSE,
 }
 
+# The standing hazard register (`hazards` table, register_status column).
+#
+# Distinct from the `hazard` family below, which is the worker-reported hazard
+# on `risk_reports` and follows the report vocabulary. These were previously
+# both pointed at REPORT_STATUS_STAGE, so every register entry resolved to no
+# stage at all — none of open/under_review/controlled are report statuses.
+HAZARD_REGISTER_STATUS_STAGE: Dict[str, str] = {
+    "draft": RECORD,
+    "open": ASSESS,                  # logged — awaiting review
+    # A temporary control put in place while the permanent one is designed.
+    "interim_control": RESPOND,
+    "under_review": INVESTIGATE,
+    "controls_planned": IMPROVE,
+    "pending_verification": VERIFY,
+    "controlled": LEARN,             # permanent control confirmed; lesson owed
+    "closed": CLOSE,
+}
+
 # event family -> mapping
 FAMILY_MAPPINGS: Dict[str, Dict[str, str]] = {
     "incident": REPORT_STATUS_STAGE,
     "near_miss": REPORT_STATUS_STAGE,
     "unsafe_act": REPORT_STATUS_STAGE,
     "risk": REPORT_STATUS_STAGE,
+    # `hazard` is the worker-reported hazard on risk_reports — see
+    # workflow_engine._SOURCES. The standing register is `hazard_register`.
     "hazard": REPORT_STATUS_STAGE,
+    "hazard_register": HAZARD_REGISTER_STATUS_STAGE,
     "permit": PERMIT_STATUS_STAGE,
     "audit": AUDIT_STATUS_STAGE,
     "inspection": AUDIT_STATUS_STAGE,

@@ -19,7 +19,7 @@ export function TextArea({ label, minHeight = 100, error, style, ...rest }: Prop
         multiline
         textAlignVertical="top"
         style={[styles.input, { borderColor, minHeight }, style]}
-        placeholderTextColor={Colors.textLight}
+        placeholderTextColor="#94A3B8"
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         {...rest}

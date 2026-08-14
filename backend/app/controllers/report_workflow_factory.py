@@ -22,7 +22,7 @@ from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from app.config.database import SessionLocal
 from app.services import event_assessment, events, workflow_stages
@@ -34,6 +34,8 @@ from app.core.dependencies import CurrentUser, get_current_user
 from app.schemas.report_workflow import (
     ManagerApproveReport,
     ManagerCloseReport,
+    ManagerVerifyReportEffectiveness,
+    ReportCapaComplete,
     ReportListItem,
     ReportVerify,
     ReportWorkflowResponse,
@@ -57,7 +59,40 @@ ALL_READ_ROLES = SUPERVISOR_ROLES | MANAGER_ROLES | AUDITOR_ROLES
 ESCALATING_SEVERITIES = {"high", "critical"}
 
 SUPERVISOR_QUEUE_STATUSES = ["reported", "acknowledged", "under_investigation"]
-MANAGER_QUEUE_STATUSES = ["escalated", "pending_approval"]
+# Stages 04, 05, 06 and 07 all sit with the manager in one form or another.
+# `capa_open` is here so a record does not vanish from the manager's view for
+# the length of a corrective action that may run 90 days.
+MANAGER_QUEUE_STATUSES = [
+    "escalated",             # 04 — needs a decision one level up
+    "pending_approval",      # 04 — RCA awaiting sign-off
+    "capa_open",             # 05 — visible, but the action is the assignee's
+    "pending_verification",  # 06 — fix done, effectiveness unconfirmed
+    "approved",              # 07 — verified, awaiting the lesson and closure
+]
+
+
+def _has_open_capa(db: Session, family: str, record_id: int) -> bool:
+    """Is any corrective action for this record still outstanding?"""
+    from app.models.capa_action import CapaAction
+
+    return (
+        db.query(CapaAction.id)
+        .filter(CapaAction.subject_family == family, CapaAction.subject_id == record_id)
+        .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
+        .first()
+        is not None
+    )
+
+
+def _has_any_capa(db: Session, family: str, record_id: int) -> bool:
+    from app.models.capa_action import CapaAction
+
+    return (
+        db.query(CapaAction.id)
+        .filter(CapaAction.subject_family == family, CapaAction.subject_id == record_id)
+        .first()
+        is not None
+    )
 
 
 def _role_matches(user_role: str, allowed: set) -> bool:
@@ -169,8 +204,13 @@ def build_workflow_router(
         )
 
     def _list(rows) -> List[ReportListItem]:
-        return [
-            ReportListItem(
+        out = []
+        for r in rows:
+            # Derived once, the same way _respond does it. This used to call
+            # stage_for twice and omit completed_stages and total_stages
+            # entirely, so a queue card had no way to draw the stage rail.
+            st = workflow_stages.describe(report_type, r.workflow_status)
+            out.append(ReportListItem(
                 id=r.id,
                 report_type=report_type,
                 workflow_status=r.workflow_status,
@@ -186,13 +226,13 @@ def build_workflow_router(
                 assessed_priority=getattr(r, "assessed_priority", None),
                 is_hipo=bool(getattr(r, "is_hipo", 0)),
                 response_due_at=getattr(r, "response_due_at", None),
-                stage=workflow_stages.stage_for(report_type, r.workflow_status),
-                stage_number=workflow_stages.stage_number(
-                    workflow_stages.stage_for(report_type, r.workflow_status)
-                ),
-            )
-            for r in rows
-        ]
+                stage=st.get("stage"),
+                stage_number=st.get("stage_number"),
+                stage_label=st.get("stage_label"),
+                completed_stages=st.get("completed_stages") or [],
+                total_stages=st.get("total_stages"),
+            ))
+        return out
 
     # ══════════════════════════════════════════════════════════════════════════
     # WORKER
@@ -241,6 +281,14 @@ def build_workflow_router(
         db.commit()
         db.refresh(row)
         return _respond(row)
+
+    # Stage 01 -> 02. `worker_report` is a closure over this router's model and
+    # schema, so it cannot be imported by name. Attaching it here lets
+    # app/controllers/event_drafts.py submit a draft through the family's real
+    # create path — with its validation, its station lookup and its stage 02
+    # assessment — instead of a second implementation that would drift.
+    router.create_from_payload = worker_report  # type: ignore[attr-defined]
+    router.create_schema = create_schema        # type: ignore[attr-defined]
 
     @router.get("/my-reports", response_model=List[ReportListItem])
     def worker_my_reports(
@@ -300,6 +348,42 @@ def build_workflow_router(
         db.refresh(row)
         return _respond(row)
 
+    @router.post("/{record_id}/start-investigation", response_model=ReportWorkflowResponse)
+    def supervisor_start_investigation(
+        record_id: int,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Stage 03 -> 04. Opens the investigation before any findings exist.
+
+        Without this, `under_investigation` was a status only a manager
+        rejection could produce, so a record jumped from RESPOND straight to the
+        end of INVESTIGATE and stage 04 was never observably occupied.
+        """
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"investigate {tag}")
+        row = _get(db, record_id, current_user.org_id)
+
+        if row.workflow_status not in ("acknowledged", "reported"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only an acknowledged {tag} can move into investigation",
+            )
+
+        now = datetime.now()
+        row.workflow_status = "under_investigation"
+        if row.investigation_started_at is None:
+            row.investigation_started_at = now
+        # Acknowledgement is a precondition of investigating; record it rather
+        # than leaving a hole in the audit trail.
+        if row.acknowledged_at is None:
+            row.acknowledged_at = now
+        if row.assigned_supervisor_id is None:
+            row.assigned_supervisor_id = _employee_id_for(db, current_user.user_id)
+
+        db.commit()
+        db.refresh(row)
+        return _respond(row)
+
     @router.post("/{record_id}/investigate", response_model=ReportWorkflowResponse)
     def supervisor_investigate(
         record_id: int,
@@ -329,6 +413,44 @@ def build_workflow_router(
         row.investigation_completed_at = now
         if row.assigned_supervisor_id is None:
             row.assigned_supervisor_id = _employee_id_for(db, current_user.user_id)
+
+        # ── Stage 05 IMPROVE · raise the corrective action ────────────────────
+        # WF-04: the CAPA inherits its type from the assessed priority, which
+        # sets the deadline. Without severity potential and systemic risk it
+        # still gets a type and a due date, just no 1-9 priority band.
+        if payload.capa_description:
+            from app.models.capa_action import CapaAction
+            from app.services.capa_priority import prioritise
+
+            prio = prioritise(
+                severity_potential=payload.capa_severity_potential,
+                systemic_risk=payload.capa_systemic_risk,
+                capa_type=payload.capa_type,
+                incident_priority=getattr(row, "assessed_priority", None),
+                created_at=now,
+            )
+            db.add(CapaAction(
+                organisation_id=current_user.org_id,
+                # incident_id stays null: this is not an incident. The
+                # polymorphic pair is what links it back (migration 056).
+                subject_family=report_type,
+                subject_id=row.id,
+                action_type="Corrective",
+                description=payload.capa_description,
+                root_cause_addressed=payload.root_cause,
+                responsible_person_id=payload.capa_responsible_person_id,
+                due_date=payload.capa_due_date or (prio.due_date.date() if prio.due_date else None),
+                status="Open",
+                severity_potential=prio.severity_potential,
+                systemic_risk=prio.systemic_risk,
+                priority_score=prio.priority_score,
+                priority_band=prio.priority_band,
+                capa_type=prio.capa_type,
+                capa_type_label=prio.capa_type_label,
+                target_hours=prio.target_hours,
+                evidence_required=prio.evidence_required,
+                priority_explanation=prio.explanation,
+            ))
 
         if (row.severity or "").lower() in ESCALATING_SEVERITIES:
             row.workflow_status = "escalated"
@@ -395,18 +517,162 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        """Approve the supervisor's investigation, or send it back for redo."""
+        """Approve the supervisor's investigation, or send it back for redo.
+
+        Approving ends stage 04. Where it goes next depends on whether there is
+        anything to improve: outstanding corrective actions mean IMPROVE, actions
+        already complete mean VERIFY, and an investigation that raised none has
+        nothing to verify and goes straight to LEARN.
+        """
         _require_role(current_user.role, MANAGER_ROLES, f"approve {tag} investigations")
         row = _get(db, record_id, current_user.org_id)
         if payload.approved:
-            row.workflow_status = "pending_approval"  # ready for closure
             row.approved_at = datetime.now()
+            if _has_open_capa(db, report_type, row.id):
+                row.workflow_status = "capa_open"
+            elif _has_any_capa(db, report_type, row.id):
+                row.workflow_status = "pending_verification"
+            else:
+                row.workflow_status = "approved"
         else:
             row.workflow_status = "under_investigation"  # back to the supervisor
             row.approved_at = None
         db.commit()
         db.refresh(row)
         return _respond(row)
+
+    @router.post("/{record_id}/verify-effectiveness", response_model=ReportWorkflowResponse)
+    def manager_verify_effectiveness(
+        record_id: int,
+        payload: ManagerVerifyReportEffectiveness,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Stage 06 VERIFY — confirm the corrective action actually worked.
+
+        A negative verification is not a rejection of paperwork; it means the
+        hazard is still live. The record returns to IMPROVE and its actions are
+        reopened, because closing something whose fix did not hold is exactly
+        what this stage exists to prevent.
+        """
+        _require_role(current_user.role, MANAGER_ROLES, f"verify {tag} corrective actions")
+        row = _get(db, record_id, current_user.org_id)
+
+        if row.workflow_status not in ("pending_verification", "capa_open"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"This {tag} has no corrective action awaiting verification",
+            )
+        if row.workflow_status == "capa_open" and _has_open_capa(db, report_type, row.id):
+            raise HTTPException(
+                status_code=400,
+                detail="Corrective actions are still open — they must be completed before verification",
+            )
+
+        from app.models.capa_action import CapaAction
+
+        now = datetime.now()
+        if payload.effective:
+            row.workflow_status = "approved"
+            row.capa_verified_by = _employee_id_for(db, current_user.user_id)
+            row.capa_verified_at = now
+            row.capa_verification_notes = payload.verification_notes
+        else:
+            row.workflow_status = "capa_open"
+            row.capa_verified_by = None
+            row.capa_verified_at = None
+            row.capa_verification_notes = payload.verification_notes
+            row.capa_verification_failures = (row.capa_verification_failures or 0) + 1
+            # A CAPA that did not work is not a completed CAPA. Leaving it closed
+            # would let the record walk straight back to verification with
+            # nothing having changed.
+            db.query(CapaAction).filter(
+                CapaAction.subject_family == report_type,
+                CapaAction.subject_id == row.id,
+                func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"]),
+            ).update({"status": "Open"}, synchronize_session=False)
+
+        db.commit()
+        db.refresh(row)
+        return _respond(row)
+
+    @router.get("/capa/my-actions")
+    def my_capa_actions(
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Outstanding corrective actions raised against this report type."""
+        from app.models.capa_action import CapaAction
+
+        emp_id = _employee_id_for(db, current_user.user_id)
+        q = (
+            db.query(CapaAction)
+            .filter(CapaAction.organisation_id == current_user.org_id)
+            .filter(CapaAction.subject_family == report_type)
+            .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
+        )
+        if not _role_matches(current_user.role, ALL_ELEVATED_ROLES):
+            q = q.filter(CapaAction.responsible_person_id == emp_id)
+        return [
+            {
+                "id": c.id, "subject_family": c.subject_family, "subject_id": c.subject_id,
+                "description": c.description, "due_date": c.due_date.isoformat() if c.due_date else None,
+                "status": c.status, "priority_band": c.priority_band,
+            }
+            for c in q.order_by(CapaAction.id.desc()).limit(100).all()
+        ]
+
+    @router.post("/capa/{capa_id}/complete")
+    def complete_capa_action(
+        capa_id: int,
+        payload: ReportCapaComplete,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Stage 05 -> 06 once the last outstanding action closes.
+
+        A partly-actioned record has not been improved yet, so the record only
+        leaves IMPROVE when nothing is left open.
+        """
+        from app.models.capa_action import CapaAction
+
+        capa = (
+            db.query(CapaAction)
+            .filter(CapaAction.id == capa_id)
+            .filter(CapaAction.organisation_id == current_user.org_id)
+            .filter(CapaAction.subject_family == report_type)
+            .first()
+        )
+        if not capa:
+            raise HTTPException(status_code=404, detail="CAPA action not found")
+
+        emp_id = _employee_id_for(db, current_user.user_id)
+        is_owner = emp_id is not None and capa.responsible_person_id == emp_id
+        if not is_owner and not _role_matches(current_user.role, ALL_ELEVATED_ROLES):
+            raise HTTPException(status_code=403, detail="Not authorized to close this CAPA action")
+
+        capa.status = "Completed"
+        if payload.effectiveness_rating is not None:
+            capa.effectiveness_rating = payload.effectiveness_rating
+        db.flush()
+
+        advanced_to = None
+        parent = db.query(model).filter(model.id == capa.subject_id).first()
+        if (
+            parent is not None
+            and parent.workflow_status == "capa_open"
+            and not _has_open_capa(db, report_type, parent.id)
+        ):
+            parent.workflow_status = "pending_verification"
+            advanced_to = parent.workflow_status
+
+        db.commit()
+        return {
+            "id": capa.id,
+            "status": capa.status,
+            "effectiveness_rating": capa.effectiveness_rating,
+            "subject_advanced_to": advanced_to,
+        }
 
     @router.post("/{record_id}/close", response_model=ReportWorkflowResponse)
     def manager_close(
@@ -417,6 +683,27 @@ def build_workflow_router(
     ):
         _require_role(current_user.role, MANAGER_ROLES, f"close {tag}")
         row = _get(db, record_id, current_user.org_id)
+
+        if row.workflow_status == "closed":
+            raise HTTPException(status_code=400, detail=f"This {tag} is already closed")
+
+        # Stage 08 is the end of the ring, not a shortcut across it. Closure
+        # requires the record to have reached LEARN, meaning its RCA was
+        # approved, its corrective actions completed and their effectiveness
+        # verified. Closing straight out of capa_open was how a record could be
+        # signed off with its fix still outstanding.
+        if row.workflow_status != "approved":
+            st = workflow_stages.describe(report_type, row.workflow_status)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"This {tag} is at stage {st.get('stage_number')} "
+                    f"{st.get('stage_label') or row.workflow_status} and cannot be closed yet. "
+                    "It must clear investigation approval, corrective action and effectiveness "
+                    "verification first."
+                ),
+            )
+
         row.workflow_status = "closed"
         row.closed_at = datetime.now()
         if payload.closure_notes is not None:

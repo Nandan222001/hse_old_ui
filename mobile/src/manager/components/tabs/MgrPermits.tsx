@@ -117,15 +117,17 @@ export function MgrPermits({ showToast }: ScreenProps) {
           const st = STATUS[String(p.status).toLowerCase()] || STATUS.pending;
           const exp = p.validity_end ? new Date(p.validity_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
           return (
-            <View key={p.id} style={styles.ptwCard}>
-              <View style={styles.ptwIcon}><Zap size={18} color="#2563EB" /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.ptwTitle} numberOfLines={1}>{p.title || p.permit_type}</Text>
-                <Text style={styles.ptwSub} numberOfLines={1}>{[p.location, p.requestor].filter(Boolean).join(' · ')}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <View style={[styles.tag, { backgroundColor: st.bg }]}><Text style={[styles.tagText, { color: st.color }]}>{st.label}</Text></View>
-                {exp && <Text style={styles.ptwExp}>Exp {exp}</Text>}
+            <View key={p.id} style={styles.ptwCardWrap}>
+              <View style={styles.ptwCard}>
+                <View style={styles.ptwIcon}><Zap size={18} color="#2563EB" /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ptwTitle} numberOfLines={1}>{p.title || p.permit_type}</Text>
+                  <Text style={styles.ptwSub} numberOfLines={1}>{[p.location, p.requestor].filter(Boolean).join(' · ')}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <View style={[styles.tag, { backgroundColor: st.bg }]}><Text style={[styles.tagText, { color: st.color }]}>{st.label}</Text></View>
+                  {exp && <Text style={styles.ptwExp}>Exp {exp}</Text>}
+                </View>
               </View>
             </View>
           );
@@ -163,7 +165,10 @@ const styles = StyleSheet.create({
   approveBtn: { backgroundColor: '#0B3D91', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   approveText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   empty: { color: '#737686', textAlign: 'center', marginTop: 20 },
-  ptwCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#EEF2F7' },
+  // The card and its stage rail share one bordered container so the rail reads
+  // as part of the permit rather than a separate row.
+  ptwCardWrap: { backgroundColor: '#FFFFFF', borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: '#EEF2F7', paddingHorizontal: 14, paddingBottom: 8 },
+  ptwCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 14 },
   ptwIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
   ptwTitle: { fontSize: 14, fontWeight: '700', color: '#0B1C30' },
   ptwSub: { fontSize: 12, color: '#737686', marginTop: 2 },

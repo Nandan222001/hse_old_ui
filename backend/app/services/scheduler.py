@@ -82,7 +82,7 @@ def notify_overdue_capa_summary() -> None:
         rows = (
             db.query(CapaAction.organisation_id, func.count(CapaAction.id))
             .filter(
-                CapaAction.status != "Completed",
+                (CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]),
                 CapaAction.due_date.isnot(None),
                 CapaAction.due_date < today,
             )

@@ -36,6 +36,8 @@ class PermitToWork(Base):
     approved_at = Column(DateTime, nullable=True)
     rejected_at = Column(DateTime, nullable=True)
     rejection_reason = Column(Text, nullable=True)
+    # Stage 04 INVESTIGATE — why live work was stopped (migration 058).
+    suspension_reason = Column(Text, nullable=True)
     auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     auditor_verified_at = Column(DateTime, nullable=True)
     verification_result = Column(String(50), nullable=True)  # valid | invalid | not_displayed

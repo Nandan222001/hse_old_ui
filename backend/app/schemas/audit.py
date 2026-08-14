@@ -13,6 +13,10 @@ class ChecklistItemIn(BaseModel):
     response: Optional[str] = None       # pass | fail | na | null
     remarks: Optional[str] = None
     photo_attached: bool = False
+    # Stage 03 RESPOND. A finding marked critical is the stop-work case: it has
+    # to be contained before the audit goes any further, which is exactly what
+    # RESPOND means for every other family.
+    critical: bool = False
 
 
 class AuditCreate(BaseModel):
@@ -60,5 +64,18 @@ class AuditResponse(BaseModel):
     findings: List[ChecklistItemIn] = Field(default_factory=list)
     submitted_at: Optional[datetime] = None
 
+    # Position on the eight stages, derived from `status` — never stored.
+    stage: Optional[str] = None
+    stage_number: Optional[int] = None
+    stage_label: Optional[str] = None
+    completed_stages: List[str] = Field(default_factory=list)
+    total_stages: Optional[int] = None
+
     class Config:
         from_attributes = True
+
+
+class AuditVerify(BaseModel):
+    """Stage 06 VERIFY — did the corrective actions close the findings out?"""
+    effective: bool = Field(..., description="Did the actions resolve the findings?")
+    verification_notes: Optional[str] = None

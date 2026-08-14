@@ -1,4 +1,14 @@
-"""Auditor workflow — schedule audits (manager) and submit findings (auditor).
+"""Auditor workflow, on the same eight stages as every other safety event.
+
+    01 RECORD      scheduled          — booked, not started
+    02 ASSESS      in_progress        — picked up, scope confirmed
+    03 RESPOND     immediate_action   — a critical finding stops the job first
+    04 INVESTIGATE fieldwork          — working the checklist on site
+    05 IMPROVE     findings_raised    — corrective actions owed
+                   capa_open
+    06 VERIFY      pending_review     — findings actioned, resolution unconfirmed
+    07 LEARN       verified           — confirmed, lesson owed
+    08 CLOSE       completed
 
 Data written here is org-scoped, so a submitted audit surfaces in the web
 Compliance section exactly like the other roles' mobile submissions.
@@ -13,7 +23,14 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.models.audit import Audit
-from app.schemas.audit import AuditCreate, AuditSubmit, AuditResponse, ChecklistItemIn
+from app.services import workflow_stages
+from app.schemas.audit import (
+    AuditCreate,
+    AuditResponse,
+    AuditSubmit,
+    AuditVerify,
+    ChecklistItemIn,
+)
 
 router = APIRouter(prefix="/audits", tags=["Audits"])
 
@@ -58,6 +75,31 @@ def _role(user: CurrentUser) -> str:
     return (user.role or "").strip().lower()
 
 
+def _owned(db: Session, audit_id: int, current_user: CurrentUser) -> Audit:
+    """The audit, and only if this auditor holds it."""
+    a = db.query(Audit).filter(
+        Audit.id == audit_id, Audit.organisation_id == current_user.org_id
+    ).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if _role(current_user) in AUDITOR_ROLES and a.auditor_id not in (None, current_user.user_id):
+        raise HTTPException(status_code=403, detail="This audit is assigned to someone else")
+    return a
+
+
+def _has_open_audit_capa(db: Session, audit_id: int) -> bool:
+    """Any corrective action raised off this audit still outstanding?"""
+    from app.models.capa_action import CapaAction
+
+    return (
+        db.query(CapaAction.id)
+        .filter(CapaAction.subject_family == "audit", CapaAction.subject_id == audit_id)
+        .filter(CapaAction.status != "Completed")
+        .first()
+        is not None
+    )
+
+
 def _derive_score(items: List[ChecklistItemIn]) -> int:
     """Compliance % = passes / (passes + fails); 'na' rows are excluded."""
     considered = [i for i in items if (i.response or "").lower() in ("pass", "fail")]
@@ -74,12 +116,19 @@ def _to_response(a: Audit) -> AuditResponse:
             findings = [ChecklistItemIn(**it) for it in json.loads(a.findings_json)]
         except Exception:
             findings = []
+    # Derived from `status` on the way out, never stored, so the stage cannot
+    # drift from the status the rest of the system reads.
+    st = workflow_stages.describe("audit", a.status)
     return AuditResponse(
         id=a.id, organisation_id=a.organisation_id, title=a.title,
         checklist_type=a.checklist_type, site_id=a.site_id, site_name=a.site_name,
         department=a.department, shift=a.shift, auditor_id=a.auditor_id, scheduled_date=a.scheduled_date,
         due_date=a.due_date, status=a.status, priority=a.priority, progress=a.progress,
         compliance_score=a.compliance_score, findings=findings, submitted_at=a.submitted_at,
+        stage=st.get("stage"), stage_number=st.get("stage_number"),
+        stage_label=st.get("stage_label"),
+        completed_stages=st.get("completed_stages") or [],
+        total_stages=st.get("total_stages"),
     )
 
 
@@ -157,21 +206,158 @@ def submit_audit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Auditor submits the completed checklist → status=completed, compliance_score set."""
+    """Auditor submits the completed checklist.
+
+    Where it lands depends on what the checklist found, which is the whole point
+    of stages 03-05 existing for an audit:
+
+      any critical finding  -> immediate_action  (03 RESPOND — stop-work, contain first)
+      any failure           -> findings_raised   (05 IMPROVE — corrective actions owed)
+      clean                 -> pending_review    (06 VERIFY — nothing to fix, confirm and close)
+
+    It used to jump straight to `completed`, so an audit that found a dozen
+    failures was indistinguishable from one that found none.
+    """
     if _role(current_user) not in AUDITOR_ROLES:
         raise HTTPException(status_code=403, detail=f"Role '{current_user.role}' is not an auditor")
     a = db.query(Audit).filter(Audit.id == audit_id, Audit.organisation_id == current_user.org_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="Audit not found")
 
+    # A submitted checklist decides the stage, so submitting on an audit that has
+    # already been verified or closed drags it back out of LEARN/CLOSE — a closed
+    # audit would silently reopen as `findings_raised`, losing its close-out. The
+    # other verbs are all gated; this one was not.
+    if a.status in ("completed", "verified"):
+        st = workflow_stages.describe("audit", a.status)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Audit is at stage {st.get('stage_number')} "
+                f"{st.get('stage_label') or a.status} — its findings are already signed off "
+                "and the checklist cannot be resubmitted."
+            ),
+        )
+
     score = payload.compliance_score if payload.compliance_score is not None else _derive_score(payload.items)
     a.findings_json = json.dumps([i.model_dump() for i in payload.items])
     a.compliance_score = score
     if payload.shift:
         a.shift = payload.shift
-    a.status = "completed"
+
+    failures = [i for i in payload.items if (i.response or "").lower() == "fail"]
+    if any(i.critical for i in failures):
+        a.status = "immediate_action"
+    elif failures:
+        a.status = "findings_raised"
+    else:
+        a.status = "pending_review"
+
     a.progress = 100
     a.submitted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(a)
+    return _to_response(a)
+
+
+@router.post("/{audit_id}/start", response_model=AuditResponse)
+def start_audit(
+    audit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 01 -> 02. The auditor picks the job up."""
+    a = _owned(db, audit_id, current_user)
+    if a.status not in ("scheduled", "planned", "draft"):
+        raise HTTPException(status_code=400, detail="Audit is already under way")
+    a.status = "in_progress"
+    db.commit()
+    db.refresh(a)
+    return _to_response(a)
+
+
+@router.post("/{audit_id}/fieldwork", response_model=AuditResponse)
+def begin_fieldwork(
+    audit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 02/03 -> 04. On site, working the checklist.
+
+    Reachable from `immediate_action` too: once the stop-work finding has been
+    contained, the audit carries on rather than starting again.
+    """
+    a = _owned(db, audit_id, current_user)
+    if a.status not in ("in_progress", "immediate_action"):
+        raise HTTPException(
+            status_code=400, detail="Audit must be in progress before fieldwork begins"
+        )
+    a.status = "fieldwork"
+    db.commit()
+    db.refresh(a)
+    return _to_response(a)
+
+
+@router.post("/{audit_id}/verify", response_model=AuditResponse)
+def verify_audit(
+    audit_id: int,
+    payload: AuditVerify,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 06 VERIFY — confirm the findings were actually resolved.
+
+    Answering no returns the audit to IMPROVE. Findings that were not really
+    closed out are the thing an audit trail is supposed to catch, so signing
+    them off unverified would defeat the exercise.
+    """
+    a = db.query(Audit).filter(
+        Audit.id == audit_id, Audit.organisation_id == current_user.org_id
+    ).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if a.status not in ("pending_review", "capa_open", "findings_raised"):
+        raise HTTPException(
+            status_code=400, detail="Audit has no findings awaiting verification"
+        )
+    if _has_open_audit_capa(db, a.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Corrective actions are still open — they must be completed before verification",
+        )
+
+    a.status = "verified" if payload.effective else "findings_raised"
+    db.commit()
+    db.refresh(a)
+    return _to_response(a)
+
+
+@router.post("/{audit_id}/close", response_model=AuditResponse)
+def close_audit(
+    audit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage 08 CLOSE. Only from LEARN — an audit closed with its findings
+    unverified would record compliance that was never actually confirmed."""
+    a = db.query(Audit).filter(
+        Audit.id == audit_id, Audit.organisation_id == current_user.org_id
+    ).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if a.status == "completed":
+        raise HTTPException(status_code=400, detail="Audit is already closed")
+    if a.status != "verified":
+        st = workflow_stages.describe("audit", a.status)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Audit is at stage {st.get('stage_number')} "
+                f"{st.get('stage_label') or a.status} and cannot be closed yet. "
+                "Its findings must be actioned and verified first."
+            ),
+        )
+    a.status = "completed"
     db.commit()
     db.refresh(a)
     return _to_response(a)

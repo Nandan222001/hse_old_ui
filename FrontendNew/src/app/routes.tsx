@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ViolationsPage } from "./pages/ViolationsPage";
 import { ViolationDetailPage } from "./pages/ViolationDetailPage";
+import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { SitesZonesPage } from "./pages/SitesZonesPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -180,6 +181,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: DashboardRoute },
       { path: "violations", Component: ViolationsRoute },
+      // Own top-level path rather than `violations/tracking`, which would sit
+      // alongside `violations/:id` and read as an incident with id "tracking".
+      { path: "incidents/tracking", Component: IncidentTrackingPage },
       { path: "violations/:id", Component: ViolationDetailRoute },
       { path: "actions", Component: ActionsRoute },
       { path: "checklists", Component: ChecklistsRoute },

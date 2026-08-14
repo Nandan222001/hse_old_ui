@@ -102,7 +102,7 @@ export function ManagerAppRoot() {
         if (list.length === 0) return;
         const toStatus = (s: string): "Open" | "In Progress" | "Completed" => {
           const v = (s || "").toLowerCase();
-          return v === "completed" ? "Completed" : v.includes("progress") ? "In Progress" : "Open";
+          return ["completed", "closed", "verified", "done"].includes(v) ? "Completed" : v.includes("progress") ? "In Progress" : "Open";
         };
         const mapped = list.map((c: any) => ({
           id: `CAPA-${c.id}`,

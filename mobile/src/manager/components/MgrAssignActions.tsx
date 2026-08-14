@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, AlertTriangle, Info, Plus, Send, Search, MoreVertical } from 'lucide-react-native';
+import { DateTimePickerModal } from '../../worker/components/inputs/DateTimePickerModal';
 import type { ScreenProps } from './types';
 import { apiClient } from '../../api/client';
-import { assignedTaskService, AssignableWorker } from '../../services/assignedTaskService';
+import { incidentWorkflowService, type CapaOwner } from '../../services/incidentWorkflowService';
 
 const PRIORITIES = [
   { key: 'Critical', color: '#DC2626', bg: '#FEE2E2' },
@@ -22,10 +23,15 @@ interface Queued {
 
 export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast }: ScreenProps) {
   const inc: any = selectedIncident || {};
-  const [workers, setWorkers] = useState<AssignableWorker[]>([]);
+  // Supervisors, not workers. A corrective action changes a control — refit a
+  // guard, rewrite a procedure, retrain a crew — and the accountable owner is
+  // the supervisor for that area. This screen previously listed `operator`
+  // logins, so every CAPA was assigned to the wrong role.
+  const [owners, setOwners] = useState<CapaOwner[]>([]);
   const [desc, setDesc] = useState('');
   const [priority, setPriority] = useState('Critical');
   const [due, setDue] = useState('');
+  const [dueDatePickerVisible, setDueDatePickerVisible] = useState(false);
   const [rootCause, setRootCause] = useState('');
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [assigneeName, setAssigneeName] = useState('');
@@ -35,17 +41,17 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
   const [queue, setQueue] = useState<Queued[]>([]);
   const [issuing, setIssuing] = useState(false);
 
-  useEffect(() => { assignedTaskService.getAssignableWorkers().then(setWorkers).catch(() => {}); }, []);
+  useEffect(() => { incidentWorkflowService.getCapaAssignableOwners().then(setOwners).catch(() => {}); }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return workers.slice(0, 8);
-    return workers.filter((w) => w.name.toLowerCase().includes(q) || String(w.employee_id).includes(q)).slice(0, 8);
-  }, [workers, search]);
+    if (!q) return owners.slice(0, 8);
+    return owners.filter((w) => w.name.toLowerCase().includes(q) || String(w.employee_id).includes(q)).slice(0, 8);
+  }, [owners, search]);
 
   const queueAction = () => {
     if (!desc.trim()) return Alert.alert('Missing', 'Enter an action description.');
-    if (!assigneeId) return Alert.alert('Missing', 'Select an assignee.');
+    if (!assigneeId) return Alert.alert('Missing', 'Select a supervisor to own this action.');
     setQueue((p) => [...p, { description: desc.trim(), priority, due: due.trim(), assigneeId, assigneeName, rootCause: rootCause.trim() }]);
     setDesc(''); setDue(''); setAssigneeId(null); setAssigneeName(''); setSearch(''); setPriority('Critical'); setCompliance(false); setRootCause('');
   };
@@ -126,7 +132,14 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
             <View style={styles.row2}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>Due Date</Text>
-                <TextInput style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor="#94A3B8" value={due} onChangeText={setDue} />
+                <TouchableOpacity
+                  style={[styles.input, { justifyContent: 'center', height: 44 }]}
+                  onPress={() => setDueDatePickerVisible(true)}
+                >
+                  <Text style={{ fontSize: 14, color: due ? '#0B1C30' : '#94A3B8' }}>
+                    {due || 'Select date'}
+                  </Text>
+                </TouchableOpacity>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.label}>Assignee</Text>
@@ -148,7 +161,7 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
                     <Text style={styles.wId}>ID {w.employee_id}</Text>
                   </TouchableOpacity>
                 ))}
-                {filtered.length === 0 && <Text style={styles.wEmpty}>No workers match.</Text>}
+                {filtered.length === 0 && <Text style={styles.wEmpty}>No supervisors match.</Text>}
               </View>
             )}
 
@@ -198,6 +211,18 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      <DateTimePickerModal
+        visible={dueDatePickerVisible}
+        value={due ? `${due} 00:00` : null}
+        title="CAPA Due Date"
+        minToday={true}
+        onCancel={() => setDueDatePickerVisible(false)}
+        onConfirm={(val) => {
+          const datePart = val.split(' ')[0]; // Extract "YYYY-MM-DD"
+          setDue(datePart);
+          setDueDatePickerVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -168,7 +168,7 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
 
     open_capa = (
         _org_filter(
-            db.query(CapaAction).filter(CapaAction.status != "Completed"),
+            db.query(CapaAction).filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
         )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
@@ -612,7 +612,7 @@ def get_risk_matrix(
             db.query(CapaAction)
             .filter(
                 CapaAction.incident_id.in_(inc_ids),
-                CapaAction.status != "Completed",
+                (CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]),
                 *([CapaAction.organisation_id == org_id] if org_id is not None else []),
             )
             .count()
@@ -675,7 +675,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
         _org_filter(
             db.query(CapaAction, Employee)
             .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
-            .filter(CapaAction.status != "Completed"),
+            .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
         )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
@@ -716,7 +716,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
         return ">90 Days"
 
     all_open = _org_filter(
-        db.query(CapaAction).filter(CapaAction.status != "Completed"),
+        db.query(CapaAction).filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
         CapaAction, org_id,
     ).all()
     bucket_labels = ["0-30 Days", "31-60 Days", "61-90 Days", ">90 Days"]
@@ -740,11 +740,11 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
 
     capa_total = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
     capa_done = _org_filter(
-        db.query(CapaAction).filter(CapaAction.status == "Completed"), CapaAction, org_id
+        db.query(CapaAction).filter(func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"])), CapaAction, org_id
     ).count()
     effectiveness = round((capa_done / capa_total * 100) if capa_total else 0)
     open_count = _org_filter(
-        db.query(CapaAction).filter(CapaAction.status != "Completed"), CapaAction, org_id
+        db.query(CapaAction).filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])), CapaAction, org_id
     ).count()
     overdue_count = _org_filter(
         db.query(CapaAction).filter(CapaAction.status == "Overdue"),
@@ -754,7 +754,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
     # Risks closed in last 7 days (vanished from matrix + aging automatically)
     recently_closed_count = _org_filter(
         db.query(CapaAction).filter(
-            CapaAction.status == "Completed",
+            func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"]),
             CapaAction.due_date >= today - timedelta(days=7),
         ),
         CapaAction, org_id,
@@ -913,7 +913,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     # own spec marks as computable (all other Module 2 Risk KPIs need a structured risk register).
     total_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).count()
     completed_capa = _org_filter(
-        db.query(CapaAction).filter(CapaAction.status == "Completed"), CapaAction, org_id
+        db.query(CapaAction).filter(func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"])), CapaAction, org_id
     ).count()
     corrective_action_closure_rate = round(completed_capa / total_capa * 100, 1) if total_capa else 0
 
@@ -996,7 +996,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
             db.query(CapaAction, Employee, Incident)
             .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
             .outerjoin(Incident, CapaAction.incident_id == Incident.id)
-            .filter(CapaAction.status != "Completed"),
+            .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
         )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
@@ -1347,7 +1347,7 @@ def get_engagement_summary(
         db.query(Employee.full_name, func.count(CapaAction.id).label("cnt"))
         .join(CapaAction, CapaAction.responsible_person_id == Employee.id)
         .filter(
-            CapaAction.status == "Completed",
+            func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"]),
             *(
                 [Employee.organisation_id == org_id]
                 if org_id is not None else []
@@ -1392,7 +1392,7 @@ def get_engagement_summary(
 
     open_capa_rows = (
         _org_filter(
-            db.query(CapaAction).filter(CapaAction.status != "Completed"),
+            db.query(CapaAction).filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
         )
         .order_by(
@@ -1534,6 +1534,7 @@ def get_violation_detail(
 
     return {
         "id": f"INC-{inc.id:05d}",
+        "source": inc.source,
         "incident_type": inc.incident_type or "Unknown",
         "severity": _map_severity(inc.severity or ""),
         "raw_severity": inc.severity or "Unknown",

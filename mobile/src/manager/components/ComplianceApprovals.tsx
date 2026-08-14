@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, CheckCircle2, ShieldAlert } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { apiClient } from "../../api/client";
+import { incidentWorkflowService } from "../../services/incidentWorkflowService";
 
 export function ComplianceApprovalsView({ setCurrentScreen, showToast }: ScreenProps) {
   const [items, setItems] = useState<any[]>([]);
@@ -35,10 +36,15 @@ export function ComplianceApprovalsView({ setCurrentScreen, showToast }: ScreenP
     try {
       setBusy(id);
       setRatingFor(null);
-      await apiClient.put(`/capa-actions/${id}`, {
-        status: "Completed",
-        effectiveness_rating: rating,
-      });
+      // The workflow endpoint, NOT `PUT /capa-actions/{id}`.
+      //
+      // The generic CRUD route writes the CAPA row and stops there. Only
+      // `/incident-workflow/capa/{id}/complete` also advances the parent
+      // incident from capa_open (stage 05 IMPROVE) to pending_verification
+      // (stage 06 VERIFY) once its last outstanding action closes. Signing off
+      // through the CRUD route left every incident stranded in IMPROVE with all
+      // of its actions Completed — it could never reach VERIFY, LEARN or CLOSE.
+      await incidentWorkflowService.completeCapaAction(id, rating);
       showToast?.(`CAPA-${id} signed off & closed`);
       load();
     } catch (e: any) {

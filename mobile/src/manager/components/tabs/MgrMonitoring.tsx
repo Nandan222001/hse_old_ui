@@ -7,6 +7,8 @@ import type { ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
 import { complianceService } from '../../../services/complianceService';
 import { useAuth } from '../../../hooks/useAuth';
+import { NeedsYourAction } from '../NeedsYourAction';
+import type { NextActionItem } from '../../../services/incidentWorkflowService';
 
 const FILTERS = ['Today', 'This Week', 'All Time'];
 
@@ -40,6 +42,22 @@ export function MgrMonitoring({ setActiveTab, setCurrentScreen, setSelectedIncid
     } as any);
     setCurrentScreen('investigation');
   };
+  // The queue already knows the incident id and its stage, so it can route
+  // straight into the investigation screen rather than through the alert-shaped
+  // payload the Recent Reports list has to reconstruct.
+  const openNextAction = (item: NextActionItem) => {
+    setSelectedIncident?.({
+      id: item.id,
+      title: item.description,
+      severity: item.priority === 'P1' || item.priority === 'P2' ? 'Critical' : 'High',
+      time: '',
+      desc: item.description,
+      status: item.stage_label ?? item.workflow_status,
+      zone: '',
+    } as any);
+    setCurrentScreen('investigation');
+  };
+
   const [filter, setFilter] = useState(0);
   const [sev, setSev] = useState({ critical: 0, high: 0, medium: 0, low: 0 });
   const [reports, setReports] = useState<any[]>([]);
@@ -70,6 +88,11 @@ export function MgrMonitoring({ setActiveTab, setCurrentScreen, setSelectedIncid
     >
       <Text style={styles.eyebrow}>{(user?.site || 'SITE AREA A-12').toUpperCase()} • {(user?.role || 'HSE MANAGER').toUpperCase()}</Text>
       <Text style={styles.title}>Incident Monitoring</Text>
+
+      {/* What is outstanding, before the counts. The severity tiles below say
+          how bad the estate is; this says what to do about it, which is the
+          question a manager opens the app with. */}
+      <NeedsYourAction onOpen={openNextAction} />
 
       {/* Filter pills */}
       <View style={styles.pills}>

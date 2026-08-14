@@ -66,6 +66,7 @@ export const ENDPOINTS = {
   // Reference data used to resolve foreign keys on report forms.
   LOOKUPS: {
     WORKING_STATIONS: '/working-stations/',
+    EMPLOYEES: '/employees/',
   },
 
   // Shift check-in — writes the man-hours that every rate KPI divides by.

@@ -141,6 +141,12 @@ def raise_competence_gap(db: Session, envelope: Dict[str, Any], payload: Dict[st
 
 _FOLLOW_UP_DAYS = {"P1": 7, "P2": 7, "P3": 30, "P4": 60, "P5": 90}
 
+# An event closed without ever being classified is not low risk — it is unknown
+# risk. Defaulting it to the P5 window (90 days) meant the events we understood
+# least got checked last, which is backwards. 30 days matches P3: soon enough to
+# catch a real problem, not so soon it floods the inspection schedule.
+_UNCLASSIFIED_FOLLOW_UP_DAYS = 30
+
 
 @subscribe(*ANY_CLOSURE)
 def schedule_follow_up_inspection(db: Session, envelope: Dict[str, Any], payload: Dict[str, Any]) -> HandlerResult:
@@ -148,7 +154,8 @@ def schedule_follow_up_inspection(db: Session, envelope: Dict[str, Any], payload
     if not station_id:
         return HandlerResult("no station to inspect", changed=False)
 
-    days = _FOLLOW_UP_DAYS.get(payload.get("priority") or "", 90)
+    priority = payload.get("priority")
+    days = _FOLLOW_UP_DAYS.get(priority or "", _UNCLASSIFIED_FOLLOW_UP_DAYS)
     due = datetime.utcnow() + timedelta(days=days)
 
     already = db.execute(
@@ -175,7 +182,10 @@ def schedule_follow_up_inspection(db: Session, envelope: Dict[str, Any], payload
          "now": datetime.utcnow()},
     )
     db.commit()
-    return HandlerResult(f"follow-up inspection scheduled at station {station_id} in {days} days")
+    label = priority or "unclassified"
+    return HandlerResult(
+        f"follow-up inspection scheduled at station {station_id} in {days} days ({label})"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

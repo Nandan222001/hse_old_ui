@@ -98,7 +98,19 @@ class Incident(Base):
     statutory_authorised_at = Column(DateTime, nullable=True)
     statutory_reference = Column(String(120), nullable=True)
 
+    # ── Stage 06 VERIFY · did the corrective action work? (migration 054) ─────
+    # Distinct from the auditor trio below: this is the manager's in-workflow
+    # sign-off that the CAPA held, not the auditor's post-closure review.
+    capa_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    capa_verified_at = Column(DateTime, nullable=True)
+    capa_verification_notes = Column(Text, nullable=True)
+    capa_verification_failures = Column(Integer, default=0)
+
     # Auditor close-out review — mirrors the same trio on permits_to_work and hazards.
     auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     auditor_verified_at = Column(DateTime, nullable=True)
     verification_notes = Column(Text, nullable=True)
+
+    @property
+    def source(self) -> str:
+        return "Mobile App" if (self.gps_latitude is not None or self.gps_longitude is not None) else "Web App"

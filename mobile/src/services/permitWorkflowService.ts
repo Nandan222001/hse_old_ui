@@ -97,14 +97,46 @@ export const permitWorkflowService = {
     const { data } = await apiClient.get(PERMIT_WORKFLOW.ACTIVE);
     return data ?? [];
   },
-  async close(id: number, notes?: string): Promise<PermitDetail> {
-    const { data } = await apiClient.post(PERMIT_WORKFLOW.CLOSE(id), { notes });
+  /**
+   * Stage 05 -> 06. Work starts under the permit.
+   *
+   * An issued permit and one being worked under are different things: the first
+   * is a granted authorisation, the second is live work relying on its controls
+   * right now.
+   */
+  async activate(id: number): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.ACTIVATE(id), {});
     return data;
   },
 
   /**
-   * Close-out at end of work. `deviationReported` is required because it is the only
+   * Stage 06 -> 04. Work stops and the cause is established before anyone goes
+   * back in. This is the permit's genuine investigate state.
+   */
+  async suspend(id: number, reason: string): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.SUSPEND(id), { reason });
+    return data;
+  },
+
+  /** Stage 04 -> 06. Cause established, work may restart. */
+  async resume(id: number): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.RESUME(id), {});
+    return data;
+  },
+
+  /** Stage 06 -> 07. Work finished; the permit is spent and owes its lesson. */
+  async completeWork(id: number): Promise<PermitDetail> {
+    const { data } = await apiClient.post(PERMIT_WORKFLOW.COMPLETE_WORK(id), {});
+    return data;
+  },
+
+  /**
+   * Close-out at end of work. `deviation_reported` is required because it is the only
    * source for LOTO Compliance % and Permit Deviation Rate.
+   *
+   * There used to be a second, earlier `close(id, notes)` above this one. It was
+   * unreachable — TypeScript takes the last declaration — so every call already
+   * used this signature, and it was one of the repo's standing type errors.
    */
   async close(id: number, payload: {
     deviation_reported: 'Yes' | 'No';

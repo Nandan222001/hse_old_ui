@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
-  SafeAreaView, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { authService, EmployeeProfile } from '../../worker/services/authService';

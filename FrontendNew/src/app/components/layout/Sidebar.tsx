@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
-  Lightbulb, ClipboardCheck, BarChart3,
-  FolderClosed, AlertTriangle,
+  Lightbulb, ClipboardCheck, BarChart3, ChevronDown,
+  FolderClosed, AlertTriangle, ListChecks, GitBranch,
   LogOut, Shield, Settings, X, Database, HardHat, MapPin, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -12,6 +12,9 @@ interface NavItem {
   name: string;
   icon: LucideIcon;
   path: string;
+  /** When present the item expands into a submenu and `path` is the default
+   *  destination clicking the parent navigates to. */
+  children?: NavItem[];
 }
 
 interface NavGroup {
@@ -30,7 +33,15 @@ const navGroups: NavGroup[] = [
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },
       { name: "Risk", icon: CircleAlert, path: "/root-cause-analysis" },
       { name: "Work", icon: Briefcase, path: "/actions" },
-      { name: "Incidents", icon: AlertTriangle, path: "/violations" },
+      {
+        name: "Incidents",
+        icon: AlertTriangle,
+        path: "/violations",
+        children: [
+          { name: "Overview", icon: ListChecks, path: "/violations" },
+          { name: "Lifecycle Tracking", icon: GitBranch, path: "/incidents/tracking" },
+        ],
+      },
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Checklists", icon: BookOpenText, path: "/checklists" },
       { name: "Reports", icon: BarChart3, path: "/analytics" },
@@ -50,6 +61,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [hovered, setHovered] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const orgLabel = (user?.companyName || user?.orgCode || "").trim();
 
   useEffect(() => {
@@ -65,6 +77,11 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
     if (path === "/") return location.pathname === "/";
     return location.pathname.startsWith(path.split("?")[0]);
   };
+
+  // A parent counts as active when it or any of its children match, so the
+  // group stays highlighted on a child route that lives under a different path.
+  const isGroupActive = (item: NavItem) =>
+    isActive(item.path) || (item.children?.some((child) => isActive(child.path)) ?? false);
 
   const visibleNavGroups = navGroups;
 
@@ -127,37 +144,90 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                const active = isActive(item.path);
+                const groupActive = isGroupActive(item);
+                const active = item.children ? groupActive && !item.children.some((c) => isActive(c.path)) : groupActive;
                 const isHovered = hovered === item.name;
+                const expanded = item.children ? (openMenu === item.name || groupActive) : false;
 
                 return (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      navigate(item.path);
-                      onCloseMobile?.();
-                    }}
-                    onMouseEnter={() => setHovered(item.name)}
-                    onMouseLeave={() => setHovered(null)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group"
-                    style={active ? {
-                      background: 'linear-gradient(135deg, #4A57B9 0%, #6F80E8 100%)',
-                      boxShadow: '0 6px 16px rgba(79, 94, 190, 0.28)',
-                    } : {
-                      background: isHovered ? '#EEF2FB' : 'transparent',
-                    }}
-                  >
-                    <item.icon
-                      className="w-[17px] h-[17px] flex-shrink-0"
-                      style={{ color: active ? '#ffffff' : '#7C869C' }}
-                    />
-                    <span
-                      className="text-[13px] flex-1 text-left"
-                      style={{ color: active ? '#ffffff' : '#2F3A4F', fontWeight: active ? 600 : 500 }}
+                  <div key={item.name}>
+                    <button
+                      onClick={() => {
+                        if (item.children) {
+                          // Expand and land on the first child, so one click
+                          // always reaches a page rather than only toggling.
+                          setOpenMenu(expanded && !groupActive ? null : item.name);
+                        }
+                        navigate(item.path);
+                        onCloseMobile?.();
+                      }}
+                      onMouseEnter={() => setHovered(item.name)}
+                      onMouseLeave={() => setHovered(null)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group"
+                      aria-expanded={item.children ? expanded : undefined}
+                      style={active ? {
+                        background: 'linear-gradient(135deg, #4A57B9 0%, #6F80E8 100%)',
+                        boxShadow: '0 6px 16px rgba(79, 94, 190, 0.28)',
+                      } : {
+                        background: isHovered || (item.children && groupActive) ? '#EEF2FB' : 'transparent',
+                      }}
                     >
-                      {item.name}
-                    </span>
-                  </button>
+                      <item.icon
+                        className="w-[17px] h-[17px] flex-shrink-0"
+                        style={{ color: active ? '#ffffff' : '#7C869C' }}
+                      />
+                      <span
+                        className="text-[13px] flex-1 text-left"
+                        style={{ color: active ? '#ffffff' : '#2F3A4F', fontWeight: active || groupActive ? 600 : 500 }}
+                      >
+                        {item.name}
+                      </span>
+                      {item.children && (
+                        <ChevronDown
+                          className="w-[14px] h-[14px] flex-shrink-0 transition-transform duration-200"
+                          style={{
+                            color: active ? '#ffffff' : '#9AA5BC',
+                            transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                          }}
+                        />
+                      )}
+                    </button>
+
+                    {item.children && expanded && (
+                      <div className="mt-0.5 ml-[26px] space-y-0.5 border-l pl-2" style={{ borderColor: '#E1E8F6' }}>
+                        {item.children.map((child) => {
+                          const childActive = isActive(child.path);
+                          const childHovered = hovered === `${item.name}/${child.name}`;
+                          return (
+                            <button
+                              key={child.name}
+                              onClick={() => {
+                                navigate(child.path);
+                                onCloseMobile?.();
+                              }}
+                              onMouseEnter={() => setHovered(`${item.name}/${child.name}`)}
+                              onMouseLeave={() => setHovered(null)}
+                              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200"
+                              style={{
+                                background: childActive ? '#E4EAFC' : childHovered ? '#F1F5FE' : 'transparent',
+                              }}
+                            >
+                              <child.icon
+                                className="w-[14px] h-[14px] flex-shrink-0"
+                                style={{ color: childActive ? '#3E4FB1' : '#94A0B8' }}
+                              />
+                              <span
+                                className="text-[12px] flex-1 text-left"
+                                style={{ color: childActive ? '#2C3A8C' : '#4B5670', fontWeight: childActive ? 600 : 500 }}
+                              >
+                                {child.name}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
