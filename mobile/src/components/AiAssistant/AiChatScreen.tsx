@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../theme/colors';
-import { askAi, aiErrorText, AiMessage } from '../../services/aiService';
+import { askAi, askData, aiErrorText, AiMessage } from '../../services/aiService';
 import { MarkdownText } from './MarkdownText';
 
 /**
@@ -61,6 +61,9 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
   const [messages, setMessages] = useState<Bubble[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  // Data mode sends the question to /ai/ask-data, where Claude writes a real
+  // SELECT against this org's data instead of answering from the role briefing.
+  const [dataMode, setDataMode] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const scrollToEnd = () =>
@@ -93,6 +96,12 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
         setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, ...fields } : m)));
 
       try {
+        if (dataMode) {
+          // No deltas to render — the answer only exists once the query has run.
+          const { answer } = await askData(question);
+          patch({ streaming: false, content: answer });
+          return;
+        }
         await askAi(question, history, (_chunk, sofar) => {
           patch({ content: sofar });
           scrollToEnd();
@@ -105,7 +114,7 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
         scrollToEnd();
       }
     },
-    [busy, messages],
+    [busy, messages, dataMode],
   );
 
   const empty = messages.length === 0;
@@ -205,11 +214,25 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
         </ScrollView>
 
         <View style={styles.composer}>
+          <TouchableOpacity
+            style={[styles.modeBtn, dataMode && styles.modeBtnOn]}
+            onPress={() => setDataMode((v) => !v)}
+            disabled={busy}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: dataMode }}
+            accessibilityLabel="Data mode — answer from a live database query"
+          >
+            <Ionicons
+              name="server-outline"
+              size={17}
+              color={dataMode ? Colors.white : Colors.textLight}
+            />
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
             value={draft}
             onChangeText={setDraft}
-            placeholder="Ask about your safety data…"
+            placeholder={dataMode ? 'Ask a question about your data…' : 'Ask about your safety data…'}
             placeholderTextColor={Colors.textLight}
             multiline
             editable={!busy}
@@ -303,6 +326,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnOff: { backgroundColor: Colors.textLight },
+  modeBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modeBtnOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
 });
 
 export default AiChatScreen;

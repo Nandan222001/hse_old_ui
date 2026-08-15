@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Bot, ChevronRight, Lightbulb, Mic, Send, ShieldAlert, TrendingUp, Zap,
-  AlertTriangle, Activity, Clock, RefreshCw,
+  AlertTriangle, Activity, Clock, RefreshCw, Database,
 } from 'lucide-react';
 import {
   Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ComposedChart,
 } from 'recharts';
-import { chatWithAIAgent, type ChatMessage } from '../../services/ai.service';
+import { askData, chatWithAIAgent, type ChatMessage } from '../../services/ai.service';
 import { getViolations } from '../../services/violations.service';
 import { getZones } from '../../services/infrastructure.service';
 import { FormattedMessage } from '../components/shared/FormattedMessage';
@@ -121,6 +121,10 @@ export function AIAgentPage() {
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Data mode routes the question to /ai/ask-data, where Claude writes a real
+  // SELECT instead of answering from the precomputed briefing. Off by default —
+  // it costs a DB round-trip and can't stream.
+  const [dataMode, setDataMode] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const [activeModule, setActiveModule] = useState<string | null>(null);
 
@@ -278,6 +282,16 @@ export function AIAgentPage() {
     setIsProcessing(true);
     setMessages(prev => [...prev, { role: 'user', content: question }, { role: 'ai', content: '', loading: true }]);
     try {
+      if (dataMode) {
+        const { answer, sql } = await askData(question);
+        // Show the SELECT under the answer so the number is auditable — a figure
+        // with no visible provenance is the thing safety managers won't trust.
+        const body = sql.length
+          ? `${answer}\n\n<details><summary>Query used</summary>\n\n\`\`\`sql\n${sql.join(';\n\n')}\n\`\`\`\n</details>`
+          : answer;
+        setMessages(prev => [...prev.filter(m => !m.loading), { role: 'ai', content: body }]);
+        return;
+      }
       const nextHistory: ChatMessage[] = [...conversationHistory, { role: 'user', content: question }];
       let streamStarted = false;
       const reply = await chatWithAIAgent(question, conversationHistory, (_delta, fullSoFar) => {
@@ -572,8 +586,14 @@ export function AIAgentPage() {
             <div style={{ padding: '14px 20px', borderTop: `1px solid ${BRAND.border}`, background: '#fff', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: BRAND.bg, border: `1px solid ${BRAND.border}`, borderRadius: '10px', padding: '6px 6px 6px 16px' }}>
                 <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && askAi(input)}
-                  placeholder="Type a custom query or follow-up question…"
+                  placeholder={dataMode ? 'Ask a question about your data — e.g. "how many incidents last month?"' : 'Type a custom query or follow-up question…'}
                   style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: '13px', color: '#374151', fontFamily: 'inherit' }} />
+                <button onClick={() => setDataMode(v => !v)} disabled={isProcessing}
+                  title={dataMode ? 'Data mode on — answers come from a live database query' : 'Data mode off — answers come from the standard briefing'}
+                  style={{ height: '32px', padding: '0 10px', borderRadius: '7px', border: `1px solid ${dataMode ? BRAND.accent : BRAND.border}`, background: dataMode ? BRAND.light : 'transparent', cursor: isProcessing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                  <Database size={14} color={dataMode ? BRAND.accent : BRAND.muted} />
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: dataMode ? BRAND.accent : BRAND.muted }}>Data</span>
+                </button>
                 <button onClick={handleMicClick} disabled={isProcessing}
                   style={{ width: '32px', height: '32px', borderRadius: '7px', border: 'none', background: isListening ? BRAND.light : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Mic size={15} color={isListening ? BRAND.accent : BRAND.muted} />

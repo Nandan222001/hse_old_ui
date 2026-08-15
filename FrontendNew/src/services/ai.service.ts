@@ -118,11 +118,41 @@ export async function analyzeZoneRisks(zoneData: unknown): Promise<string> {
   return chatWithAIAgent(prompt);
 }
 
+export type AskDataReply = {
+  answer: string;
+  /** The SELECT(s) Claude actually ran — safe to show; they are read-only and org-scoped. */
+  sql: string[];
+  model?: string;
+};
+
+/**
+ * Ask a question that has to be answered from the database rather than from the
+ * precomputed briefing — "how many incidents last month", "which site has the
+ * most overdue CAPAs". Claude writes a SELECT, the backend validates and runs it
+ * (read-only, org-scoped by the JWT), then phrases the result.
+ *
+ * Not streamed: the reply only exists after the query round-trip, so there is
+ * nothing to stream until the very end.
+ */
+export async function askData(question: string): Promise<AskDataReply> {
+  const response = await axiosInstance.post<AskDataReply>('/ai/ask-data', { question });
+  const body = response.data ?? ({} as AskDataReply);
+  return {
+    answer:
+      typeof body.answer === 'string' && body.answer.trim().length > 0
+        ? body.answer
+        : 'No answer generated for that question.',
+    sql: Array.isArray(body.sql) ? body.sql : [],
+    model: body.model,
+  };
+}
+
 export type { ChatMessage };
 
 export default {
   sendChatMessage,
   chatWithAIAgent,
+  askData,
   analyzeViolations,
   getPredictedRisks,
   generateRecommendations,

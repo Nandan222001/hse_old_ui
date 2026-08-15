@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     anthropic_base_url: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
 
+    # Connection used to run LLM-generated SQL (app/services/sql_agent.py). Point
+    # this at a SELECT-only MySQL user — see docs/sql_agent_readonly_user.sql. It
+    # is the guardrail that still holds if query validation is ever bypassed.
+    # Falls back to database_url when empty, with a startup warning.
+    sql_agent_database_url: str = ""
+
     # ── Azure OpenAI (alternative AI provider) ────────────────────────────────
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""

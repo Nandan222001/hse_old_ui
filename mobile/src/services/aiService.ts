@@ -183,6 +183,42 @@ export async function askAi(
   }
 }
 
+export interface AskDataReply {
+  answer: string;
+  /** The SELECT(s) that produced the answer — read-only and scoped to the caller's org. */
+  sql: string[];
+  model?: string;
+}
+
+/**
+ * Ask a question that must be answered from the database rather than from the
+ * role briefing — "how many incidents last month", "which site has the most
+ * overdue CAPAs". Claude writes a SELECT, the backend validates and runs it,
+ * then phrases the result.
+ *
+ * Deliberately not streamed: nothing exists to stream until the query has run,
+ * so a stream would show a spinner and then the whole answer at once anyway.
+ * Uses the same generous timeout as chat — this makes two model round-trips.
+ */
+export async function askData(question: string): Promise<AskDataReply> {
+  const res = await apiClient.post(
+    '/ai/ask-data',
+    { question },
+    { timeout: AI_TIMEOUT_MS },
+  );
+  // `/ai/ask-data` returns a bare object, so the client's {success,data} unwrap
+  // interceptor passes it through — read res.data.answer, not res.data.data.
+  const body = res.data ?? {};
+  return {
+    answer:
+      typeof body.answer === 'string' && body.answer.trim().length > 0
+        ? body.answer
+        : 'No answer generated for that question.',
+    sql: Array.isArray(body.sql) ? body.sql : [],
+    model: body.model,
+  };
+}
+
 /**
  * Turn a failed chat request into something the user can act on.
  *

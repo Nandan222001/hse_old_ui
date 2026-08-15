@@ -1460,3 +1460,75 @@ def ai_chat_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/ask-data")
+def ai_ask_data(
+    payload: dict[str, Any],
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Ask a question about this organisation's data and get a figure back.
+
+    Where /chat answers from a precomputed snapshot — fast, but limited to the
+    numbers that snapshot happens to carry — this endpoint lets Claude write and
+    run its own SELECT, so it can answer questions nobody precomputed
+    ("last month kitne incidents WindTech pe hue?").
+
+    The organisation is taken from the caller's JWT and bound server-side; the
+    model never chooses which tenant it reads. See app/services/sql_agent.py for
+    the full guardrail chain.
+
+    Request:
+      { "question": "Last month kitne incidents WindTech site pe hue?" }
+
+    Response:
+      { "answer": "...", "sql": [...], "rows": "...", "model": "...", "scope": "manager" }
+    """
+    from app.services import sql_agent
+
+    question = (payload.get("question") or payload.get("message") or "").strip()
+    if not question:
+        return {"answer": "No question provided.", "sql": [], "model": "none"}
+
+    if current_user.org_id is None:
+        return {
+            "answer": "Your account is not linked to an organisation, so I cannot look up its data.",
+            "sql": [],
+            "model": "none",
+        }
+
+    bucket = _role_bucket(current_user)
+    try:
+        result = sql_agent.answer_question(question, org_id=current_user.org_id)
+    except sql_agent.SqlAgentError as exc:
+        logger.warning("ask-data unavailable for %s: %s", current_user.email, exc)
+        return {"answer": _NO_KEY_TEXT, "sql": [], "model": "fallback", "scope": bucket}
+    except Exception:
+        logger.exception("ask-data failed for %s", current_user.email)
+        return {"answer": _UNAVAILABLE_TEXT, "sql": [], "model": "error", "scope": bucket}
+
+    log_id = log_answer(
+        db, current_user, bucket,
+        question=question,
+        answer=result["answer"],
+        briefing="\n".join(result.get("sql") or []),
+        model_id=result.get("model", ""),
+        provider="anthropic-sql-agent",
+    )
+
+    logger.info(
+        "ask-data: org=%s user=%s queries=%d",
+        current_user.org_id, current_user.email, len(result.get("sql") or []),
+    )
+
+    return {
+        "answer": result["answer"],
+        "sql": result.get("sql") or [],
+        "rows": result.get("rows"),
+        "model": result.get("model"),
+        "scope": bucket,
+        "ai_log_id": log_id,
+        "ai_generated": True,
+    }
