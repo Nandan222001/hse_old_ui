@@ -271,6 +271,50 @@ while the organisation-wide count is not. If a site-filtered query returns 0, ru
 unfiltered count before concluding nothing happened, and explain the difference."""
 
 
+# Appended to the role prompt on the main chat endpoint so the same assistant
+# that answers from the briefing can also reach for the database. The briefing
+# only carries org-level aggregates, so anything record-level ("the last
+# incident", "which site", "list the overdue ones") has to come from a query.
+CHAT_TOOL_GUIDANCE = """
+
+# Querying the database
+The briefing above is a snapshot of org-level totals. For anything it does not
+contain — individual records, a specific month, a per-site or per-person
+breakdown, "the last X", "list the Y" — use the run_sql_query tool instead of
+saying you don't have access. Query first, then answer from the rows.
+
+Do NOT query for questions the briefing already answers, for definitions, or for
+advice — answer those directly.
+
+## Schema
+These are the ONLY tables and columns available to the tool.
+
+{schema}
+
+## Writing SQL
+- MySQL. One SELECT (a leading WITH is fine). No semicolon. Never `SELECT *`.
+- ALWAYS filter every table by `organisation_id = :org_id`. Write that token
+  literally — it is a bind parameter. NEVER write a numeric organisation id, and
+  never take one from the user's question.
+- Always include a LIMIT (max {max_rows}). Prefer aggregates over raw rows.
+- Incidents/near-misses/unsafe acts have no site column: join `working_stations`
+  on `location_station_id`, then `sites` on `working_stations.site_id`. Every
+  table in the join needs its own `:org_id` filter.
+- Use `incident_date_time` / `event_date_time` / `observed_date_time` for when
+  something happened; `created_at` is row-write time and misleads on trends.
+- Today is {today}. "last month" is the previous calendar month.
+- If a query is rejected, read the error and send a corrected one."""
+
+
+def chat_tool_guidance() -> str:
+    """Render the tool guidance block for the main chat system prompt."""
+    return CHAT_TOOL_GUIDANCE.format(
+        schema=build_schema_prompt(),
+        max_rows=MAX_ROWS,
+        today=date.today().isoformat(),
+    )
+
+
 TOOL_DEFINITION = {
     "name": "run_sql_query",
     "description": (

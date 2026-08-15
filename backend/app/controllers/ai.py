@@ -711,25 +711,13 @@ def _cacheable_system(system_content: str) -> list[dict]:
     }]
 
 
-def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str = "",
-                 system_prompt: str = "") -> str:
-    """Call Anthropic Claude API — supports both standard Anthropic and Azure AI Foundry."""
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError("anthropic package not installed. Run: pip install 'anthropic>=0.40.0'")
+def _claude_request(payload: dict, api_key: str, base_url: str) -> dict:
+    """One Messages-API round trip, returned as a plain dict.
 
-    system_content, conversation = _split_system_and_conversation(messages, system_prompt)
-
-    # Azure AI Foundry uses a different endpoint + auth header
+    Split out of _call_claude so the tool-use loop can call it repeatedly
+    without duplicating the Foundry auth handling.
+    """
     if base_url:
-        payload = {
-            "model": model,
-            "max_tokens": _MAX_TOKENS,
-            "system": system_content,
-            "messages": conversation,
-        }
-        # Azure AI Foundry endpoint format
         endpoint = base_url.rstrip("/") + "/v1/messages"
 
         # Auth style differs per Foundry deployment. This used to always try
@@ -752,34 +740,96 @@ def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str =
                     logger.info("Azure Foundry auth mode: %s", mode)
                     _azure_auth_mode = mode
                 break
-
         response.raise_for_status()
-        data = response.json()
-        usage = data.get("usage") or {}
-        if usage:
-            logger.info(
-                "AI usage: in=%s out=%s", usage.get("input_tokens"), usage.get("output_tokens")
-            )
-        return data["content"][0]["text"] if data.get("content") else "No response."
-    else:
-        # Standard Anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=_cacheable_system(system_content),
-            messages=conversation,
+        return response.json()
+
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+    return client.messages.create(**payload).model_dump()
+
+
+def _log_usage(data: dict) -> None:
+    usage = data.get("usage") or {}
+    if usage:
+        logger.info(
+            "AI usage: in=%s cache_read=%s out=%s",
+            usage.get("input_tokens"), usage.get("cache_read_input_tokens"),
+            usage.get("output_tokens"),
         )
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            logger.info(
-                "AI usage: in=%s cache_read=%s cache_write=%s out=%s",
-                getattr(usage, "input_tokens", "?"),
-                getattr(usage, "cache_read_input_tokens", "?"),
-                getattr(usage, "cache_creation_input_tokens", "?"),
-                getattr(usage, "output_tokens", "?"),
-            )
-        return response.content[0].text if response.content else "No response."
+
+
+def _first_text(content: list) -> str:
+    return "".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
+
+
+def _call_claude(messages: list[dict], api_key: str, model: str, base_url: str = "",
+                 system_prompt: str = "", org_id: Optional[int] = None) -> str:
+    """Call Anthropic Claude API — supports both standard Anthropic and Azure AI Foundry.
+
+    When `org_id` is given, the run_sql_query tool is offered and Claude may
+    query the database mid-answer instead of replying only from the briefing.
+    The org id is bound server-side, never chosen by the model.
+    """
+    try:
+        import anthropic  # noqa: F401  (import checked up front for a clear error)
+    except ImportError:
+        raise RuntimeError("anthropic package not installed. Run: pip install 'anthropic>=0.40.0'")
+
+    from app.services import sql_agent
+
+    system_content, conversation = _split_system_and_conversation(messages, system_prompt)
+
+    payload = {
+        "model": model,
+        "max_tokens": _MAX_TOKENS,
+        "system": system_content if base_url else _cacheable_system(system_content),
+        "messages": conversation,
+    }
+    if org_id is None:
+        data = _claude_request(payload, api_key, base_url)
+        _log_usage(data)
+        return _first_text(data.get("content") or []) or "No response."
+
+    for round_no in range(sql_agent.MAX_TOOL_ROUNDS):
+        last_round = round_no == sql_agent.MAX_TOOL_ROUNDS - 1
+        payload["messages"] = conversation
+        payload.pop("tools", None)
+        if not last_round:
+            payload["tools"] = [sql_agent.TOOL_DEFINITION]
+
+        data = _claude_request(payload, api_key, base_url)
+        _log_usage(data)
+        content = data.get("content") or []
+
+        if data.get("stop_reason") != "tool_use":
+            return _first_text(content) or "No response."
+
+        conversation = conversation + [{"role": "assistant", "content": content}]
+        conversation.append({"role": "user", "content": _run_sql_tool_calls(content, org_id)})
+
+    return "I couldn't complete that lookup. Try rephrasing the question."
+
+
+def _run_sql_tool_calls(content: list, org_id: int) -> list[dict]:
+    """Execute every run_sql_query call in an assistant turn, returning the
+    tool_result blocks to send back. Errors come back as results, not
+    exceptions, so Claude can read the reason and correct its own query."""
+    from app.services import sql_agent
+
+    results = []
+    for block in content:
+        if block.get("type") != "tool_use" or block.get("name") != "run_sql_query":
+            continue
+        sql = (block.get("input") or {}).get("sql", "")
+        body, is_error = sql_agent.run_tool(sql, org_id)
+        results.append({
+            "type": "tool_result",
+            "tool_use_id": block.get("id"),
+            "content": body,
+            **({"is_error": True} if is_error else {}),
+        })
+    return results
 
 
 def _call_azure_openai(messages: list[dict], settings, system_prompt: str = "") -> str:
@@ -817,11 +867,25 @@ def _call_azure_openai(messages: list[dict], settings, system_prompt: str = "") 
 # assistant feeling instant and feeling broken on a phone.
 
 
-def _parse_anthropic_sse(lines):
+def _parse_anthropic_sse(lines, state: Optional[dict] = None):
     """Turn a raw Anthropic Messages-API SSE line stream into text deltas.
+
     Shared by the standard-Anthropic and Azure-AI-Foundry streaming paths — the
-    wire format (content_block_delta events) is identical for both."""
+    wire format is identical for both.
+
+    Pass `state` to also reconstruct the assistant turn while streaming. A
+    generator can't return a value alongside its yields, so the caller supplies a
+    dict that gets filled in with:
+      state["content"]     — the assembled content blocks (text + tool_use)
+      state["stop_reason"] — e.g. "tool_use" when Claude wants the SQL tool
+
+    tool_use arguments arrive split across `input_json_delta` fragments, so they
+    are buffered per block index and parsed once the block closes.
+    """
     event_type = None
+    blocks: dict[int, dict] = {}
+    partials: dict[int, str] = {}
+
     for line in lines:
         if not line:
             event_type = None
@@ -836,33 +900,52 @@ def _parse_anthropic_sse(lines):
                 data = json.loads(data_str)
             except ValueError:
                 continue
-            if event_type == "content_block_delta":
+
+            if event_type == "content_block_start" and state is not None:
+                idx = data.get("index", 0)
+                block = dict(data.get("content_block") or {})
+                blocks[idx] = block
+                if block.get("type") == "tool_use":
+                    partials[idx] = ""
+
+            elif event_type == "content_block_delta":
                 delta = data.get("delta", {})
                 if delta.get("type") == "text_delta":
                     text = delta.get("text", "")
                     if text:
+                        if state is not None:
+                            idx = data.get("index", 0)
+                            blk = blocks.setdefault(idx, {"type": "text", "text": ""})
+                            blk["text"] = blk.get("text", "") + text
                         yield text
+                elif delta.get("type") == "input_json_delta" and state is not None:
+                    idx = data.get("index", 0)
+                    partials[idx] = partials.get(idx, "") + (delta.get("partial_json") or "")
+
+            elif event_type == "content_block_stop" and state is not None:
+                idx = data.get("index", 0)
+                if idx in partials:
+                    raw = partials.pop(idx).strip()
+                    try:
+                        blocks[idx]["input"] = json.loads(raw) if raw else {}
+                    except ValueError:
+                        # Malformed arguments — keep the block so the tool loop
+                        # can hand Claude a proper error instead of crashing.
+                        blocks[idx]["input"] = {}
+
+            elif event_type == "message_delta" and state is not None:
+                stop = (data.get("delta") or {}).get("stop_reason")
+                if stop:
+                    state["stop_reason"] = stop
+
+    if state is not None:
+        state["content"] = [blocks[i] for i in sorted(blocks)]
 
 
-def _call_claude_stream(messages: list[dict], api_key: str, model: str, base_url: str = "",
-                        system_prompt: str = ""):
-    """Streaming counterpart to _call_claude — yields text deltas as they arrive
-    instead of blocking for the full completion."""
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError("anthropic package not installed. Run: pip install 'anthropic>=0.40.0'")
-
-    system_content, conversation = _split_system_and_conversation(messages, system_prompt)
-
+def _stream_once(payload: dict, api_key: str, base_url: str, state: dict):
+    """Stream one Messages-API turn, yielding text deltas and filling `state`
+    with the assembled content blocks and stop_reason."""
     if base_url:
-        payload = {
-            "model": model,
-            "max_tokens": _MAX_TOKENS,
-            "system": system_content,
-            "messages": conversation,
-            "stream": True,
-        }
         endpoint = base_url.rstrip("/") + "/v1/messages"
         logger.info("Streaming from Azure AI Foundry: %s", endpoint)
 
@@ -885,19 +968,68 @@ def _call_claude_stream(messages: list[dict], api_key: str, model: str, base_url
                 if _azure_auth_mode != mode:
                     logger.info("Azure Foundry auth mode: %s", mode)
                     _azure_auth_mode = mode
-                yield from _parse_anthropic_sse(response.iter_lines())
+                yield from _parse_anthropic_sse(response.iter_lines(), state)
                 return
         raise RuntimeError(f"Azure AI Foundry rejected both auth styles (last status {last_status})")
-    else:
-        client = anthropic.Anthropic(api_key=api_key)
-        with client.messages.stream(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=_cacheable_system(system_content),
-            messages=conversation,
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
+
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+    kwargs = {k: v for k, v in payload.items() if k != "stream"}
+    with client.messages.stream(**kwargs) as stream:
+        for text in stream.text_stream:
+            yield text
+        final = stream.get_final_message()
+        state["stop_reason"] = final.stop_reason
+        state["content"] = [b.model_dump() for b in final.content]
+
+
+def _call_claude_stream(messages: list[dict], api_key: str, model: str, base_url: str = "",
+                        system_prompt: str = "", org_id: Optional[int] = None):
+    """Streaming counterpart to _call_claude — yields text deltas as they arrive
+    instead of blocking for the full completion.
+
+    With `org_id` set, Claude can call run_sql_query mid-answer. A tool call ends
+    that stream, so the query runs and a fresh stream continues the reply; the
+    client sees one uninterrupted run of text either way.
+    """
+    try:
+        import anthropic  # noqa: F401
+    except ImportError:
+        raise RuntimeError("anthropic package not installed. Run: pip install 'anthropic>=0.40.0'")
+
+    from app.services import sql_agent
+
+    system_content, conversation = _split_system_and_conversation(messages, system_prompt)
+
+    payload = {
+        "model": model,
+        "max_tokens": _MAX_TOKENS,
+        "system": system_content if base_url else _cacheable_system(system_content),
+        "messages": conversation,
+        "stream": True,
+    }
+
+    if org_id is None:
+        yield from _stream_once(payload, api_key, base_url, {})
+        return
+
+    for round_no in range(sql_agent.MAX_TOOL_ROUNDS):
+        last_round = round_no == sql_agent.MAX_TOOL_ROUNDS - 1
+        payload["messages"] = conversation
+        payload.pop("tools", None)
+        if not last_round:
+            payload["tools"] = [sql_agent.TOOL_DEFINITION]
+
+        state: dict = {}
+        yield from _stream_once(payload, api_key, base_url, state)
+
+        if state.get("stop_reason") != "tool_use":
+            return
+
+        content = state.get("content") or []
+        conversation = conversation + [{"role": "assistant", "content": content}]
+        conversation.append({"role": "user", "content": _run_sql_tool_calls(content, org_id)})
 
 
 def _call_azure_openai_stream(messages: list[dict], settings, system_prompt: str = ""):
@@ -979,6 +1111,13 @@ def _prepare_request(
     # any "role" the caller puts in the request body is ignored.
     bucket = _role_bucket(current_user)
     system_prompt = _ROLE_PROMPTS[bucket]
+
+    # Must match what the orchestrator engine assembles — the callers of this
+    # function pass org_id to the model call, so the schema has to be in the
+    # prompt or Claude gets the tool with nothing to write SQL against.
+    if getattr(current_user, "org_id", None) is not None:
+        from app.services import sql_agent
+        system_prompt = system_prompt + sql_agent.chat_tool_guidance()
 
     if not messages:
         return [], bucket, system_prompt
@@ -1295,7 +1434,8 @@ def ai_chat_stream(
             # Extract prepared streaming context from adapter
             full_messages = response_data.get("messages", [])
             system_prompt = response_data.get("system_prompt", "")
-            
+            stream_org_id = response_data.get("org_id")
+
             settings = get_settings()
             if not settings.anthropic_api_key:
                 get_settings.cache_clear()
@@ -1315,6 +1455,7 @@ def ai_chat_stream(
                         settings.anthropic_model,
                         base_url=settings.anthropic_base_url or "",
                         system_prompt=system_prompt,
+                        org_id=stream_org_id,
                     ):
                         started = True
                         yield event({"delta": chunk})
@@ -1395,10 +1536,19 @@ def ai_chat_stream(
             # Fall back to direct streaming (orchestrator bypass for transition safety)
             logger.warning("Falling back to direct streaming (orchestrator bypass)")
             
-            messages_with_briefing, bucket, system_prompt = _prepare_request(payload, db, current_user)
+            # Deliberately NOT named `bucket`. Rebinding the enclosing scope's
+            # `bucket` here would make it local to generate() for the whole
+            # function, so every earlier read of it — including the ones on the
+            # happy path above — raised UnboundLocalError. That turned a fully
+            # streamed answer into a crash, and the except clause below then
+            # re-streamed the entire reply, so the user saw it twice and paid
+            # for it twice.
+            messages_with_briefing, fallback_bucket, system_prompt = _prepare_request(
+                payload, db, current_user
+            )
             if not messages_with_briefing:
                 yield event({"delta": "No message provided."})
-                yield event({"done": True, "model": "fallback", "scope": bucket})
+                yield event({"done": True, "model": "fallback", "scope": fallback_bucket})
                 return
             
             settings = get_settings()
@@ -1417,6 +1567,7 @@ def ai_chat_stream(
                         settings.anthropic_model,
                         base_url=settings.anthropic_base_url or "",
                         system_prompt=system_prompt,
+                        org_id=getattr(current_user, "org_id", None),
                     ):
                         started = True
                         yield event({"delta": chunk})

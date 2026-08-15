@@ -194,7 +194,8 @@ def _rules_rams(payload: Dict[str, Any]) -> EngineOutput:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _llm_generate(payload: Dict[str, Any]) -> EngineOutput:
-    from app.config.settings import settings
+    from app.config.settings import get_settings
+    settings = get_settings()
 
     prompt = payload.get("prompt") or payload.get("text")
     if not prompt:
@@ -236,7 +237,8 @@ def _llm_chat(payload: Dict[str, Any]) -> EngineOutput:
         system_prompt: optional override for role prompt
         streaming: bool (if True, returns special streaming marker)
     """
-    from app.config.settings import settings
+    from app.config.settings import get_settings
+    settings = get_settings()
     
     messages = payload.get("messages")
     if not messages:
@@ -257,10 +259,19 @@ def _llm_chat(payload: Dict[str, Any]) -> EngineOutput:
     bucket = _role_bucket(current_user)
     system_prompt = payload.get("system_prompt") or _ROLE_PROMPTS[bucket]
     briefing = _cached_briefing(db, current_user, bucket)
-    
+
+    # The briefing only carries org-level totals, so record-level questions ("the
+    # last incident", "which site") used to hit a dead end. Appending the tool
+    # guidance lets Claude decide to query instead — org_id is bound server-side
+    # from the JWT, so the model can never widen its own scope.
+    org_id = getattr(current_user, "org_id", None)
+    if org_id is not None:
+        from app.services import sql_agent
+        system_prompt = system_prompt + sql_agent.chat_tool_guidance()
+
     # Prepend briefing as system message
     full_messages = [{"role": "system", "content": briefing}] + list(messages)
-    
+
     # Check if streaming is requested
     if payload.get("streaming", False):
         # Return a special marker - streaming must be handled by the controller
@@ -271,6 +282,7 @@ def _llm_chat(payload: Dict[str, Any]) -> EngineOutput:
                 "messages": full_messages,
                 "system_prompt": system_prompt,
                 "bucket": bucket,
+                "org_id": org_id,
             },
             confidence=0.85,
             explanation="Chat request prepared for streaming (deferred to controller)",
@@ -288,6 +300,7 @@ def _llm_chat(payload: Dict[str, Any]) -> EngineOutput:
                 model=settings.anthropic_model,
                 base_url=settings.anthropic_base_url or "",
                 system_prompt=system_prompt,
+                org_id=org_id,
             )
             return EngineOutput(
                 result={
