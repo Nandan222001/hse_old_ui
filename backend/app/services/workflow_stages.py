@@ -124,12 +124,27 @@ PERMIT_STATUS_STAGE: Dict[str, str] = {
     "suspended": INVESTIGATE,
     "approved": IMPROVE,             # granted; controls attached before issue
     "issued": IMPROVE,
-    "active": VERIFY,                # live work under verification
+    # A permit being worked under is still stage 05: the controls are in force
+    # and being relied on, but nobody has confirmed they are actually holding.
+    # `active` used to map to VERIFY, which meant every live permit on site read
+    # as "verified" — 3,216 of them in this database — while /verify wrote the
+    # auditor's result and left workflow_status alone, so a checked permit and an
+    # unchecked one were indistinguishable. VERIFY is now reached only by the
+    # auditor's on-site check actually passing.
+    "active": IMPROVE,
+    "verified": VERIFY,              # auditor confirmed the controls on site
     "expired": LEARN,
     "closed": CLOSE,
     "cancelled": CLOSE,
     "rejected": CLOSE,               # terminal — the work never proceeded
 }
+
+# A permit that authorises work right now. Defined here, next to the mapping it
+# has to agree with, because it is read by both permit_workflow and gate_engine
+# and the two had already drifted: both filtered on `approved`, a status no
+# endpoint writes, so the manager's monitoring list and the auditor's queue were
+# permanently empty and the SIMOPS clash check ignored every issued permit.
+PERMIT_LIVE_STATUSES = ("issued", "active", "verified")
 
 # Audits and inspections. Findings are the investigation, CAPAs the improvement.
 AUDIT_STATUS_STAGE: Dict[str, str] = {

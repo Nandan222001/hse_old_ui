@@ -32,6 +32,7 @@ from app.models.gates import GateDecisionLog
 from app.models.permit_to_work import PermitToWork
 from app.models.transport import WeatherLimitTable
 from app.services.hse_formulae import fatigue_index, journey_risk_score
+from app.services.workflow_stages import PERMIT_LIVE_STATUSES
 
 PASS = "pass"
 AMBER = "amber"
@@ -331,7 +332,11 @@ def gate_zone_simops(db: Session, org_id: Optional[int], permit: PermitToWork) -
         .filter(PermitToWork.organisation_id == org_id)
         .filter(PermitToWork.id != permit.id)
         .filter(PermitToWork.is_high_energy == 1)
-        .filter(PermitToWork.workflow_status.in_(["approved", "active", "acknowledged"]))
+        # Anything that authorises work right now, plus `acknowledged` — a permit
+        # already through supervisor review is close enough to issue that a
+        # SIMOPS clash is worth flagging before it is granted. This filtered on
+        # `approved`, which nothing writes, so issued permits never clashed.
+        .filter(PermitToWork.workflow_status.in_(list(PERMIT_LIVE_STATUSES) + ["acknowledged"]))
         .all()
     )
 

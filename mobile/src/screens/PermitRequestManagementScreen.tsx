@@ -13,6 +13,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   approved:     { label: 'Issued — not yet started', color: '#C2410C', bg: '#FFF7ED' },
   issued:       { label: 'Issued — not yet started', color: '#C2410C', bg: '#FFF7ED' },
   active:       { label: 'Active — work in progress', color: '#16A34A', bg: '#F0FDF4' },
+  verified:     { label: 'Active — controls verified on site', color: '#15803D', bg: '#F0FDF4' },
   suspended:    { label: 'Suspended — work stopped', color: '#B91C1C', bg: '#FEF2F2' },
   expired:      { label: 'Work complete — awaiting close-out', color: '#2563EB', bg: '#EFF6FF' },
   closed:       { label: 'Closed', color: '#64748B', bg: '#F1F5F9' },
@@ -188,7 +189,10 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
               </TouchableOpacity>
             )}
 
-            {ws === 'active' && (
+            {/* `verified` is live work that has passed an on-site audit check —
+                same actions as `active`, or a verified permit would strand with
+                no way to complete or stop it. */}
+            {(ws === 'active' || ws === 'verified') && (
               <>
                 <TouchableOpacity style={styles.ackBtn} onPress={completeWork} activeOpacity={0.85}>
                   <Ionicons name="checkmark-done-circle" size={18} color="#FFFFFF" />

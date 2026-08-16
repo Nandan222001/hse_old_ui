@@ -28,9 +28,10 @@ router = APIRouter(prefix="/workflow", tags=["Workflow Engine"])
 # family -> (table, priority column or None, status column)
 #
 # The status column is not uniform: audits use `status`, permits keep their real
-# lifecycle in `status` while `workflow_status` only tracks approvals, and the
-# four report families use `workflow_status`. Hardcoding one name is what broke
-# this endpoint the first time.
+# lifecycle in `workflow_status` (their `status` column is the website's business
+# state, which the analytics count), and the four report families use
+# `workflow_status`. Hardcoding one name is what broke this endpoint the first
+# time.
 _SOURCES: Dict[str, tuple] = {
     "incident": ("incidents", "severity_priority", "workflow_status"),
     "near_miss": ("near_misses", "assessed_priority", "workflow_status"),

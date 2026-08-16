@@ -5,8 +5,8 @@ safety event.
     02 ASSESS      requested | acknowledged — awaiting review and the gate check
     03 RESPOND     gate_blocked   — a hard gate failed; fix it before issue
     04 INVESTIGATE suspended      — work stopped, cause being established
-    05 IMPROVE     issued         — granted, controls attached, work not started
-    06 VERIFY      active         — live work relying on those controls
+    05 IMPROVE     issued | active — granted, controls attached and being relied on
+    06 VERIFY      verified       — auditor confirmed those controls on site
     07 LEARN       expired        — work finished, close-out lesson owed
     08 CLOSE       closed | rejected | cancelled
 
@@ -23,8 +23,8 @@ safety event.
     worker    POST /{id}/complete-work                  → expired
     supr      POST /{id}/close                          → closed
     mgr       GET  /permit-workflow/active              (monitoring)
-    auditor   GET  /permit-workflow/audit-list          (active permits to verify)
-    auditor   POST /{id}/verify                         → records on-site verification
+    auditor   GET  /permit-workflow/audit-list          (live permits to verify)
+    auditor   POST /{id}/verify                         → verified, if the check passes
 
 Writes to permits_to_work. Two status columns, deliberately:
 
@@ -75,6 +75,11 @@ router = APIRouter(prefix="/permit-workflow", tags=["Permit Workflow"])
 
 SUPERVISOR_QUEUE = ["requested"]
 MANAGER_QUEUE = ["requested", "acknowledged"]
+
+# Granted, being worked under, or worked under and since verified — the states
+# in which a permit authorises work right now. Shared with gate_engine; see
+# workflow_stages.PERMIT_LIVE_STATUSES for why it lives there.
+LIVE_STATUSES = list(workflow_stages.PERMIT_LIVE_STATUSES)
 
 
 def _permit_ref(row) -> str:
@@ -355,11 +360,11 @@ def activate_permit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Stage 05 -> 06. Work starts under the permit.
+    """Work starts under the permit. Still stage 05.
 
-    An issued permit and one being worked under are different things: the first
-    is a granted authorisation, the second is live work whose controls are being
-    relied on right now. Stage 06 VERIFY is the second.
+    An issued permit and one being worked under are different things — a granted
+    authorisation versus controls actually being relied on — but neither has been
+    checked by anyone, so both sit at IMPROVE. Only /verify advances the stage.
     """
     row = _get(db, permit_id, current_user.org_id)
     if row.workflow_status not in ("issued", "approved"):
@@ -380,15 +385,18 @@ def suspend_permit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Stage 06 -> 04. Work stops and the cause is established.
+    """Stage 05/06 -> 04. Work stops and the cause is established.
 
     This is the permit's genuine INVESTIGATE state. The gate evaluation before
     issue is triage, not investigation — this is the case where something went
     wrong under a live permit and nobody goes back in until it is understood.
+
+    A verified permit is suspendable like any other: passing an on-site check
+    earlier does not make the work immune to stopping.
     """
     require_role(current_user.role, ALL_ELEVATED_ROLES, "suspend permits")
     row = _get(db, permit_id, current_user.org_id)
-    if row.workflow_status not in ("active", "issued"):
+    if row.workflow_status not in LIVE_STATUSES:
         raise HTTPException(
             status_code=400, detail="Only a live permit can be suspended"
         )
@@ -406,7 +414,12 @@ def resume_permit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Stage 04 -> 06. The cause was established and work may restart."""
+    """Stage 04 -> 05. The cause was established and work may restart.
+
+    Back to `active`, never straight to `verified`: a verification made before
+    the stoppage says nothing about the controls now, so the permit has to be
+    checked again to reach stage 06.
+    """
     require_role(current_user.role, ALL_ELEVATED_ROLES, "resume permits")
     row = _get(db, permit_id, current_user.org_id)
     if row.workflow_status != "suspended":
@@ -424,14 +437,18 @@ def complete_permit_work(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Stage 06 -> 07. Work is finished; the permit is spent and owes its lesson.
+    """Stage 05/06 -> 07. Work is finished; the permit is spent and owes its lesson.
 
     Named for what the holder does. The status is `expired` because that is what
     a permit becomes once its work is done — it is no longer an authorisation
     anyone can rely on, but it is not closed out either.
+
+    Verification is not required to finish work: auditors sample live permits,
+    they do not check every one. A permit completed without ever being verified
+    simply never occupied stage 06, which is the honest record of what happened.
     """
     row = _get(db, permit_id, current_user.org_id)
-    if row.workflow_status not in ("active", "issued"):
+    if row.workflow_status not in LIVE_STATUSES:
         raise HTTPException(
             status_code=400, detail="Only a live permit can be completed"
         )
@@ -466,12 +483,12 @@ def active_permits(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Approved / active permits — the manager's monitoring view."""
+    """Live permits — the manager's monitoring view."""
     require_role(current_user.role, ALL_READ_ROLES, "monitor active permits")
     rows = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
-        .filter(PermitToWork.workflow_status == "approved")
+        .filter(PermitToWork.workflow_status.in_(LIVE_STATUSES))
         .order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
@@ -490,12 +507,16 @@ def auditor_audit_list(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Active permits the auditor checks are valid and physically displayed on site."""
+    """Live permits the auditor checks are valid and physically displayed on site.
+
+    Already-verified permits stay on the list: verification is a sampling check
+    on live work, and a permit can be re-checked while the work continues.
+    """
     require_role(current_user.role, AUDITOR_ROLES | MANAGER_ROLES, "audit permits")
     rows = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
-        .filter(PermitToWork.workflow_status == "approved")
+        .filter(PermitToWork.workflow_status.in_(LIVE_STATUSES))
         .order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
@@ -511,13 +532,43 @@ def auditor_verify(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    """Stage 05 -> 06. The auditor confirms on site that the controls are holding.
+
+    This is the only way a permit reaches VERIFY. It used to record the result
+    and leave `workflow_status` untouched, so verification changed nothing a
+    dashboard could see and every live permit sat at stage 06 regardless.
+
+    Only a passing check advances the permit. An `invalid` or `not_displayed`
+    result is a finding on live work, so the permit stays exactly where it is and
+    a human decides whether to suspend it — the check does not stop the job by
+    itself, and it must not read as a pass either.
+    """
     require_role(current_user.role, AUDITOR_ROLES | MANAGER_ROLES, "verify permits")
     row = _get(db, permit_id, current_user.org_id)
+
+    # Verifying a finished or closed permit would drag it back from LEARN/CLOSE
+    # to VERIFY and undo its close-out. On-site verification only means something
+    # while the work is live.
+    if row.workflow_status not in LIVE_STATUSES:
+        st = workflow_stages.describe("permit", row.workflow_status)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Permit is at stage {st.get('stage_number')} "
+                f"{st.get('stage_label') or row.workflow_status} — on-site verification "
+                "applies to live work only."
+            ),
+        )
+
     row.auditor_verified_by = employee_id_for(db, current_user.user_id)
     row.auditor_verified_at = datetime.now()
     row.verification_result = payload.verification_result
     if payload.verification_notes is not None:
         row.verification_notes = payload.verification_notes
+
+    if str(payload.verification_result or "").strip().lower() == "valid":
+        row.workflow_status = "verified"
+
     db.commit()
     db.refresh(row)
     return _respond(row)
