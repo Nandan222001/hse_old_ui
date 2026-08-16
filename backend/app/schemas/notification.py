@@ -23,6 +23,12 @@ class NotificationOut(TimestampMixin):
     status: str
     sent_at: Optional[datetime]
     is_read: bool = False
+    # Migration 061. `category` lets a client group the CAPA chase separately
+    # from announcements, and `subject_ref` lets it deep-link to the action
+    # rather than making the user go and find CAPA-000231 by hand.
+    target_employee_id: Optional[int] = None
+    category: Optional[str] = None
+    subject_ref: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

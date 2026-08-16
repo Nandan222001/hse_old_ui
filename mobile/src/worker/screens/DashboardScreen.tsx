@@ -244,10 +244,17 @@ export default function DashboardScreen({ navigation }: any) {
             <Text style={styles.myKpiVal}>{myKpis?.my_near_misses ?? '—'}</Text>
             <Text style={styles.myKpiLbl}>My Near Misses</Text>
           </View>
-          <View style={styles.myKpiCard}>
+          {/* This tile counted the worker's own corrective actions but had no
+              screen behind it — the CAPA screen lives in the supervisor stack.
+              It now opens the owner's list. */}
+          <TouchableOpacity
+            style={styles.myKpiCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('MyActions')}
+          >
             <Text style={styles.myKpiVal}>{myKpis?.my_open_capa ?? '—'}</Text>
             <Text style={styles.myKpiLbl}>Open CAPAs</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Section */}

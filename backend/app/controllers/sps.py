@@ -256,14 +256,26 @@ def acknowledge_alert(
 
     if payload.create_capa:
         description = payload.capa_description or (row.message or "SPS alert corrective action")
+        # `action_description` is not a column on CapaAction and never has been,
+        # so this raised TypeError and returned a 500 on every acknowledgement
+        # that asked for a CAPA. The column is `description`.
         capa = CapaAction(
             organisation_id=current_user.org_id,
-            action_description=description,
+            description=description,
+            # An SPS alert is a proactive signal rather than a reported event, so
+            # it has no subject record — but it does have a source, without which
+            # the action would be indistinguishable from the orphans the generic
+            # CRUD endpoint produces.
+            source="proactive",
+            action_type="Preventive",
+            root_cause_addressed=row.message,
+            raised_by=employee_id_for(db, current_user.user_id),
             due_date=date.today() + timedelta(days=payload.due_days),
             status="Open",
         )
         db.add(capa)
         db.flush()
+        capa.capa_ref = f"CAPA-{capa.id:06d}"
         row.capa_action_id = capa.id
 
     db.commit()

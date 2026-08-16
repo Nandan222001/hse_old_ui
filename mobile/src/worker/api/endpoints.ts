@@ -57,6 +57,21 @@ export const ENDPOINTS = {
     DETAIL: (id: string | number) => `/risk-workflow/${id}`,
   },
 
+  // WF-04 corrective actions. A worker can own one — the lifecycle document's
+  // owner row is "whoever is assigned: worker, supervisor or manager" — but
+  // until now there was no worker screen behind the dashboard's "Open CAPAs"
+  // count, so an assigned action was unreachable on this app.
+  CAPA: {
+    MY_ACTIONS: '/capa/my-actions',
+    DETAIL: (id: string | number) => `/capa/${id}`,
+    START: (id: string | number) => `/capa/${id}/start`,
+    PROGRESS: (id: string | number) => `/capa/${id}/progress`,
+    EVIDENCE: (id: string | number) => `/capa/${id}/evidence`,
+    EVIDENCE_UPLOAD: (id: string | number) => `/capa/${id}/evidence/upload`,
+    SUBMIT: (id: string | number) => `/capa/${id}/submit`,
+    CLOSURE_CHECKS: (id: string | number) => `/capa/${id}/closure-checks`,
+  },
+
   // Hazard catalog (reference data), NOT worker risk reports — those go to RISK above.
   HAZARDS: {
     CATEGORIES: '/hazard-categorys',

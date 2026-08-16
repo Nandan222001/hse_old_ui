@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text, func
 
 from app.config.database import SessionLocal
-from app.services import event_assessment, events, workflow_stages
+from app.services import capa_notify, event_assessment, events, workflow_stages
 from app.services.events import catalogue
 from sqlalchemy.orm import Session
 
@@ -429,12 +429,14 @@ def build_workflow_router(
                 incident_priority=getattr(row, "assessed_priority", None),
                 created_at=now,
             )
-            db.add(CapaAction(
+            capa = CapaAction(
                 organisation_id=current_user.org_id,
                 # incident_id stays null: this is not an incident. The
                 # polymorphic pair is what links it back (migration 056).
                 subject_family=report_type,
                 subject_id=row.id,
+                source=report_type,
+                raised_by=_employee_id_for(db, current_user.user_id),
                 action_type="Corrective",
                 description=payload.capa_description,
                 root_cause_addressed=payload.root_cause,
@@ -450,7 +452,22 @@ def build_workflow_router(
                 target_hours=prio.target_hours,
                 evidence_required=prio.evidence_required,
                 priority_explanation=prio.explanation,
-            ))
+            )
+            db.add(capa)
+            db.flush()
+            capa.capa_ref = f"CAPA-{capa.id:06d}"
+            if capa.responsible_person_id:
+                capa.assigned_by = capa.raised_by
+                capa.assigned_at = now
+                capa_notify.notify(
+                    db,
+                    org_id=current_user.org_id,
+                    employee_id=capa.responsible_person_id,
+                    title=f"{capa.capa_ref} assigned to you",
+                    message=f"{capa.description}\nDue {capa.due_date or 'not set'}.",
+                    category="capa_assigned",
+                    subject_ref=capa.capa_ref,
+                )
 
         if (row.severity or "").lower() in ESCALATING_SEVERITIES:
             row.workflow_status = "escalated"

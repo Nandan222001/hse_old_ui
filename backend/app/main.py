@@ -39,6 +39,7 @@ from app.controllers import (
     assigned_tasks as assigned_tasks_controller,
     team as team_controller,
     incident_workflow as incident_workflow_controller,
+    capa_workflow as capa_workflow_controller,
     event_drafts as event_drafts_controller,
     settings as settings_controller,
     near_miss_workflow as near_miss_workflow_controller,
@@ -145,6 +146,10 @@ def create_app() -> FastAPI:
     app.include_router(assigned_tasks_controller.router, prefix=prefix)
     app.include_router(team_controller.router, prefix=prefix)
     app.include_router(incident_workflow_controller.router, prefix=prefix)
+    # WF-04 — the ten-step CAPA lifecycle, shared by every event family. The
+    # /capa-actions router above it is the website's plain CRUD on the same
+    # table and is deliberately left alone.
+    app.include_router(capa_workflow_controller.router, prefix=prefix)
     app.include_router(event_drafts_controller.router, prefix=prefix)
     app.include_router(settings_controller.router, prefix=prefix)
     app.include_router(audit_controller.router, prefix=prefix)

@@ -20,6 +20,11 @@ from app.models.risk_report import RiskReport
 from app.models.safety_walk import SafetyWalk
 from app.models.audit import Audit
 from app.models.capa_action import CapaAction
+from app.models.capa_lifecycle import (
+    CapaEffectivenessReview,
+    CapaEvidence,
+    CapaProgressNote,
+)
 from app.models.event_draft import EventDraft
 from app.models.shift_schedule import ShiftSchedule
 from app.models.app_role import AppRole

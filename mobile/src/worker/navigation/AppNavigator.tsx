@@ -11,6 +11,8 @@ import { useAuthStore } from '../store/authStore';
 import LoginScreen from '../screens/LoginScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import TasksScreen from '../screens/TasksScreen';
+import MyActionsScreen from '../screens/MyActionsScreen';
+import ActionDetailScreen from '../screens/ActionDetailScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PerformTaskScreen from '../screens/PerformTaskScreen';
@@ -147,6 +149,10 @@ export default function AppNavigator() {
         <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="Permits" component={PermitsScreen} options={{ presentation: 'card' }} />
+        {/* WF-04. The dashboard's "Open CAPAs" tile had no destination before
+            this, so an action assigned to a worker was unreachable here. */}
+        <Stack.Screen name="MyActions" component={MyActionsScreen} options={{ presentation: 'card' }} />
+        <Stack.Screen name="ActionDetail" component={ActionDetailScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTrainingDetail" component={SafetyTrainingDetailScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="AISafetyAssistant" component={AISafetyAssistantScreen} options={{ presentation: 'card' }} />

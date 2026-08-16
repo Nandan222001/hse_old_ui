@@ -51,7 +51,29 @@ class MediaRejected(ValueError):
     """The upload was refused. The caller turns this into a 400."""
 
 
-def _safe_extension(filename: Optional[str], content_type: Optional[str]) -> str:
+# CAPA evidence is not only photographs. A procedure change is evidenced by the
+# revised document, a training action by the training record, a test by its
+# report — so the document formats are allowed alongside the media ones, and
+# only for that upload path. Deliberately no archives and nothing executable:
+# the allow-list is the whole defence, so it stays boring.
+DOCUMENT_CONTENT_TYPES = {
+    "application/pdf": ".pdf",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "text/csv": ".csv",
+    "text/plain": ".txt",
+}
+
+EVIDENCE_CONTENT_TYPES = {**ALLOWED_CONTENT_TYPES, **DOCUMENT_CONTENT_TYPES}
+
+
+def _safe_extension(
+    filename: Optional[str],
+    content_type: Optional[str],
+    allowed: Optional[dict] = None,
+) -> str:
     """Pick the extension from the declared type, never from the filename.
 
     The filename arrives from the device and is attacker-controlled in the
@@ -59,18 +81,19 @@ def _safe_extension(filename: Optional[str], content_type: Optional[str]) -> str
     `evidence.php`. The content type is checked against a fixed allow-list, so
     the extension can only ever be one of a handful of known-safe values.
     """
+    allowed = allowed if allowed is not None else ALLOWED_CONTENT_TYPES
     if content_type:
-        ext = ALLOWED_CONTENT_TYPES.get(content_type.split(";")[0].strip().lower())
+        ext = allowed.get(content_type.split(";")[0].strip().lower())
         if ext:
             return ext
     # Fall back to the filename's suffix only if it is itself on the allow-list.
     if filename:
         suffix = Path(filename).suffix.lower()
-        if suffix in set(ALLOWED_CONTENT_TYPES.values()):
+        if suffix in set(allowed.values()):
             return suffix
     raise MediaRejected(
         f"Unsupported media type '{content_type or filename or 'unknown'}'. "
-        f"Allowed: {', '.join(sorted(set(ALLOWED_CONTENT_TYPES)))}"
+        f"Allowed: {', '.join(sorted(set(allowed)))}"
     )
 
 
@@ -79,12 +102,17 @@ def save_image(
     filename: Optional[str],
     content_type: Optional[str],
     subdir: str = "incidents",
+    allowed_types: Optional[dict] = None,
 ) -> str:
     """Write one media file and return the URL path to store on the record.
 
     The stored name is a fresh uuid: the device's filename is discarded entirely,
     so two workers photographing/videoing the same thing cannot collide and nothing
     user-supplied reaches the filesystem.
+
+    `allowed_types` widens the allow-list for callers that legitimately accept
+    more than photos — CAPA evidence, which includes documents. It defaults to
+    the media-only list, so no existing caller changes behaviour.
     """
     if not content:
         raise MediaRejected("Empty file")
@@ -93,7 +121,7 @@ def save_image(
             f"File is {len(content) // (1024 * 1024)} MB; the limit is {MAX_BYTES // (1024 * 1024)} MB"
         )
 
-    ext = _safe_extension(filename, content_type)
+    ext = _safe_extension(filename, content_type, allowed_types)
 
     # Constrain the subdir to a plain word so a caller can never traverse out of
     # UPLOAD_ROOT with something like "../../etc".

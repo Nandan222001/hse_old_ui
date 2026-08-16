@@ -22,8 +22,12 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.controllers.workflow_common import employee_id_for
 from app.models.audit import Audit
 from app.services import workflow_stages
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 from app.schemas.audit import (
     AuditCreate,
     AuditResponse,
@@ -255,9 +259,113 @@ def submit_audit(
 
     a.progress = 100
     a.submitted_at = datetime.utcnow()
+
+    # "Every non-conformance raised by an auditor becomes a CAPA with the finding
+    # attached as evidence" — HSE_CAPA_Lifecycle.pdf, the six sources.
+    #
+    # Nothing created audit CAPAs before this, even though verify_audit refuses
+    # to run while `_has_open_audit_capa` is true and `capa_open` is a valid
+    # audit status. The gate was checking for records that no code path could
+    # produce, so a failed audit item had no corrective action behind it.
+    raised = _raise_finding_capas(db, a, failures, current_user)
+
     db.commit()
     db.refresh(a)
-    return _to_response(a)
+    out = _to_response(a)
+    if raised:
+        logger.info("Audit %s raised %s corrective action(s) from failed items", a.id, raised)
+    return out
+
+
+def _raise_finding_capas(db: Session, audit, failures: list, current_user) -> int:
+    """One CAPA per failed checklist item, carrying the finding across.
+
+    Per item rather than per audit because the document is explicit that each
+    root cause gets its own action — an audit that fails six items has six
+    things to fix, and one lumped action closes when the easiest is done.
+
+    Critical items inherit P2 (major non-conformance), the rest P3 (minor), which
+    is the trigger column of the CAPA type table read literally.
+    """
+    from app.models.capa_action import CapaAction
+    from app.services import capa_notify
+    from app.services.capa_priority import prioritise
+
+    if not failures:
+        return 0
+
+    now = datetime.utcnow()
+    raised_by = employee_id_for(db, current_user.user_id) if current_user else None
+    created = 0
+
+    for item in failures:
+        label = (getattr(item, "question", None) or getattr(item, "title", None)
+                 or "Checklist item")
+        finding = getattr(item, "remarks", None) or ""
+        critical = bool(getattr(item, "critical", False))
+
+        # Skip an item that already produced an action, so re-submitting a
+        # checklist does not duplicate the whole finding list.
+        existing = (
+            db.query(CapaAction.id)
+            .filter(
+                CapaAction.subject_family == "audit",
+                CapaAction.subject_id == audit.id,
+                CapaAction.root_cause_addressed == str(label)[:255],
+            )
+            .first()
+        )
+        if existing:
+            continue
+
+        prio = prioritise(
+            severity_potential="high" if critical else "medium",
+            systemic_risk="medium",
+            capa_type="P2" if critical else "P3",
+            created_at=now,
+        )
+        capa = CapaAction(
+            organisation_id=audit.organisation_id,
+            subject_family="audit",
+            subject_id=audit.id,
+            source="audit",
+            raised_by=raised_by,
+            action_type="Corrective",
+            description=f"Audit finding: {label}" + (f" — {finding}" if finding else ""),
+            root_cause_addressed=str(label)[:255],
+            due_date=prio.due_date.date() if prio.due_date else None,
+            status="Open",
+            severity_potential=prio.severity_potential,
+            systemic_risk=prio.systemic_risk,
+            priority_score=prio.priority_score,
+            priority_band=prio.priority_band,
+            capa_type=prio.capa_type,
+            capa_type_label=prio.capa_type_label,
+            target_hours=prio.target_hours,
+            evidence_required=prio.evidence_required,
+            priority_explanation=prio.explanation,
+        )
+        db.add(capa)
+        db.flush()
+        capa.capa_ref = f"CAPA-{capa.id:06d}"
+        created += 1
+
+    if created:
+        # Unassigned on purpose: the auditor finds the non-conformance, the line
+        # decides who owns fixing it. The managers get told there is a queue.
+        capa_notify.notify_many(
+            db,
+            capa_notify.safety_managers(db, audit.organisation_id),
+            org_id=audit.organisation_id,
+            title=f"{created} corrective action(s) raised from an audit",
+            message=(
+                f"Audit #{audit.id} raised {created} non-conformance(s). "
+                "Each needs an owner and a plan before work can start."
+            ),
+            category="capa_assigned",
+            type_="warning",
+        )
+    return created
 
 
 @router.post("/{audit_id}/start", response_model=AuditResponse)

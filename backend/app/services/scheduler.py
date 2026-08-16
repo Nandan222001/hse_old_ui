@@ -18,6 +18,7 @@ from app.config.database import SessionLocal
 from app.models.permit_to_work import PermitToWork
 from app.models.capa_action import CapaAction
 from app.models.notification import Notification
+from app.services import capa_scheduler
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -132,13 +133,36 @@ def start_scheduler() -> None:
     now = datetime.utcnow()
     _scheduler.add_job(check_checklist_sla_breaches, "interval", minutes=15, id="checklist_sla_check", next_run_time=now)
     _scheduler.add_job(notify_overdue_capa_summary, "interval", hours=24, id="capa_overdue_summary", next_run_time=now)
+
+    # ── WF-04 · the CAPA chase (app.services.capa_scheduler) ──────────────────
+    # Hourly for the escalation chain because a P1 action's entire life is 24
+    # hours; a daily job would miss its 75% reminder altogether.
+    _scheduler.add_job(
+        capa_scheduler.run_capa_escalations, "interval", hours=1,
+        id="capa_escalation_chain", next_run_time=now,
+    )
+    _scheduler.add_job(
+        capa_scheduler.rescore_capa_priorities, "interval", weeks=1,
+        id="capa_weekly_rescore", next_run_time=now,
+    )
+    _scheduler.add_job(
+        capa_scheduler.notify_due_effectiveness_reviews, "interval", hours=24,
+        id="capa_effectiveness_reviews", next_run_time=now,
+    )
+    _scheduler.add_job(
+        capa_scheduler.flag_systemic_issues, "interval", hours=24,
+        id="capa_systemic_flag", next_run_time=now,
+    )
     # expire_overdue_permits is intentionally NOT scheduled: the current dataset's
     # permits all carry validity_end dates from 2024-2025 while the system clock is
     # 2026, so every "Active" permit reads as already-expired and the job would wipe
     # out /actions' entire "active work" view on its first run. Re-enable once
     # validity_end reflects real, currently-relevant dates.
     _scheduler.start()
-    logger.info("Event & Trigger scheduler started (checklist SLA / CAPA summary; permit expiry disabled)")
+    logger.info(
+        "Event & Trigger scheduler started (checklist SLA / CAPA summary / CAPA escalation "
+        "chain / weekly re-score / effectiveness reviews / systemic flag; permit expiry disabled)"
+    )
 
 
 def stop_scheduler() -> None:

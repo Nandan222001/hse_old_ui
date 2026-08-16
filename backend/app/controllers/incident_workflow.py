@@ -696,6 +696,13 @@ def supervisor_investigate(
         capa = CapaAction(
             organisation_id=current_user.org_id,
             incident_id=incident.id,
+            # Migration 056 backfilled the polymorphic link once but this path
+            # never populated it, so every action raised since then read
+            # subject_family NULL and was invisible to the shared CAPA lifecycle.
+            subject_family="incident",
+            subject_id=incident.id,
+            source="incident",
+            raised_by=_acting_employee_id(db, current_user),
             action_type="Corrective",
             description=payload.capa_description,
             root_cause_addressed=payload.root_cause,
@@ -715,6 +722,11 @@ def supervisor_investigate(
             priority_explanation=prio.explanation,
         )
         db.add(capa)
+        db.flush()
+        capa.capa_ref = f"CAPA-{capa.id:06d}"
+        if capa.responsible_person_id:
+            capa.assigned_by = capa.raised_by
+            capa.assigned_at = now
         incident.capa_generated = "Yes"
 
         # Send notification
@@ -734,12 +746,22 @@ def supervisor_investigate(
                 if emp:
                     emp_name = emp.full_name or f"EMP-{capa.responsible_person_id}"
 
+            # Addressed to the owner, not broadcast. This read target_type="all",
+            # so a notification naming one person was delivered to the whole
+            # organisation and the person who had to act got no more signal than
+            # anyone else. See migration 061.
             notif = Notification(
                 organisation_id=current_user.org_id,
-                title="New CAPA Action Assigned",
-                message=f"A new corrective action (CAPA) has been assigned to {emp_name}: {capa.description}",
+                title=f"{capa.capa_ref} assigned to you",
+                message=(
+                    f"A new corrective action has been assigned to {emp_name}: "
+                    f"{capa.description}\nDue {capa.due_date or 'not set'}."
+                ),
                 type="info",
-                target_type="all",
+                target_type="specific" if capa.responsible_person_id else "all",
+                target_employee_id=capa.responsible_person_id,
+                category="capa_assigned",
+                subject_ref=capa.capa_ref,
                 status="sent",
                 sent_at=datetime.utcnow()
             )
