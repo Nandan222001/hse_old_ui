@@ -1,356 +1,319 @@
-import { useEffect, useState } from "react";
-import { FileCheck, RefreshCw, AlertTriangle, Plus, Trash2, X } from "lucide-react";
-import {
-  getEquipmentCertifications, createEquipmentCertification, deleteEquipmentCertification,
-  type EquipmentCertification, type EquipmentCertFilters, type CertCreate,
-} from "../../services/analytics.service";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowRight, FileText, Gauge, RefreshCw, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getPermitsSummary, type PermitsSummary } from "../../services/analytics.service";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 
-const STATUS_COLORS: Record<string, string> = {
-  Valid:           "bg-blue-100 text-blue-700",
-  "Expiring Soon": "bg-yellow-100 text-yellow-700",
-  Expired:         "bg-red-100 text-red-700",
-};
+function MetricCard({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  tone: "blue" | "green" | "amber" | "red";
+}) {
+  const accent =
+    tone === "green" ? "#16A34A" : tone === "amber" ? "#D97706" : tone === "red" ? "#DC2626" : "#2563EB";
 
-const EMPTY_FORM: CertCreate = {
-  equipment_name: "", equipment_type: "", zone: "",
-  serial_number: "", manufacturer: "", model: "",
-  certification_type: "", certified_by: "",
-  issue_date: "", expiry_date: "", next_inspection_date: "",
-  compliance_standard: "",
-};
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[12px] font-semibold" style={{ color: "#374151" }}>{label}</label>
-      {children}
-    </div>
+    <Card className="overflow-hidden border-none shadow-[0_10px_26px_rgba(15,23,42,0.08)]" style={{ background: "linear-gradient(180deg, #FFFFFF 0%, #F8FAFF 100%)" }}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#64748B" }}>{label}</p>
+            <p className="mt-2 text-3xl font-bold" style={{ color: accent }}>{value}</p>
+            <p className="mt-1 text-[12px]" style={{ color: "#64748B" }}>{hint}</p>
+          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: `${accent}12`, color: accent }}>
+            <Gauge className="h-5 w-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
+function ratio(numerator: number, denominator: number) {
+  if (!denominator) return 0;
+  return Math.round((numerator / denominator) * 100);
+}
+
 export function EquipmentCertificationPage() {
-  const [records, setRecords]   = useState<EquipmentCertification[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [filters, setFilters]   = useState<EquipmentCertFilters>({});
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm]         = useState<CertCreate>(EMPTY_FORM);
-  const [saving, setSaving]     = useState(false);
-  const [formError, setFormError] = useState("");
+  const [data, setData] = useState<PermitsSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
-    if (records.length === 0) {
-      setLoading(true);
-    }
+    setLoading(true);
     setError(null);
     try {
-      const data = await getEquipmentCertifications(filters);
-      setRecords(data);
+      const summary = await getPermitsSummary();
+      setData(summary);
     } catch {
-      setError("Failed to load equipment certifications. Ensure the backend is running.");
+      setError("Failed to load the Module 4 dashboard. Make sure the analytics backend is running.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [filters]);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const stats = {
-    total:        records.length,
-    valid:        records.filter(r => r.Status === "Valid").length,
-    expiringSoon: records.filter(r => r.Status === "Expiring Soon").length,
-    expired:      records.filter(r => r.Status === "Expired").length,
-  };
+  const ptwCompliance = data?.permit_compliance_pct ?? 0;
+  const activePermits = data?.active_permits ?? 0;
+  const exposureHours = data?.work_exposure_hours ?? 0;
+  const openViolations = data?.permit_violations.length ?? 0;
+  const totalPermits = data ? data.work_by_type.reduce((sum, row) => sum + row.active + row.closed + row.expired, 0) : 0;
+  const closedPermits = data ? data.work_by_type.reduce((sum, row) => sum + row.closed, 0) : 0;
+  const controlCoverage = ratio(closedPermits, totalPermits);
+  const trend = useMemo(
+    () => data?.expiry_timeline.map((item) => ({
+      label: item.label,
+      value: Math.round(item.width),
+      rightText: item.rightText,
+      color: item.color,
+    })) ?? [],
+    [data],
+  );
 
-  const equipmentTypes = [...new Set(records.map(r => r.Equipment_Type).filter(Boolean))];
-
-  const handleSave = async () => {
-    if (!form.equipment_name.trim()) { setFormError("Equipment name is required."); return; }
-    setSaving(true);
-    setFormError("");
-    try {
-      const payload: CertCreate = {
-        ...form,
-        issue_date:           form.issue_date || undefined,
-        expiry_date:          form.expiry_date || undefined,
-        next_inspection_date: form.next_inspection_date || undefined,
-      };
-      await createEquipmentCertification(payload);
-      setShowModal(false);
-      setForm(EMPTY_FORM);
-      await fetchData();
-    } catch {
-      setFormError("Failed to save. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (certId: string) => {
-    if (!window.confirm(`Delete ${certId}?`)) return;
-    try {
-      await deleteEquipmentCertification(certId);
-      setRecords(prev => prev.filter(r => r.Cert_ID !== certId));
-    } catch {
-      alert("Failed to delete.");
-    }
-  };
+  const warningTone = ptwCompliance >= 90 ? "green" : ptwCompliance >= 75 ? "amber" : "red";
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Equipment Certification</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage and track equipment certifications and inspection records.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button size="sm" onClick={() => { setForm(EMPTY_FORM); setFormError(""); setShowModal(true); }}
-            style={{ background: "linear-gradient(135deg,#0B3D91,#1D4ED8)", color: "#fff" }}>
-            <Plus className="w-4 h-4 mr-2" /> Add Certificate
-          </Button>
-        </div>
-      </div>
+      <div
+        className="overflow-hidden rounded-[28px] border shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
+        style={{
+          borderColor: "#D9E4FB",
+          background: "linear-gradient(135deg, #0F2E63 0%, #173A78 42%, #F8FBFF 42%, #FFFFFF 100%)",
+        }}
+      >
+        <div className="grid gap-6 p-6 lg:grid-cols-[1.3fr_0.9fr] lg:p-8">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90">
+              <Sparkles className="h-3.5 w-3.5" />
+              Module 4 - Assets & Operations
+            </div>
+            <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight text-white lg:text-4xl">
+              PTW-led asset control dashboard
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80">
+              Built from the workbook’s computed Module 4 logic: permit-to-work compliance, LOTO proxy compliance,
+              active permit pressure, and the explicit maintenance data gaps called out in the sheet.
+            </p>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total Equipment", value: stats.total,        color: "text-gray-900" },
-          { label: "Valid",           value: stats.valid,        color: "text-blue-600" },
-          { label: "Expiring Soon",   value: stats.expiringSoon, color: "text-yellow-600" },
-          { label: "Expired",         value: stats.expired,      color: "text-red-600" },
-        ].map(({ label, value, color }) => (
-          <Card key={label}>
-            <CardContent className="pt-5">
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Alert banner */}
-      {(stats.expired > 0 || stats.expiringSoon > 0) && (
-        <div className="flex items-center gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-          <p className="text-sm text-yellow-800">
-            {stats.expired > 0 && <span className="font-semibold">{stats.expired} expired</span>}
-            {stats.expired > 0 && stats.expiringSoon > 0 && " and "}
-            {stats.expiringSoon > 0 && <span className="font-semibold">{stats.expiringSoon} expiring soon</span>}
-            {" "}— review and schedule recertification.
-          </p>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <Select value={filters.status ?? "all"}
-          onValueChange={v => setFilters(f => ({ ...f, status: v === "all" ? undefined : v }))}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {["Valid", "Expiring Soon", "Expired"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filters.equipment_type ?? "all"}
-          onValueChange={v => setFilters(f => ({ ...f, equipment_type: v === "all" ? undefined : v }))}>
-          <SelectTrigger className="w-52"><SelectValue placeholder="Equipment Type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {equipmentTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="w-5 h-5 text-blue-600" />
-            Certifications ({records.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {error ? (
-            <div className="p-6 text-center text-sm text-red-500">{error}</div>
-          ) : (loading && records.length === 0) ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">Loading...</div>
-          ) : records.length === 0 ? (
-            <div className="p-10 text-center">
-              <FileCheck className="w-10 h-10 mx-auto mb-3 opacity-20 text-blue-400" />
-              <p className="text-sm text-muted-foreground mb-3">No certifications yet. Add your first one.</p>
-              <Button size="sm" onClick={() => { setForm(EMPTY_FORM); setFormError(""); setShowModal(true); }}
-                style={{ background: "linear-gradient(135deg,#0B3D91,#1D4ED8)", color: "#fff" }}>
-                <Plus className="w-4 h-4 mr-2" /> Add Certificate
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button onClick={fetchData} disabled={loading} className="bg-white text-slate-900 hover:bg-white/90">
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                Refresh Module 4
               </Button>
+              <a href="#module4-breakdown" className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15">
+                View breakdown
+                <ArrowRight className="h-4 w-4" />
+              </a>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cert ID</TableHead>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Site / Zone</TableHead>
-                    <TableHead>Serial No.</TableHead>
-                    <TableHead>Cert Type</TableHead>
-                    <TableHead>Certified By</TableHead>
-                    <TableHead>Expiry Date</TableHead>
-                    <TableHead>Next Inspection</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Standard</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map(r => (
-                    <TableRow key={r.Cert_ID}
-                      className={r.Status === "Expired" ? "bg-red-50" : r.Status === "Expiring Soon" ? "bg-yellow-50" : ""}>
-                      <TableCell className="font-mono text-xs">{r.Cert_ID}</TableCell>
-                      <TableCell>
-                        <p className="font-medium text-sm">{r.Equipment_Name}</p>
-                        <p className="text-xs text-muted-foreground">{r.Manufacturer} {r.Model}</p>
-                      </TableCell>
-                      <TableCell className="text-sm">{r.Equipment_Type}</TableCell>
-                      <TableCell className="text-sm">
-                        <span className="font-medium">{r.Site_ID}</span>
-                        <span className="text-muted-foreground"> / {r.Zone_ID}</span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{r.Serial_Number}</TableCell>
-                      <TableCell className="text-sm">{r.Certification_Type}</TableCell>
-                      <TableCell className="text-sm">{r.Certified_By}</TableCell>
-                      <TableCell className="text-sm">{r.Expiry_Date}</TableCell>
-                      <TableCell className="text-sm">{r.Next_Inspection}</TableCell>
-                      <TableCell>
-                        <Badge className={`text-xs ${STATUS_COLORS[r.Status] ?? ""}`} variant="outline">
-                          {r.Status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{r.Compliance_Standard}</TableCell>
-                      <TableCell>
-                        <button onClick={() => handleDelete(r.Cert_ID)}
-                          className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                          title="Delete">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          </div>
+
+          <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-white/95 p-4 shadow-[0_14px_32px_rgba(15,23,42,0.12)]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">PTW Compliance</p>
+                <p className="mt-2 text-4xl font-bold text-slate-900">{ptwCompliance}%</p>
+              </div>
+              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                {warningTone === "green" ? "On track" : warningTone === "amber" ? "Watch" : "Critical"}
+              </Badge>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add Certificate Modal */}
-      {showModal && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => !saving && setShowModal(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-              style={{ border: "1px solid #D6E4FF" }}>
-              <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "#E0EAFF" }}>
-                <div className="flex items-center gap-2">
-                  <FileCheck className="w-5 h-5 text-blue-600" />
-                  <h2 className="text-[17px] font-bold" style={{ color: "#0A0A0A" }}>Add Equipment Certificate</h2>
-                </div>
-                <button disabled={saving} onClick={() => setShowModal(false)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
+            <div className="h-3 rounded-full bg-slate-200">
+              <div
+                className="h-3 rounded-full"
+                style={{
+                  width: `${Math.max(ptwCompliance, 4)}%`,
+                  background: warningTone === "green"
+                    ? "linear-gradient(90deg, #22C55E, #16A34A)"
+                    : warningTone === "amber"
+                      ? "linear-gradient(90deg, #F59E0B, #D97706)"
+                      : "linear-gradient(90deg, #F87171, #DC2626)",
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-slate-600">
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.1em] text-slate-400">Active permits</div>
+                <div className="mt-1 text-2xl font-bold text-slate-900">{activePermits}</div>
               </div>
-
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {formError && (
-                  <div className="col-span-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                    {formError}
-                  </div>
-                )}
-
-                <Field label="Equipment Name *">
-                  <input value={form.equipment_name} onChange={e => setForm(f => ({ ...f, equipment_name: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="e.g. Overhead Crane #3" />
-                </Field>
-                <Field label="Equipment Type">
-                  <input value={form.equipment_type ?? ""} onChange={e => setForm(f => ({ ...f, equipment_type: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="e.g. Lifting Equipment" />
-                </Field>
-                <Field label="Serial Number">
-                  <input value={form.serial_number ?? ""} onChange={e => setForm(f => ({ ...f, serial_number: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="SN-00123" />
-                </Field>
-                <Field label="Manufacturer">
-                  <input value={form.manufacturer ?? ""} onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="Manufacturer name" />
-                </Field>
-                <Field label="Model">
-                  <input value={form.model ?? ""} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="Model number" />
-                </Field>
-                <Field label="Zone / Area">
-                  <input value={form.zone ?? ""} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="Zone A" />
-                </Field>
-                <Field label="Certification Type">
-                  <input value={form.certification_type ?? ""} onChange={e => setForm(f => ({ ...f, certification_type: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="e.g. Annual Inspection" />
-                </Field>
-                <Field label="Certified By">
-                  <input value={form.certified_by ?? ""} onChange={e => setForm(f => ({ ...f, certified_by: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="Inspector or certifying body" />
-                </Field>
-                <Field label="Issue Date">
-                  <input type="date" value={form.issue_date ?? ""} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }} />
-                </Field>
-                <Field label="Expiry Date">
-                  <input type="date" value={form.expiry_date ?? ""} onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }} />
-                </Field>
-                <Field label="Next Inspection Date">
-                  <input type="date" value={form.next_inspection_date ?? ""} onChange={e => setForm(f => ({ ...f, next_inspection_date: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }} />
-                </Field>
-                <Field label="Compliance Standard">
-                  <input value={form.compliance_standard ?? ""} onChange={e => setForm(f => ({ ...f, compliance_standard: e.target.value }))}
-                    className="h-9 rounded-lg border px-3 text-[13px]" style={{ borderColor: "#D1D5DB" }}
-                    placeholder="e.g. LOLER 1998, ISO 9001" />
-                </Field>
-              </div>
-
-              <div className="px-6 py-4 border-t flex justify-end gap-3" style={{ borderColor: "#E0EAFF" }}>
-                <button onClick={() => setShowModal(false)} disabled={saving}
-                  className="px-4 py-2 rounded-lg border text-[13px]" style={{ borderColor: "#D1D5DB", color: "#374151" }}>
-                  Cancel
-                </button>
-                <button onClick={handleSave} disabled={saving}
-                  className="px-5 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-60"
-                  style={{ background: "linear-gradient(135deg,#0B3D91,#1D4ED8)" }}>
-                  {saving ? "Saving…" : "Save Certificate"}
-                </button>
+              <div className="rounded-2xl bg-slate-50 p-3">
+                <div className="text-[11px] uppercase tracking-[0.1em] text-slate-400">Exposure hours</div>
+                <div className="mt-1 text-2xl font-bold text-slate-900">{exposureHours.toLocaleString()}</div>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Total Permits" value={totalPermits} hint="Current PTW population in view" tone="blue" />
+        <MetricCard label="PTW Compliance" value={`${ptwCompliance}%`} hint="Closed permits over total issued" tone="green" />
+        <MetricCard label="LOTO Proxy" value={`${controlCoverage}%`} hint="No-deviation isolation / lockout proxy" tone="amber" />
+        <MetricCard label="Deviation Alerts" value={openViolations} hint="Permits with reported deviations" tone="red" />
+      </div>
+
+      {(data?.permit_violations.length ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div className="text-sm">
+            <div className="font-semibold">PTW risk attention required</div>
+            <div className="mt-0.5 text-amber-800">
+              {data?.permit_violations.length ?? 0} permits have reported deviations and should be reviewed against isolation and close-out controls.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error ? (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6 text-center text-sm text-red-700">{error}</CardContent>
+        </Card>
+      ) : loading && !data ? (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-slate-500">Loading Module 4 dashboard...</CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-4 xl:grid-cols-[1.3fr_0.9fr]">
+            <Card className="border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
+              <CardHeader id="module4-breakdown" className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-[18px]">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  Computation Inputs
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2">
+                {[
+                  { label: "Permits Issued", value: data?.work_by_type.reduce((sum, row) => sum + row.active + row.closed + row.expired, 0) ?? 0 },
+                  { label: "Permits Properly Closed", value: data?.work_by_type.reduce((sum, row) => sum + row.closed, 0) ?? 0 },
+                  { label: "Permits Expired", value: data?.work_by_type.reduce((sum, row) => sum + row.expired, 0) ?? 0 },
+                  { label: "Permits Active", value: data?.work_by_type.reduce((sum, row) => sum + row.active, 0) ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">{item.label}</div>
+                    <div className="mt-2 text-2xl font-bold text-slate-900">{item.value}</div>
+                  </div>
+                ))}
+                <div className="md:col-span-2 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-slate-700">
+                  Workbook note: only two KPIs are directly computable from PTW data. Maintenance, inspection, and SCE
+                  KPIs remain unavailable until CMMS / asset-register data is connected.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-[18px]">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                  Data Gap Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[
+                  "No CMMS or asset register was shared.",
+                  "Inspection and maintenance KPIs are not computable yet.",
+                  "SCE / critical equipment health needs a separate source.",
+                ].map((text) => (
+                  <div key={text} className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                    <span>{text}</span>
+                  </div>
+                ))}
+                <div className="rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-600">
+                  Suggested next feed: equipment master, inspection register, maintenance work orders, and SCE register.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[18px]">PTW Status Mix</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={data?.work_by_type ?? []}>
+                    <CartesianGrid stroke="#E2E8F0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fill: "#475569", fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis hide />
+                    <Tooltip />
+                    <Bar dataKey="closed" stackId="a" fill="#22C55E" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="active" stackId="a" fill="#F59E0B" />
+                    <Bar dataKey="expired" stackId="a" fill="#EF4444" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[18px]">Expiry Timeline</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(data?.expiry_timeline ?? []).slice(0, 5).map((item) => (
+                  <div key={item.label}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium text-slate-700">{item.label}</span>
+                      <span className="text-slate-500">{item.rightText}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-200">
+                      <div className="h-2 rounded-full" style={{ width: `${Math.max(item.width, 4)}%`, background: item.color }} />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="border-slate-200 shadow-[0_10px_26px_rgba(15,23,42,0.08)]">
+            <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-[18px]">
+            <FileText className="h-5 w-5 text-slate-700" />
+                Active Permit Watchlist
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto p-0">
+              <table className="w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {["Permit", "Type", "Issued By", "Location", "Status", "Expiry"].map((head) => (
+                      <th key={head} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                        {head}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.active_work_rows ?? []).slice(0, 8).map((row) => (
+                    <tr key={row.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.id}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{row.type}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{row.issued_by}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{row.location}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                          {row.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{row.expiry}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
