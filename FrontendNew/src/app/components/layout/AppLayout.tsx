@@ -71,7 +71,7 @@ export function AppLayout() {
               onToggleDarkMode={() => setDarkMode(!darkMode)}
               onOpenSidebar={() => setSidebarOpen(true)}
             />
-            <main className="flex-1 min-h-0 overflow-auto p-3 sm:p-4 md:p-6" style={{ background: darkMode ? '#070F21' : '#F7F9FE' }}>
+            <main className="flex-1 min-h-0 overflow-auto p-2 sm:p-3 md:p-4 lg:p-5" style={{ background: darkMode ? '#070F21' : '#F7F9FE' }}>
               <Outlet context={{ darkMode }} />
             </main>
           </div>

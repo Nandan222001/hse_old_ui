@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   getDashboardStats,
@@ -235,7 +236,7 @@ export function DashboardPage() {
   const demoKpis = [...leadingKpis, ...limitingKpis];
 
   const content = (
-      <>
+      <div className="w-full space-y-4">
         <div
           className="rounded-2xl border p-4 md:p-5"
           style={{ borderColor: '#CFDCF5', background: '#F8FBFF' }}
@@ -243,11 +244,12 @@ export function DashboardPage() {
           {/* Leading Indicators Row */}
           <div className="mb-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#E9EDFF', color: '#4A5568' }}>
-                â†‘ Leading Indicators
+              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#E9EDFF', color: '#4A5568' }}>
+                <ArrowUp className="h-3.5 w-3.5" />
+                Leading Indicators
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
               {leadingKpis.map((item) => (
                 <div
                   key={item.title}
@@ -263,7 +265,8 @@ export function DashboardPage() {
                     <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
                     {item.inline && (
                       <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? 'â†˜' : 'â†—'} {item.inline}
+                        {item.trendDown ? <ArrowDown className="inline-block h-3.5 w-3.5 align-middle mr-1" /> : <ArrowUp className="inline-block h-3.5 w-3.5 align-middle mr-1" />}
+                        {item.inline}
                       </span>
                     )}
                   </div>
@@ -279,11 +282,12 @@ export function DashboardPage() {
           {/* Limiting Indicators Row */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400E' }}>
-                â†“ Limiting Indicators
+              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                <ArrowDown className="h-3.5 w-3.5" />
+                Limiting Indicators
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
               {limitingKpis.map((item) => (
                 <div
                   key={item.title}
@@ -299,7 +303,8 @@ export function DashboardPage() {
                     <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
                     {item.inline && (
                       <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? 'â†˜' : 'â†—'} {item.inline}
+                        {item.trendDown ? <ArrowDown className="inline-block h-3.5 w-3.5 align-middle mr-1" /> : <ArrowUp className="inline-block h-3.5 w-3.5 align-middle mr-1" />}
+                        {item.inline}
                       </span>
                     )}
                   </div>
@@ -310,7 +315,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
             <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Incident Categories</h2>
             <ResponsiveContainer width="100%" height={380}>
@@ -344,7 +349,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[1.1fr_auto_1fr] xl:items-center">
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_auto_1fr] lg:items-center">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-semibold text-slate-700">Avg. Safety Walk Compliance</span>
@@ -377,58 +382,59 @@ export function DashboardPage() {
               </div>
             </div>
         </div>
+        </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-          <div className="xl:col-span-6 rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-3 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Ranked Action Table</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+        <div
+          className="grid w-full min-w-0 max-w-none grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,0.75fr)_minmax(0,1fr)]"
+          style={{ width: '100%', maxWidth: 'none' }}
+        >
+          <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Ranked Action Table</h2>
+              <span className="rounded-full bg-[#EEF2FF] px-2.5 py-1 text-[11px] font-bold text-[#4A57B9]">TOP {capaActions.length}</span>
+            </div>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <table className="w-full table-fixed text-left">
+                <colgroup><col className="w-[42%]" /><col className="w-[18%]" /><col className="w-[20%]" /><col className="w-[20%]" /></colgroup>
                 <thead>
                   <tr className="border-b" style={{ borderColor: '#E5E7EB' }}>
-                    <th className="py-2 text-[13px]" style={{ color: '#4B5563', fontWeight: 700 }}>Action</th>
-                    <th className="py-2 text-[13px]" style={{ color: '#4B5563', fontWeight: 700 }}>Priority</th>
-                    <th className="py-2 text-[13px]" style={{ color: '#4B5563', fontWeight: 700 }}>Due Date</th>
-                    <th className="py-2 text-[13px]" style={{ color: '#4B5563', fontWeight: 700 }}>Assignee</th>
+                    {['Action', 'Priority', 'Due Date', 'Assignee'].map((heading) => <th key={heading} className="px-2 py-2 first:pl-0 text-[12px] uppercase tracking-wide" style={{ color: '#64748B', fontWeight: 700 }}>{heading}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {capaActions.map((row) => (
-                    <tr key={row.id} className="border-b last:border-b-0" style={{ borderColor: '#F1F5F9' }}>
-                      <td className="py-2 text-[13px]" style={{ color: '#111827' }}>{row.description || row.action_type}</td>
-                      <td className="py-2 text-[13px]" style={{ color: row.priority === 'High' ? '#B45309' : '#4B5563', fontWeight: 600 }}>{row.priority}</td>
-                      <td className="py-2 text-[13px]" style={{ color: '#374151' }}>{formatDueDate(row.due_date)}</td>
-                      <td className="py-2 text-[13px]" style={{ color: '#374151' }}>{row.assignee}</td>
-                    </tr>
-                  ))}
+                  {capaActions.map((row) => {
+                    const assignee = row.assignee || 'Unassigned';
+                    const initials = assignee.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+                    return <tr key={row.id} className="border-b last:border-b-0" style={{ borderColor: '#F1F5F9' }}>
+                      <td className="max-w-0 break-words px-2 py-3 first:pl-0 text-[13px]" style={{ color: '#111827' }}><span className="block break-words" title={row.description || row.action_type}>{row.description || row.action_type}</span></td>
+                      <td className="px-2 py-3 text-[13px]"><span className="inline-flex rounded-full px-2 py-1 text-[11px] font-bold" style={{ background: row.priority === 'High' ? '#FFF1F2' : '#FFF7ED', color: row.priority === 'High' ? '#BE123C' : '#C2410C' }}>{row.priority}</span></td>
+                      <td className="px-2 py-3 text-[13px] whitespace-nowrap" style={{ color: '#374151' }}>{formatDueDate(row.due_date)}</td>
+                      <td className="break-words px-2 py-3 text-[13px]" style={{ color: '#374151' }}><span className="flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9EDFF] text-[10px] font-bold text-[#4A57B9]">{initials}</span><span className="break-words">{assignee}</span></span></td>
+                    </tr>;
+                  })}
                 </tbody>
               </table>
             </div>
+            <button onClick={() => navigate('/work')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#D8E1F5] px-4 py-2.5 text-[13px] font-semibold text-[#4A57B9] hover:bg-[#F5F7FF]">View All Actions <ChevronRight className="h-4 w-4" /></button>
           </div>
 
-          <div className="xl:col-span-3 rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-3 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Overdue CAPA</h2>
-            <div className="space-y-3">
-              {overdueCapa.map((item) => (
-                <div key={item.id} className="text-[14px] leading-[1.45]" style={{ color: '#374151' }}>
-                  <span>Incident #{item.incident_id} - {item.action_type || 'Action'} - </span>
-                  <span style={{ color: '#B45309', fontWeight: 700 }}>{item.days_overdue} Day{item.days_overdue !== 1 ? 's' : ''} Overdue</span>
-                </div>
-              ))}
+          <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
+            <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Overdue CAPA</h2><AlertTriangle className="h-5 w-5 text-[#D97706]" /></div>
+            <div className="flex-1 space-y-1">
+              {overdueCapa.map((item) => <div key={item.id} className="flex gap-3 border-b border-[#F1F5F9] py-3 last:border-b-0"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#64748B]" /><div className="min-w-0 text-[14px] leading-5" style={{ color: '#374151' }}><div>Incident #{item.incident_id} <span className="text-[#94A3B8]">•</span> {item.action_type || 'Corrective'}</div><div className="font-bold text-[#C2410C]">{item.days_overdue} days overdue</div></div></div>)}
             </div>
+            <button onClick={() => navigate('/work')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#F4D6B0] bg-[#FFF9F2] px-4 py-2.5 text-[13px] font-semibold text-[#B45309] hover:bg-[#FFF3E1]">View All Overdue CAPA <ChevronRight className="h-4 w-4" /></button>
           </div>
 
-          <div className="xl:col-span-3 rounded-2xl border bg-white p-4 md:p-5 flex items-center justify-center" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <button
-              onClick={() => navigate("/near-miss")}
-              className="rounded-full px-8 py-3 text-[16px] md:text-[18px] text-white transition-transform duration-150 hover:scale-[1.02]"
-              style={{ background: 'linear-gradient(135deg, #5565C1 0%, #6E7BDB 100%)', boxShadow: '0 8px 18px rgba(81, 96, 186, 0.38)', fontWeight: 600 }}
-            >
-              Near Miss Reporting
-            </button>
+          <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
+            <div><h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Reporting</h2><p className="mt-1 text-[13px] leading-5" style={{ color: '#6B7280' }}>Capture near misses quickly so the next review cycle has cleaner data.</p></div>
+            <div className="mt-4 flex-1 rounded-2xl border bg-[#F8FBFF] p-4" style={{ borderColor: '#E3EAF8' }}><div className="text-[11px] font-bold uppercase tracking-widest text-[#4A57B9]">Quick actions</div><div className="mt-3 space-y-3 text-[13px] text-[#374151]"><div>• Log a new near miss</div><div>• Attach a photo or note</div><div>• Escalate before close-out</div></div></div>
+            <div className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: '#E5E7EB' }}><div className="text-[11px] font-bold uppercase tracking-widest text-[#6B7280]">Why it matters</div><p className="mt-2 text-[13px] leading-5" style={{ color: '#4B5563' }}>Early reporting helps surface patterns before they become incidents and keeps the dashboard action-focused.</p></div>
+            <button onClick={() => navigate('/near-miss')} className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-6 py-3 text-[14px] text-white transition-transform duration-150 hover:scale-[1.01]" style={{ background: 'linear-gradient(135deg, #5565C1 0%, #6E7BDB 100%)', boxShadow: '0 8px 18px rgba(81, 96, 186, 0.28)', fontWeight: 600 }}>Open Near Miss Reporting</button>
           </div>
         </div>
-      </>
-  );
+      </div>
+    );
 
   return (
     <div className="space-y-6">
