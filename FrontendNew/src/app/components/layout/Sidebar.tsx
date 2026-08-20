@@ -4,7 +4,7 @@ import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
   Lightbulb, ClipboardCheck, BarChart3, ChevronDown,
   FolderClosed, AlertTriangle, ListChecks, GitBranch,
-  LogOut, Shield, Settings, X, Database, HardHat, MapPin, type LucideIcon
+  LogOut, Settings, X, Database, HardHat, MapPin, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -103,8 +103,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         <div className="px-5 py-5 border-b" style={{ borderColor: '#E9EEF8' }}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #505AB6, #7889F2)' }}>
-                <Shield className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-white">
+                <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
               </div>
               <span className="text-[15px]" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif', fontWeight: 700 }}>HSE Intelligence</span>
             </div>

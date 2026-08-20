@@ -110,10 +110,10 @@ export function LoginPage() {
 
         <div className="relative z-10 text-center max-w-lg px-12">
           <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-8"
-            style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}
+            className="w-20 h-20 rounded-2xl overflow-hidden mx-auto mb-8 bg-white/90 p-2"
+            style={{ backdropFilter: "blur(10px)" }}
           >
-            <Shield className="w-10 h-10 text-white" />
+            <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover rounded-xl" />
           </div>
           <h1
             className="text-white mb-4"
@@ -157,11 +157,8 @@ export function LoginPage() {
         <div className="w-full max-w-[400px]">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mb-10">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, #0B3D91, #1D4ED8)" }}
-            >
-              <Shield className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white">
+              <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
             </div>
             <span className="text-[14px]" style={{ color: "#0B3D91", fontFamily: "DM Sans, sans-serif", fontWeight: 700 }}>
               HSE Intelligence

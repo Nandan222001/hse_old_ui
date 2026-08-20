@@ -106,7 +106,7 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
 
       {/* Breadcrumb */}
       <div className="hidden items-center gap-1.5 text-[13px] md:flex" style={{ color: '#9CA3AF' }}>
-        <span>HSE Intelligence</span>
+        <img src="/logo.png" alt="HSE logo" className="h-6 w-6 rounded-md object-cover" />
         {orgLabel && (
           <>
             <ChevronRight className="w-3.5 h-3.5" />

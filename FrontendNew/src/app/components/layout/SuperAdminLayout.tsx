@@ -50,8 +50,8 @@ function SuperAdminSidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClo
         <div className="px-5 py-5 border-b" style={{ borderColor: "#E9EEF8" }}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4A57B9, #6F80E8)" }}>
-                <ShieldCheck className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-white">
+                <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
               </div>
               <div>
                 <span className="text-[15px] font-bold" style={{ color: "#111827" }}>HSE Intelligence</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
@@ -15,7 +15,7 @@ import {
   type LeadingIndicators,
 } from "../../services/dashboard.service";
 
-// ── date helpers ─────────────────────────────────────────────────────────────
+// â”€â”€ date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function toISO(d: Date) {
   return d.toISOString().split("T")[0];
 }
@@ -56,7 +56,7 @@ async function repairOrgData() {
     if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
     void headers;
   } catch {
-    // silent — repair is best-effort
+    // silent â€” repair is best-effort
   }
 }
 
@@ -95,7 +95,7 @@ function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label:
       </div>
       <div className="mt-2 text-[15px]" style={{ color: '#111827', fontWeight: 700 }}>{label}</div>
       {threshold && (
-        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;•&nbsp; {threshold}</div>
+        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;â€¢&nbsp; {threshold}</div>
       )}
     </div>
   );
@@ -113,7 +113,7 @@ export function DashboardPage() {
   const [leading, setLeading] = useState<LeadingIndicators | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // ── date filter state ──────────────────────────────────────────────────────
+  // â”€â”€ date filter state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [preset, setPreset] = useState<Preset>("ALL");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -223,7 +223,7 @@ export function DashboardPage() {
         : `${leading.contractor_risk_label} / ${Number(leading.contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
       sub: leading.contractor_has_contractors === false
         ? "No contractor workforce recorded"
-        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
+        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "âš  Extreme Risk â€” Violations Present" : "Limiting Indicator",
       accent: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
       border: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
       inline: "",
@@ -240,16 +240,11 @@ export function DashboardPage() {
           className="rounded-2xl border p-4 md:p-5"
           style={{ borderColor: '#CFDCF5', background: '#F8FBFF' }}
         >
-          <div className="mb-4 text-center text-[14px] md:text-[15px] leading-[1.35]" style={{ color: '#8F2E73', fontWeight: 600 }}>
-            Forces attention toward leading predictive metrics first,<br />
-            balancing compliance with immediate action triggers.
-          </div>
-
           {/* Leading Indicators Row */}
           <div className="mb-1">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#E9EDFF', color: '#4A5568' }}>
-                ↑ Leading Indicators
+                â†‘ Leading Indicators
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
@@ -268,7 +263,7 @@ export function DashboardPage() {
                     <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
                     {item.inline && (
                       <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? '↘' : '↗'} {item.inline}
+                        {item.trendDown ? 'â†˜' : 'â†—'} {item.inline}
                       </span>
                     )}
                   </div>
@@ -285,7 +280,7 @@ export function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400E' }}>
-                ↓ Limiting Indicators
+                â†“ Limiting Indicators
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
@@ -304,7 +299,7 @@ export function DashboardPage() {
                     <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
                     {item.inline && (
                       <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? '↘' : '↗'} {item.inline}
+                        {item.trendDown ? 'â†˜' : 'â†—'} {item.inline}
                       </span>
                     )}
                   </div>
@@ -339,19 +334,48 @@ export function DashboardPage() {
           </div>
 
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Safety Walk Compliance & Corrective Action Closure</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <GaugeCard
-                value={stats ? Math.round(stats.avg_compliance_rating * 20) : 0}
-                label="Avg. Safety Walk Compliance"
-              />
-              <GaugeCard
-                value={stats ? Math.round(stats.capa_completion_rate) : 0}
-                label="Corrective Action Closure Rate"
-                threshold=">90% (ISO 45001 §10)"
-              />
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Safety Walk Compliance & Corrective Action Closure</h2>
+                <p className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Diagram view of inspection quality, action closure, and target performance.</p>
+              </div>
+              <div className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-widest" style={{ background: '#EEF2FF', color: '#4A57B9' }}>
+                Flow view
+              </div>
             </div>
-          </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1.1fr_auto_1fr] xl:items-center">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-semibold text-slate-700">Avg. Safety Walk Compliance</span>
+                  <span className="font-bold text-slate-900">{stats ? Math.round(stats.avg_compliance_rating * 20) : 0}%</span>
+                </div>
+                <div className="mt-3 h-3 rounded-full bg-slate-200">
+                  <div className="h-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500" style={{ width: `${Math.max(stats ? Math.round(stats.avg_compliance_rating * 20) : 0, 4)}%` }} />
+                </div>
+                <div className="mt-3 text-[12px] text-slate-500">Inspection quality input</div>
+              </div>
+
+              <div className="hidden xl:flex flex-col items-center gap-2 px-2 text-slate-400">
+                <div className="h-16 w-px bg-slate-300" />
+                <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-widest">→</span>
+                <div className="h-16 w-px bg-slate-300" />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-semibold text-slate-700">Corrective Action Closure</span>
+                  <span className="font-bold text-slate-900">{stats ? Math.round(stats.capa_completion_rate) : 0}%</span>
+                </div>
+                <div className="mt-3 h-3 rounded-full bg-slate-200">
+                  <div className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-blue-600" style={{ width: `${Math.max(stats ? Math.round(stats.capa_completion_rate) : 0, 4)}%` }} />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[12px] text-slate-500">
+                  <span>Target 90%+</span>
+                  <span className="font-semibold text-slate-700">ISO 45001 §10</span>
+                </div>
+              </div>
+            </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
@@ -409,7 +433,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 rounded-2xl border px-5 py-4" style={{ borderColor: '#DCE4F3', background: '#FFFFFF' }}>
-        {/* top row — welcome + updated */}
+        {/* top row â€” welcome + updated */}
         <div className="flex items-center justify-between">
           <div>
             <h1>Welcome, {firstName}</h1>
@@ -419,7 +443,7 @@ export function DashboardPage() {
             <span className="text-[13px]" style={{ color: '#94A3B8' }}>
               {lastUpdated
                 ? `Updated: ${lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-                : 'Loading…'}
+                : 'Loadingâ€¦'}
             </span>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#5B6DE8' }} />
           </div>
@@ -446,7 +470,7 @@ export function DashboardPage() {
           {/* active date range label */}
           {preset !== "CUSTOM" && preset !== "ALL" && activeDates.start && (
             <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>
-              {activeDates.start} → {activeDates.end}
+              {activeDates.start} â†’ {activeDates.end}
             </span>
           )}
           {preset === "ALL" && (
@@ -479,7 +503,7 @@ export function DashboardPage() {
             </div>
             {customStart && customEnd && (
               <span className="text-[12px]" style={{ color: '#94A3B8' }}>
-                {customStart} → {customEnd}
+                {customStart} â†’ {customEnd}
               </span>
             )}
           </div>
