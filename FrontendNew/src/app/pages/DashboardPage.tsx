@@ -200,7 +200,7 @@ export function DashboardPage() {
       trendDown: false,
     },
     {
-      title: "LTISR",
+      title: "LTIF",
       value: `${leading.ltisr ?? 0}`,
       sub: "Limiting Indicator",
       accent: "#FFFFFF",
