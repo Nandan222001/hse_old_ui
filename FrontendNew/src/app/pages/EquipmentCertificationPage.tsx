@@ -158,7 +158,6 @@ export function EquipmentCertificationPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Total Permits" value={totalPermits} hint="Current PTW population in view" tone="blue" />
-        <MetricCard label="PTW Compliance" value={`${ptwCompliance}%`} hint="Closed permits over total issued" tone="green" />
         <MetricCard label="LOTO Proxy" value={`${controlCoverage}%`} hint="No-deviation isolation / lockout proxy" tone="amber" />
         <MetricCard label="Deviation Alerts" value={openViolations} hint="Permits with reported deviations" tone="red" />
       </div>
