@@ -1,161 +1,311 @@
+/**
+ * The auditor's home — what is owed, and what is escalating.
+ *
+ * Ordered by what can go wrong rather than by what is tidy: the audits that are
+ * late come first, because "audit not conducted" is itself a finding and the
+ * only person who can fix it is looking at this screen. Then the walk in front
+ * of them, then the effectiveness checks that keep old audits open, then the
+ * programme that says why any of it is scheduled at all.
+ */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
-import { auditService, Audit } from '../services/auditService';
-import { AiFab, AI_PROMPTS } from '../../components/AiAssistant';
+import {
+  auditService, Audit, Finding, ProgrammeRow, CLASSIFICATION_META,
+} from '../services/auditService';
+import { AiFab } from '../../components/AiAssistant';
+import {
+  Banner, C, Card, Empty, RiskBandChip, ScoreRing, SectionLabel, StepTracker,
+} from '../components';
+
+function fmt(d?: string | null) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }); }
+  catch { return '—'; }
+}
+
+const ACTIVE_STATUSES = ['scheduled', 'in_progress', 'fieldwork', 'immediate_action', 'findings_raised'];
 
 export function AuditorDashboardScreen({ navigation }: any) {
   const { user } = useAuth();
   const [audits, setAudits] = useState<Audit[]>([]);
+  const [programme, setProgramme] = useState<ProgrammeRow[]>([]);
+  const [openFindings, setOpenFindings] = useState<Finding[]>([]);
+  const [late, setLate] = useState<Array<Record<string, any>>>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      setAudits(await auditService.listAssigned());
-    } catch { /* keep whatever we had */ }
-    finally { setLoading(false); setRefreshing(false); }
+    const [a, p, f, e] = await Promise.all([
+      auditService.listAssigned().catch(() => [] as Audit[]),
+      auditService.programme().catch(() => [] as ProgrammeRow[]),
+      auditService.openFindings().catch(() => [] as Finding[]),
+      auditService.escalations().catch(() => ({ audits_not_conducted: [], definitions: [] })),
+    ]);
+    setAudits(a);
+    setProgramme(p);
+    setOpenFindings(f);
+    setLate(e.audits_not_conducted ?? []);
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
     const unsub = navigation.addListener('focus', load);
     load();
+    auditService.loadReference();
     return unsub;
   }, [navigation, load]);
 
-  const total = audits.length;
-  const completed = audits.filter((a) => a.status === 'completed').length;
-  const pending = audits.filter((a) => a.status !== 'completed').length;
+  const inFlight = audits.filter((a) => ACTIVE_STATUSES.includes(a.status) && !a.closed_at);
+  const stopped = audits.filter((a) => a.status === 'immediate_action');
   const scores = audits.map((a) => a.compliance_score).filter((s): s is number => typeof s === 'number');
   const avg = scores.length ? Math.round(scores.reduce((x, y) => x + y, 0) / scores.length) : 0;
-
+  const overdueChecks = openFindings.filter(
+    (f) => f.corrective_action_due && new Date(f.corrective_action_due) < new Date(),
+  );
   const initials = (user?.name || 'Auditor').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>HSE Audit Pro</Text>
-        <View style={styles.headerRight}>
-          <Ionicons name="notifications-outline" size={22} color="#0F172A" />
-          <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.hi}>Welcome back</Text>
+          <Text style={styles.name}>{user?.name || 'Auditor'}</Text>
         </View>
+        <TouchableOpacity onPress={() => navigation.navigate('AuditFindings')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="notifications-outline" size={22} color={C.ink} />
+          {overdueChecks.length > 0 && <View style={styles.badge} />}
+        </TouchableOpacity>
+        <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-      >
-        <Text style={styles.hi}>Welcome back,</Text>
-        <Text style={styles.name}>{user?.name || 'Auditor'}</Text>
-        <Text style={styles.sub}>Here's your audit workload at a glance.</Text>
+      {loading ? (
+        <ActivityIndicator color={C.brand} style={{ marginTop: 40 }} />
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+        >
+          {/* Escalations first — each fires on its own, nobody has to notice */}
+          {stopped.length > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate('AuditDetail', { auditId: stopped[0].id })} activeOpacity={0.9}>
+              <Banner
+                tone="danger" icon="hand-left"
+                title={`${stopped.length} audit${stopped.length === 1 ? '' : 's'} stopped — critical finding`}
+                text="Work may be suspended. Contain the hazard, then resume the walk."
+              />
+            </TouchableOpacity>
+          )}
+          {late.length > 0 && (
+            <Banner
+              tone="warn" icon="calendar"
+              title={`${late.length} audit${late.length === 1 ? '' : 's'} not conducted`}
+              text={`Past 110% of the scheduled date. A missed audit is itself a finding. First: ${late[0].title}.`}
+            />
+          )}
+          {overdueChecks.length > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate('AuditFindings')} activeOpacity={0.9}>
+              <Banner
+                tone="warn" icon="time"
+                title={`${overdueChecks.length} effectiveness check${overdueChecks.length === 1 ? '' : 's'} overdue`}
+                text="Findings stay open until the fix is verified on site at 30, 60 and 90 days."
+              />
+            </TouchableOpacity>
+          )}
 
-        {loading ? (
-          <ActivityIndicator color="#2563EB" style={{ marginTop: 40 }} />
-        ) : (
-          <>
-            <View style={styles.statsGrid}>
-              <Stat label="Assigned" value={total} color="#2563EB" bg="#EFF6FF" icon="clipboard-outline" />
-              <Stat label="Completed" value={completed} color="#16A34A" bg="#F0FDF4" icon="checkmark-done-outline" />
-              <Stat label="Pending" value={pending} color="#F97316" bg="#FFF7ED" icon="time-outline" />
-              <Stat label="Avg Score" value={`${avg}%`} color="#8B5CF6" bg="#F5F3FF" icon="trending-up-outline" />
-            </View>
+          {/* The numbers */}
+          <View style={styles.statsRow}>
+            <Stat label="In flight" value={inFlight.length} icon="walk" color="#1D4ED8" bg="#EFF6FF" />
+            <Stat label="To verify" value={openFindings.length} icon="shield-checkmark" color="#B45309" bg="#FEF3C7" />
+            <Stat label="Closed" value={audits.filter((a) => a.closed_at).length} icon="lock-closed" color="#047857" bg="#D1FAE5" />
+          </View>
 
-            <Text style={styles.section}>Quick Actions</Text>
-            <View style={styles.actionsRow}>
-              <Action label="Assigned Audits" icon="list-outline" onPress={() => navigation.navigate('Audits')} />
-              <Action label="Audit Calendar" icon="calendar-outline" onPress={() => navigation.navigate('AuditCalendar')} />
+          {avg > 0 && (
+            <View style={styles.avgCard}>
+              <ScoreRing score={avg} band={avg >= 90 ? 'excellent' : avg >= 75 ? 'good' : avg >= 60 ? 'acceptable' : 'poor'} size={82} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.avgTitle}>Average score across your audits</Text>
+                <Text style={styles.avgNote}>
+                  Below 70% alerts the Safety Manager automatically. Below 65% twice in a row at one
+                  site forces a re-audit.
+                </Text>
+              </View>
             </View>
-            <View style={styles.actionsRow}>
-              <Action label="Verifications" icon="shield-checkmark-outline" onPress={() => navigation.navigate('Verifications')} />
-              <Action label="Audit Trail" icon="time-outline" onPress={() => navigation.navigate('AuditTrail')} />
-            </View>
-            <View style={styles.actionsRow}>
-              <Action label="Close-Out Review" icon="clipboard-outline" onPress={() => navigation.navigate('CloseOutReview')} />
-              <Action label="Competence Evidence" icon="school-outline" onPress={() => navigation.navigate('CompetenceEvidenceAudit')} />
-              <Action label="Gate Overrides" icon="lock-open-outline" onPress={() => navigation.navigate('GateOverrideAudit')} />
-              <Action label="Data Integrity" icon="analytics-outline" onPress={() => navigation.navigate('DataIntegrity')} />
-              <Action label="Contractor Audit" icon="business-outline" onPress={() => navigation.navigate('ContractorAudit')} />
-              <Action label="Transport Audit" icon="car-outline" onPress={() => navigation.navigate('TransportVehicleAudit')} />
-              <View style={{ flex: 1 }} />
-            </View>
+          )}
 
-            <Text style={styles.section}>Recent Audits</Text>
-            {audits.slice(0, 4).map((a) => (
-              <TouchableOpacity key={a.id} style={styles.recentCard} activeOpacity={0.85}
-                onPress={() => navigation.navigate(a.status === 'completed' ? 'AuditDetail' : 'AuditChecklist', { audit: { ...a, checklist_type: a.checklist_type } })}>
+          {/* The walk in front of them */}
+          <SectionLabel>Your queue ({inFlight.length})</SectionLabel>
+          {inFlight.length ? inFlight.slice(0, 4).map((a) => (
+            <TouchableOpacity
+              key={a.id}
+              style={styles.auditCard}
+              onPress={() => navigation.navigate('AuditDetail', { auditId: a.id, audit: a })}
+              activeOpacity={0.9}
+            >
+              <View style={styles.auditHead}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.recentTitle}>{a.title}</Text>
-                  <Text style={styles.recentSub}>{a.site_name || '—'} · {a.checklist_type || 'Audit'}</Text>
+                  <Text style={styles.auditRef}>{a.audit_ref} · {a.trigger_label ?? 'Scheduled'}</Text>
+                  <Text style={styles.auditTitle} numberOfLines={2}>{a.title}</Text>
+                  <Text style={styles.auditSite}>{a.site_name ?? '—'} · due {fmt(a.due_date)}</Text>
                 </View>
-                <View style={[styles.recentBadge, a.status === 'completed' ? styles.badgeGreen : styles.badgeBlue]}>
-                  <Text style={[styles.recentBadgeText, { color: a.status === 'completed' ? '#16A34A' : '#2563EB' }]}>
-                    {a.status === 'completed' ? `${a.compliance_score ?? 0}%` : (a.status || 'scheduled')}
+                <RiskBandChip value={a.risk_band} small />
+              </View>
+              <View style={styles.stepLine}>
+                <StepTracker steps={a.steps} compact />
+              </View>
+              <Text style={styles.nextStep}>
+                Step {String(a.current_step ?? 1).padStart(2, '0')} · {a.current_step_label ?? '—'}
+              </Text>
+            </TouchableOpacity>
+          )) : (
+            <Empty icon="checkmark-done-outline" text="Nothing in flight. Your assigned audits appear here." />
+          )}
+
+          {inFlight.length > 4 && (
+            <TouchableOpacity style={styles.moreBtn} onPress={() => navigation.navigate('Audits')}>
+              <Text style={styles.moreBtnText}>View all {inFlight.length}</Text>
+              <Ionicons name="chevron-forward" size={15} color={C.brand} />
+            </TouchableOpacity>
+          )}
+
+          {/* Why any of this is scheduled */}
+          <SectionLabel>The programme</SectionLabel>
+          <Card subtitle="Audits are not booked by hand. The frequency comes from each site's risk band, and the band is driven by its own safety performance score.">
+            {programme.length ? programme.slice(0, 6).map((p) => (
+              <View key={`${p.site_id}`} style={styles.progRow}>
+                <RiskBandChip value={p.risk_band} small />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.progSite} numberOfLines={1}>{p.site_name ?? 'Site'}</Text>
+                  <Text style={styles.progFreq}>
+                    {(p.inspection_frequency ?? '').replace(/_/g, '-')} inspection ·{' '}
+                    {(p.audit_frequency ?? '').replace(/_/g, '-')} audit
                   </Text>
                 </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.progDue, p.overdue && { color: '#B91C1C' }]}>
+                    {fmt(p.next_audit_due)}
+                  </Text>
+                  <Text style={styles.progScore}>score {p.site_score ?? '—'}</Text>
+                </View>
+              </View>
+            )) : <Empty icon="calendar-outline" text="No sites in the programme yet." />}
+          </Card>
+
+          {/* The other job */}
+          <SectionLabel>On-site verification</SectionLabel>
+          <View style={styles.quickGrid}>
+            {[
+              { r: 'Verifications', i: 'shield-checkmark', t: 'Permit & hazard', s: 'WF-02 · WF-01' },
+              { r: 'CompetenceEvidenceAudit', i: 'school', t: 'Competence', s: 'WF-07' },
+              { r: 'ContractorAudit', i: 'business', t: 'Contractor', s: 'WF-09' },
+              { r: 'TransportVehicleAudit', i: 'car', t: 'Vehicle', s: 'WF-10' },
+            ].map((x) => (
+              <TouchableOpacity key={x.r} style={styles.quick} onPress={() => navigation.navigate(x.r)} activeOpacity={0.9}>
+                <View style={styles.quickIcon}><Ionicons name={x.i as any} size={18} color={C.brand} /></View>
+                <Text style={styles.quickTitle}>{x.t}</Text>
+                <Text style={styles.quickSub}>{x.s}</Text>
               </TouchableOpacity>
             ))}
-            {audits.length === 0 && <Text style={styles.empty}>No audits assigned yet.</Text>}
-          </>
-        )}
-      </ScrollView>
+          </View>
 
-      <AiFab onPress={() => navigation.navigate('AiAssistant', AI_PROMPTS.auditor)} />
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+      <AiFab onPress={() => navigation.navigate('AiAssistant')} />
     </SafeAreaView>
   );
 }
 
-function Stat({ label, value, color, bg, icon }: any) {
+function Stat({ label, value, icon, color, bg }: any) {
   return (
-    <View style={styles.statCard}>
-      <View style={[styles.statIcon, { backgroundColor: bg }]}><Ionicons name={icon} size={18} color={color} /></View>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={styles.stat}>
+      <View style={[styles.statIcon, { backgroundColor: bg }]}>
+        <Ionicons name={icon} size={16} color={color} />
+      </View>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function Action({ label, icon, onPress }: any) {
-  return (
-    <TouchableOpacity style={styles.actionCard} onPress={onPress} activeOpacity={0.85}>
-      <View style={styles.actionIcon}><Ionicons name={icon} size={22} color="#2563EB" /></View>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { height: 60, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, borderBottomWidth: 1.5, borderBottomColor: '#F1F5F9' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1E3A8A' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  scroll: { padding: 16, paddingBottom: 40 },
-  hi: { fontSize: 13, color: '#64748B', marginTop: 4 },
-  name: { fontSize: 24, fontWeight: '800', color: '#0F172A' },
-  sub: { fontSize: 13, color: '#64748B', marginTop: 2, marginBottom: 18 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  statCard: { width: '47%', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, flexGrow: 1 },
-  statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  statValue: { fontSize: 24, fontWeight: '800', color: '#0F172A' },
-  statLabel: { fontSize: 12, color: '#64748B', fontWeight: '600', marginTop: 2 },
-  section: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginTop: 24, marginBottom: 12 },
-  actionsRow: { flexDirection: 'row', gap: 12 },
-  actionCard: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, alignItems: 'center' },
-  actionIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  actionLabel: { fontSize: 13, fontWeight: '700', color: '#0F172A', textAlign: 'center' },
-  recentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, marginBottom: 10 },
-  recentTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  recentSub: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  recentBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  badgeGreen: { backgroundColor: '#DCFCE7' },
-  badgeBlue: { backgroundColor: '#EFF6FF' },
-  recentBadgeText: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
-  empty: { textAlign: 'center', color: '#94A3B8', fontWeight: '600', paddingVertical: 20 },
+  root: { flex: 1, backgroundColor: C.bg },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16,
+    paddingVertical: 12, backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1, borderBottomColor: '#EEF2F6',
+  },
+  hi: { fontSize: 11, fontWeight: '700', color: C.muted },
+  name: { fontSize: 18, fontWeight: '800', color: C.ink, marginTop: 1 },
+  badge: {
+    position: 'absolute', top: -1, right: -1, width: 8, height: 8,
+    borderRadius: 4, backgroundColor: '#DC2626',
+  },
+  avatar: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#DBEAFE',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { fontWeight: '800', fontSize: 12, color: C.brand },
+
+  scroll: { padding: 16, paddingBottom: 20 },
+
+  statsRow: { flexDirection: 'row', gap: 9, marginBottom: 12 },
+  stat: {
+    flex: 1, backgroundColor: '#FFFFFF', borderRadius: 13, borderWidth: 1,
+    borderColor: C.border, padding: 12, alignItems: 'center', gap: 3,
+  },
+  statIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginBottom: 3 },
+  statValue: { fontSize: 19, fontWeight: '900' },
+  statLabel: { fontSize: 9.5, fontWeight: '700', color: C.muted },
+
+  avgCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#FFFFFF',
+    borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 14, marginBottom: 4,
+  },
+  avgTitle: { fontSize: 12.5, fontWeight: '800', color: C.ink },
+  avgNote: { fontSize: 10.5, fontWeight: '600', color: C.muted, lineHeight: 15, marginTop: 4 },
+
+  auditCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 13, borderWidth: 1, borderColor: C.border,
+    padding: 13, marginBottom: 9,
+  },
+  auditHead: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  auditRef: { fontSize: 9, fontWeight: '900', color: C.light, letterSpacing: 0.5 },
+  auditTitle: { fontSize: 13.5, fontWeight: '800', color: C.ink, marginTop: 3, lineHeight: 18 },
+  auditSite: { fontSize: 10.5, fontWeight: '600', color: C.muted, marginTop: 3 },
+  stepLine: { marginTop: 11 },
+  nextStep: { fontSize: 10.5, fontWeight: '800', color: C.brand, marginTop: 8 },
+
+  moreBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, marginBottom: 4 },
+  moreBtnText: { fontSize: 12, fontWeight: '800', color: C.brand },
+
+  progRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9,
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  progSite: { fontSize: 12, fontWeight: '700', color: C.ink },
+  progFreq: { fontSize: 10, fontWeight: '600', color: C.light, marginTop: 2, textTransform: 'capitalize' },
+  progDue: { fontSize: 11, fontWeight: '800', color: C.mid },
+  progScore: { fontSize: 9.5, fontWeight: '600', color: C.light, marginTop: 2 },
+
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  quick: {
+    width: '47.6%', backgroundColor: '#FFFFFF', borderRadius: 13, borderWidth: 1,
+    borderColor: C.border, padding: 13, gap: 3,
+  },
+  quickIcon: {
+    width: 34, height: 34, borderRadius: 9, backgroundColor: C.brandSoft,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 5,
+  },
+  quickTitle: { fontSize: 12.5, fontWeight: '800', color: C.ink },
+  quickSub: { fontSize: 9.5, fontWeight: '700', color: C.light },
 });
+
+export default AuditorDashboardScreen;

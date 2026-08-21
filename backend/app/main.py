@@ -152,6 +152,10 @@ def create_app() -> FastAPI:
     app.include_router(capa_workflow_controller.router, prefix=prefix)
     app.include_router(event_drafts_controller.router, prefix=prefix)
     app.include_router(settings_controller.router, prefix=prefix)
+    # The web-console router first: its literal paths (/audits/templates,
+    # /audits/trends, /audits/auditors) have the same shape as /audits/{id},
+    # and FastAPI matches in registration order.
+    app.include_router(audit_controller.web_router, prefix=prefix)
     app.include_router(audit_controller.router, prefix=prefix)
     app.include_router(audit_trail_controller.router, prefix=prefix)
     # Admin view: every action on an incident, stage 01 through stage 08.

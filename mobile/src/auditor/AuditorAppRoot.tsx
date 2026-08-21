@@ -15,6 +15,14 @@ import { AuditCalendarScreen } from './screens/AuditCalendarScreen';
 import { VerificationsScreen } from './screens/VerificationsScreen';
 import { AuditTrailScreen } from './screens/AuditTrailScreen';
 import { CloseOutReviewScreen } from './screens/CloseOutReviewScreen';
+// ── WF-05 · the ten steps, in the order the auditor walks them ─────────────
+import { BriefPackScreen } from './screens/BriefPackScreen';
+import { OpeningMeetingScreen } from './screens/OpeningMeetingScreen';
+import { WorkerInterviewScreen } from './screens/WorkerInterviewScreen';
+import { ReviewFindingsScreen } from './screens/ReviewFindingsScreen';
+import { ClosingMeetingScreen } from './screens/ClosingMeetingScreen';
+import { AuditReportScreen } from './screens/AuditReportScreen';
+import { AuditFindingsScreen } from './screens/AuditFindingsScreen';
 // ── WF-06 … WF-09 audit screens ────────────────────────────────────────────
 import CompetenceEvidenceAuditScreen from './screens/CompetenceEvidenceAuditScreen';
 import GateOverrideAuditScreen from './screens/GateOverrideAuditScreen';
@@ -76,7 +84,17 @@ export function AuditorAppRoot() {
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="AuditorTabs">
       <Stack.Screen name="AuditorTabs" component={AuditorTabs} />
       <Stack.Screen name="AuditDetail" component={AuditDetailScreen} />
+
+      {/* Steps 03-10. Steps 4 to 8 are the ones conducted in the field. */}
+      <Stack.Screen name="BriefPack" component={BriefPackScreen} />
+      <Stack.Screen name="OpeningMeeting" component={OpeningMeetingScreen} />
       <Stack.Screen name="AuditChecklist" component={AuditChecklistScreen} />
+      <Stack.Screen name="WorkerInterview" component={WorkerInterviewScreen} />
+      <Stack.Screen name="ReviewFindings" component={ReviewFindingsScreen} />
+      <Stack.Screen name="ClosingMeeting" component={ClosingMeetingScreen} />
+      <Stack.Screen name="AuditReport" component={AuditReportScreen} />
+      <Stack.Screen name="AuditFindings" component={AuditFindingsScreen} />
+
       <Stack.Screen name="AuditCalendar" component={AuditCalendarScreen} />
       <Stack.Screen name="Verifications" component={VerificationsScreen} />
       <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />

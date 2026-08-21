@@ -18,7 +18,15 @@ from app.models.near_miss import NearMiss
 from app.models.unsafe_act import UnsafeAct
 from app.models.risk_report import RiskReport
 from app.models.safety_walk import SafetyWalk
-from app.models.audit import Audit
+from app.models.audit import (
+    Audit,
+    AuditChecklistItem,
+    AuditChecklistTemplate,
+    AuditChecklistTemplateItem,
+    AuditEvidence,
+    AuditFinding,
+    AuditProgramme,
+)
 from app.models.capa_action import CapaAction
 from app.models.capa_lifecycle import (
     CapaEffectivenessReview,
@@ -112,6 +120,9 @@ __all__ = [
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
     "UnsafeAct", "RiskReport",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
+    # WF-05 audit, inspection & compliance monitoring
+    "Audit", "AuditChecklistItem", "AuditFinding", "AuditEvidence", "AuditProgramme",
+    "AuditChecklistTemplate", "AuditChecklistTemplateItem",
     "OrganisationInvite", "Subscription", "Notification", "NotificationRead",
     "DataImport", "ValidationLog", "ApiIntegration", "Document",
     "EquipmentCertification", "ApiKey", "Webhook", "AuditLog",

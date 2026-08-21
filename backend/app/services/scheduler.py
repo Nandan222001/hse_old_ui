@@ -18,7 +18,7 @@ from app.config.database import SessionLocal
 from app.models.permit_to_work import PermitToWork
 from app.models.capa_action import CapaAction
 from app.models.notification import Notification
-from app.services import capa_scheduler
+from app.services import audit_calendar, capa_scheduler
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -158,10 +158,19 @@ def start_scheduler() -> None:
     # 2026, so every "Active" permit reads as already-expired and the job would wipe
     # out /actions' entire "active work" view on its first run. Re-enable once
     # validity_end reflects real, currently-relevant dates.
+    # ── WF-05 · "sets a reminder 14 days out" ────────────────────────────────
+    # Daily is the right cadence: the reminder is stamped once per audit, so a
+    # tighter sweep would find nothing new and a looser one could skip the
+    # 14-day mark entirely on a short month.
+    _scheduler.add_job(
+        audit_calendar.run_reminder_sweep, "interval", hours=24,
+        id="audit_14day_reminders", next_run_time=now,
+    )
     _scheduler.start()
     logger.info(
         "Event & Trigger scheduler started (checklist SLA / CAPA summary / CAPA escalation "
-        "chain / weekly re-score / effectiveness reviews / systemic flag; permit expiry disabled)"
+        "chain / weekly re-score / effectiveness reviews / systemic flag / audit 14-day reminders; "
+        "permit expiry disabled)"
     )
 
 

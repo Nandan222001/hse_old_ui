@@ -13,6 +13,12 @@ import { ActionsPage } from "./pages/ActionsPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AIAgentPage } from "./pages/AIAgentPage";
 import { CompliancePage } from "./pages/CompliancePage";
+// WF-05 · the web console's half of the audit workflow
+import { AuditProgrammePage } from "./pages/AuditProgrammePage";
+import { AuditRegisterPage } from "./pages/AuditRegisterPage";
+import { AuditDetailPage } from "./pages/AuditDetailPage";
+import { AuditTrendsPage } from "./pages/AuditTrendsPage";
+import { AuditTemplatesPage } from "./pages/AuditTemplatesPage";
 import { ChecklistPage } from "./pages/ChecklistPage";
 import { BillingPage } from "./pages/BillingPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
@@ -188,6 +194,12 @@ export const router = createBrowserRouter([
       { path: "actions", Component: ActionsRoute },
       { path: "checklists", Component: ChecklistsRoute },
       { path: "compliance", Component: ComplianceRoute },
+      // Literal paths before the :id one — "programme" must not be read as an id.
+      { path: "audits", Component: AuditRegisterPage },
+      { path: "audits/programme", Component: AuditProgrammePage },
+      { path: "audits/trends", Component: AuditTrendsPage },
+      { path: "audits/templates", Component: AuditTemplatesPage },
+      { path: "audits/:id", Component: AuditDetailPage },
       { path: "sites-zones", Component: SitesZonesRoute },
       { path: "policies", Component: PoliciesRoute },
       { path: "users", Component: UsersRoute },

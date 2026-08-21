@@ -40,22 +40,31 @@ def notify(
     `employee_id=None` means org-wide, which is what every pre-061 notification
     was. Callers should pass a real id — the whole point of the escalation chain
     is that it reaches a named person.
+
+    Written inside a savepoint and flushed here, so a row the database refuses
+    rolls back only itself. `db.add` on its own issues no SQL — the INSERT
+    happens at the caller's flush, long after this try block has exited — so
+    catching around the add swallowed nothing and a bad notification still took
+    down the workflow transition that raised it. That is the exact failure this
+    function's contract promises cannot happen.
     """
     try:
-        db.add(Notification(
-            organisation_id=org_id,
-            title=title[:255],
-            message=message,
-            type=type_,
-            target_type="all" if employee_id is None else "specific",
-            target_employee_id=employee_id,
-            category=category,
-            subject_ref=subject_ref,
-            status="sent",
-            sent_at=datetime.utcnow(),
-        ))
+        with db.begin_nested():
+            db.add(Notification(
+                organisation_id=org_id,
+                title=title[:255],
+                message=message,
+                type=type_,
+                target_type="all" if employee_id is None else "specific",
+                target_employee_id=employee_id,
+                category=category,
+                subject_ref=subject_ref,
+                status="sent",
+                sent_at=datetime.utcnow(),
+            ))
+            db.flush()
     except Exception:
-        logger.exception("CAPA notification failed (category=%s ref=%s)", category, subject_ref)
+        logger.exception("Notification failed (category=%s ref=%s)", category, subject_ref)
 
 
 def supervisor_of(db: Session, employee_id: Optional[int]) -> Optional[int]:
