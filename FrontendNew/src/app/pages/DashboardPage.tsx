@@ -71,6 +71,15 @@ function formatDueDate(dateStr: string | null): string {
   });
 }
 
+function formatFilterDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold?: string }>) {
   const angle = Math.round((Math.max(0, Math.min(value, 100)) / 100) * 240);
   const blueEnd = Math.min(angle, 140);
@@ -243,12 +252,6 @@ export function DashboardPage() {
         >
           {/* Leading Indicators Row */}
           <div className="mb-1">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#E9EDFF', color: '#4A5568' }}>
-                <ArrowUp className="h-3.5 w-3.5" />
-                Leading Indicators
-              </span>
-            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
               {leadingKpis.map((item) => (
                 <div
@@ -281,12 +284,6 @@ export function DashboardPage() {
 
           {/* Limiting Indicators Row */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400E' }}>
-                <ArrowDown className="h-3.5 w-3.5" />
-                Limiting Indicators
-              </span>
-            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
               {limitingKpis.map((item) => (
                 <div
@@ -476,7 +473,7 @@ export function DashboardPage() {
           {/* active date range label */}
           {preset !== "CUSTOM" && preset !== "ALL" && activeDates.start && (
             <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>
-              {activeDates.start} â†’ {activeDates.end}
+              {formatFilterDate(activeDates.start)} → {activeDates.end ? formatFilterDate(activeDates.end) : ''}
             </span>
           )}
           {preset === "ALL" && (
@@ -509,7 +506,7 @@ export function DashboardPage() {
             </div>
             {customStart && customEnd && (
               <span className="text-[12px]" style={{ color: '#94A3B8' }}>
-                {customStart} â†’ {customEnd}
+                {formatFilterDate(customStart)} → {formatFilterDate(customEnd)}
               </span>
             )}
           </div>

@@ -28,7 +28,6 @@ const navGroups: NavGroup[] = [
     items: [
       { name: "Home", icon: House, path: "/" },
       { name: "People", icon: Users, path: "/users" },
-      { name: "Sites & Zones", icon: MapPin, path: "/sites-zones" },
       { name: "Vendors", icon: HardHat, path: "/vendors" },
       { name: "Assets", icon: FolderClosed, path: "/equipment-certification" },
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },

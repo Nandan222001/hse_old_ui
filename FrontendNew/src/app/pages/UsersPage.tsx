@@ -18,6 +18,7 @@ import { TeamHierarchyTree } from "../components/people/TeamHierarchyTree";
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1").replace(/\/$/, "");
+const PAGE_SIZE = 25;
 
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem("hse_jwt_token");
@@ -453,6 +454,7 @@ export function UsersPage() {
   const [search, setSearch]         = useState("");
   const [filterRole, setFilterRole] = useState("All Roles");
   const [filterStatus, setFilterStatus] = useState("All Statuses");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // ── Team hierarchy state ─────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"directory" | "hierarchy">("directory");
@@ -523,6 +525,21 @@ export function UsersPage() {
     .filter((e) => !search || (e.full_name ?? "").toLowerCase().includes(search.toLowerCase()))
     .filter((e) => filterRole === "All Roles" || e.role_name === filterRole)
     .filter((e) => filterStatus === "All Statuses" || e.active_status === filterStatus);
+
+  const totalUsers = filteredEmployees.length;
+  const totalPages = Math.max(1, Math.ceil(totalUsers / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = totalUsers === 0 ? 0 : (safeCurrentPage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalUsers);
+  const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterRole, filterStatus]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const employeeInitials = (e: EmployeeDirectoryRow) => {
     if (!e.full_name) return "?";
@@ -642,7 +659,7 @@ export function UsersPage() {
                       <p className="text-[13px]" style={{ color: "#9CA3AF" }}>No users found</p>
                     </td>
                   </tr>
-                ) : filteredEmployees.map((e) => (
+                ) : paginatedEmployees.map((e) => (
                   <tr key={e.id} className="group hover:bg-[#F9FBF9] transition-colors" style={{ borderBottom: "1px solid #EEF2EE" }}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -671,6 +688,60 @@ export function UsersPage() {
                 ))}
               </tbody>
             </table>
+            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "#EEF2EE", background: "#FBFDFB" }}>
+              <div className="text-[12px]" style={{ color: "#6B7280" }}>
+                {totalUsers === 0
+                  ? "Showing 0 of 0 users"
+                  : `Showing ${startIndex + 1}–${endIndex} of ${totalUsers} users`}
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{
+                    color: safeCurrentPage === 1 ? "#94A3B8" : "#4A57B9",
+                    background: "#F4F7F4",
+                    border: "1px solid #E2E8F0",
+                  }}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => {
+                  const active = page === safeCurrentPage;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors"
+                      style={{
+                        color: active ? "#FFFFFF" : "#475569",
+                        background: active ? "#4A57B9" : "#F4F7F4",
+                        border: active ? "1px solid #4A57B9" : "1px solid #E2E8F0",
+                        boxShadow: active ? "0 6px 14px rgba(74, 87, 185, 0.18)" : "none",
+                      }}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{
+                    color: safeCurrentPage === totalPages ? "#94A3B8" : "#4A57B9",
+                    background: "#F4F7F4",
+                    border: "1px solid #E2E8F0",
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         </>
       ) : (
