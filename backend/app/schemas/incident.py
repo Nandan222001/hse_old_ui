@@ -55,3 +55,11 @@ class IncidentResponse(IncidentBase, TimestampMixin):
     id: int
 
     model_config = {"from_attributes": True}
+
+
+class IncidentPage(BaseModel):
+    data: list[IncidentResponse]
+    total: int
+    page: int
+    pageSize: int
+    totalPages: int

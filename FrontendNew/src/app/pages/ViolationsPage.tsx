@@ -7,7 +7,7 @@ import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMi
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
 
-interface RecentIncident {
+interface IncidentRecord {
   id: number;
   incident_type: string | null;
   severity: string | null;
@@ -15,6 +15,31 @@ interface RecentIncident {
   incident_date_time: string | null;
   report_date: string | null;
   source?: string | null;
+}
+
+interface IncidentsPageResponse {
+  data: IncidentRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+const PAGE_SIZE = 25;
+
+// Windowed page list so very large datasets don't render hundreds of page buttons.
+function getPageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const result: (number | "…")[] = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) result.push("…");
+    result.push(p);
+    prev = p;
+  }
+  return result;
 }
 
 function CardHeader({ icon: Icon, title }: Readonly<{ icon: LucideIcon; title: string }>) {
@@ -80,11 +105,25 @@ export function ViolationsPage() {
   const [personInvolvedData, setPersonInvolvedData] = useState<ViolationItem[]>([]);
   const [injuryTypeData, setInjuryTypeData] = useState<ViolationItem[]>([]);
   const [learnings, setLearnings] = useState<string[]>([]);
-  const [recentIncidents, setRecentIncidents] = useState<RecentIncident[]>([]);
+
+  const [allIncidents, setAllIncidents] = useState<IncidentRecord[]>([]);
+  const [incidentsTotal, setIncidentsTotal] = useState(0);
+  const [incidentsTotalPages, setIncidentsTotalPages] = useState(0);
+  const [incidentsPage, setIncidentsPage] = useState(1);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
 
   useEffect(() => {
-    axiosInstance.get<RecentIncident[]>('/incidents/?limit=10').then(r => setRecentIncidents(r.data)).catch(console.error);
-  }, []);
+    setIncidentsLoading(true);
+    axiosInstance
+      .get<IncidentsPageResponse>('/incidents/all', { params: { page: incidentsPage, pageSize: PAGE_SIZE } })
+      .then((r) => {
+        setAllIncidents(r.data.data);
+        setIncidentsTotal(r.data.total);
+        setIncidentsTotalPages(r.data.totalPages);
+      })
+      .catch(console.error)
+      .finally(() => setIncidentsLoading(false));
+  }, [incidentsPage]);
 
   useEffect(() => {
     getViolationsSummary(10).then((data) => {
@@ -310,51 +349,110 @@ export function ViolationsPage() {
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
-        <div className="mb-3 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Recent Incidents</div>
-        {recentIncidents.length === 0 ? (
-          <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No incidents recorded yet</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr style={{ background: '#F8FAFC' }}>
-                  {["Incident ID", "Type", "Severity", "Status", "Source", "Date"].map(h => (
-                    <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: '#64748B', fontWeight: 700 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {recentIncidents.map(inc => (
-                  <tr
-                    key={inc.id}
-                    className="cursor-pointer hover:bg-[#F8FAFC] transition-colors"
-                    style={{ borderTop: '1px solid #E2E8F0' }}
-                    onClick={() => navigate(`/violations/${inc.id}`)}
-                  >
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#4A57B9', fontWeight: 600 }}>INC-{String(inc.id).padStart(5, '0')}</td>
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.incident_type || '—'}</td>
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.severity || '—'}</td>
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.investigation_status || 'Pending'}</td>
-                    <td className="px-3 py-2 text-[13px]">
-                      {inc.source === 'Mobile App' ? (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          📱 Mobile
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-100">
-                          💻 Web
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-[13px]" style={{ color: '#64748B' }}>
-                      {inc.incident_date_time ? new Date(inc.incident_date_time).toLocaleDateString() : (inc.report_date || '—')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="mb-3 flex items-center justify-between flex-wrap gap-2">
+          <div className="text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>
+            All Incidents — {incidentsTotal}
           </div>
-        )}
+        </div>
+        {(() => {
+          if (incidentsLoading && allIncidents.length === 0) {
+            return <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>Loading incidents…</p>;
+          }
+          if (allIncidents.length === 0) {
+            return <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No incidents recorded yet</p>;
+          }
+          const rangeStart = (incidentsPage - 1) * PAGE_SIZE + 1;
+          const rangeEnd = Math.min(incidentsPage * PAGE_SIZE, incidentsTotal);
+          return (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px]">
+                  <thead>
+                    <tr style={{ background: '#F8FAFC' }}>
+                      {["Incident ID", "Type", "Severity", "Status", "Source", "Date"].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: '#64748B', fontWeight: 700 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allIncidents.map(inc => (
+                      <tr
+                        key={inc.id}
+                        className="cursor-pointer hover:bg-[#F8FAFC] transition-colors"
+                        style={{ borderTop: '1px solid #E2E8F0' }}
+                        onClick={() => navigate(`/violations/${inc.id}`)}
+                      >
+                        <td className="px-3 py-2 text-[13px]" style={{ color: '#4A57B9', fontWeight: 600 }}>INC-{String(inc.id).padStart(5, '0')}</td>
+                        <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.incident_type || '—'}</td>
+                        <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.severity || '—'}</td>
+                        <td className="px-3 py-2 text-[13px]" style={{ color: '#334155' }}>{inc.investigation_status || 'Pending'}</td>
+                        <td className="px-3 py-2 text-[13px]">
+                          {inc.source === 'Mobile App' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              📱 Mobile
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-100">
+                              💻 Web
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-[13px]" style={{ color: '#64748B' }}>
+                          {inc.incident_date_time ? new Date(inc.incident_date_time).toLocaleDateString() : (inc.report_date || '—')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between flex-wrap gap-3">
+                <span className="text-[12px]" style={{ color: '#64748B' }}>
+                  Showing {rangeStart}–{rangeEnd} of {incidentsTotal} incidents
+                </span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={incidentsPage <= 1}
+                    onClick={() => setIncidentsPage((p) => Math.max(1, p - 1))}
+                    className="px-2.5 py-1 rounded-md text-[12px] border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    style={{ color: '#374151', borderColor: '#E2E8F0' }}
+                  >
+                    ← Previous
+                  </button>
+                  {getPageNumbers(incidentsPage, incidentsTotalPages).map((p, idx) =>
+                    p === "…" ? (
+                      <span key={`ellipsis-${idx}`} className="px-1.5 text-[12px]" style={{ color: '#94A3B8' }}>…</span>
+                    ) : (
+                      <button
+                        type="button"
+                        key={p}
+                        onClick={() => setIncidentsPage(p)}
+                        className="min-w-[28px] px-2 py-1 rounded-md text-[12px] border"
+                        style={
+                          p === incidentsPage
+                            ? { background: '#4A57B9', borderColor: '#4A57B9', color: '#fff', fontWeight: 600 }
+                            : { color: '#374151', borderColor: '#E2E8F0' }
+                        }
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    disabled={incidentsPage >= incidentsTotalPages}
+                    onClick={() => setIncidentsPage((p) => Math.min(incidentsTotalPages, p + 1))}
+                    className="px-2.5 py-1 rounded-md text-[12px] border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    style={{ color: '#374151', borderColor: '#E2E8F0' }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="flex justify-end">

@@ -18,6 +18,11 @@ class IncidentService:
             return self._repo.get_all_by_org(org_id, skip=skip, limit=limit)
         return self._repo.get_all(skip=skip, limit=limit)
 
+    def count(self, org_id: Optional[int] = None) -> int:
+        if org_id is not None:
+            return self._repo.count_by_org(org_id)
+        return self._repo.count_all()
+
     def get(self, id: int, org_id: Optional[int] = None):
         if org_id is not None:
             item = self._repo.get_by_id_and_org(id, org_id)

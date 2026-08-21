@@ -1,10 +1,11 @@
+import math
 from typing import List, Dict
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.services.incident import IncidentService
-from app.schemas.incident import IncidentCreate, IncidentUpdate, IncidentResponse
+from app.schemas.incident import IncidentCreate, IncidentUpdate, IncidentResponse, IncidentPage
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -21,6 +22,27 @@ def list_incidents(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     return svc.list(skip=skip, limit=limit, org_id=current_user.org_id)
+
+
+@router.get("/all", response_model=IncidentPage)
+def list_incidents_paginated(
+    page: int = 1,
+    pageSize: int = 25,
+    svc: IncidentService = Depends(_svc),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    page = max(page, 1)
+    pageSize = max(pageSize, 1)
+    total = svc.count(org_id=current_user.org_id)
+    skip = (page - 1) * pageSize
+    data = svc.list(skip=skip, limit=pageSize, org_id=current_user.org_id)
+    return IncidentPage(
+        data=data,
+        total=total,
+        page=page,
+        pageSize=pageSize,
+        totalPages=math.ceil(total / pageSize) if total else 0,
+    )
 
 
 @router.get("/{id}", response_model=IncidentResponse)

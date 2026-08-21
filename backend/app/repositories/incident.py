@@ -24,3 +24,13 @@ class IncidentRepository(BaseRepository[Incident]):
             .limit(limit)
             .all()
         )
+
+    def count_all(self) -> int:
+        return self._db.query(self.model_class).count()
+
+    def count_by_org(self, org_id: int) -> int:
+        return (
+            self._db.query(self.model_class)
+            .filter(self.model_class.organisation_id == org_id)
+            .count()
+        )
