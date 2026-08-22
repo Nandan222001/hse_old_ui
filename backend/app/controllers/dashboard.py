@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.utils.tenant import org_scoped_join
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
 from app.models.hazard import Hazard
@@ -287,7 +288,7 @@ def get_leading_indicators(
             Incident,
             org_id,
         )
-        .join(Employee, Incident.reported_by == Employee.id)
+        .join(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id))
         .filter(func.lower(Employee.employment_type) == "permanent")
         .scalar()
         or 0
@@ -413,7 +414,7 @@ def get_ranked_capa_actions(
 ):
     org_id = current_user.org_id
     q = _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)\
-        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)\
+        .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))\
         .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
     if start_date:
         q = q.filter(func.date(CapaAction.due_date) >= start_date)
@@ -557,7 +558,7 @@ def get_safety_walks_recent(
     rows = (
         _org_filter(db.query(SafetyWalk, WorkingStation, Employee), SafetyWalk, org_id)
         .outerjoin(WorkingStation, SafetyWalk.location_station_id == WorkingStation.id)
-        .outerjoin(Employee, SafetyWalk.inspector_id == Employee.id)
+        .outerjoin(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
         .order_by(SafetyWalk.inspection_date_time.desc())
         .limit(limit)
         .all()
@@ -589,7 +590,7 @@ def get_near_misses_recent(
     rows = (
         _org_filter(db.query(NearMiss, WorkingStation, Employee), NearMiss, org_id)
         .outerjoin(WorkingStation, NearMiss.location_station_id == WorkingStation.id)
-        .outerjoin(Employee, NearMiss.reported_by == Employee.id)
+        .outerjoin(Employee, org_scoped_join(NearMiss.reported_by == Employee.id, Employee.organisation_id, org_id))
         .order_by(NearMiss.event_date_time.desc())
         .limit(limit)
         .all()

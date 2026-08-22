@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.utils.tenant import org_scoped_join
 from app.models.capa_action import CapaAction
 from app.models.department import Department
 from app.models.employee import Employee
@@ -124,7 +125,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     # avoiding org mismatch when employees reference roles from another org.
     avg_supervisor_compliance = (
         db.query(func.avg(SafetyWalk.compliance_rating))
-        .join(Employee, SafetyWalk.inspector_id == Employee.id)
+        .join(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
         .join(Role, Employee.role_id == Role.id)
         .filter(
             Role.safety_signatory == "Yes",
@@ -206,7 +207,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     role_incidents = dict(
         db.query(Role.role_name, func.count(Incident.id))
         .join(Employee, Employee.role_id == Role.id)
-        .outerjoin(Incident, Incident.reported_by == Employee.id)
+        .outerjoin(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
         .filter(*([Employee.organisation_id == org_id] if org_id is not None else []))
         .group_by(Role.role_name)
         .all()
@@ -214,7 +215,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     role_near_misses = dict(
         db.query(Role.role_name, func.count(NearMiss.id))
         .join(Employee, Employee.role_id == Role.id)
-        .outerjoin(NearMiss, NearMiss.reported_by == Employee.id)
+        .outerjoin(NearMiss, org_scoped_join(NearMiss.reported_by == Employee.id, NearMiss.organisation_id, org_id))
         .filter(*([Employee.organisation_id == org_id] if org_id is not None else []))
         .group_by(Role.role_name)
         .all()
@@ -272,7 +273,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     coaching_rows = (
         _of(
             db.query(CapaAction, Employee)
-            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
             .filter(CapaAction.action_type == "Training", CapaAction.status != "Completed"),
             CapaAction, org_id,
         )
@@ -304,7 +305,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     open_rows = (
         _of(
             db.query(CapaAction, Employee)
-            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
             .filter(CapaAction.action_type != "Training", CapaAction.status != "Completed"),
             CapaAction, org_id,
         )

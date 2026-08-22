@@ -32,6 +32,7 @@ endpoints exist.
 """
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -278,9 +279,18 @@ def _require_owner_or_elevated(db: Session, capa: CapaAction, current_user: Curr
     raise HTTPException(status_code=403, detail=f"Not authorized to {action}")
 
 
-def _employee_name(db: Session, employee_id: Optional[int]) -> Optional[str]:
+def _employee_name(db: Session, employee_id: Optional[int], org_id: Optional[int] = None) -> Optional[str]:
+    """Look up an employee's name. When org_id is given, only returns a name for
+    an employee belonging to that org — employee ids are a global, cross-tenant
+    key, so an unscoped lookup can surface another organisation's employee name
+    for a stale/bad cross-org foreign key."""
     if not employee_id:
         return None
+    if org_id is not None:
+        return db.execute(
+            text("SELECT full_name FROM employees WHERE id = :id AND organisation_id = :org_id"),
+            {"id": employee_id, "org_id": org_id},
+        ).scalar()
     return db.execute(
         text("SELECT full_name FROM employees WHERE id = :id"), {"id": employee_id}
     ).scalar()
@@ -351,7 +361,7 @@ def _detail(db: Session, capa: CapaAction) -> CapaDetail:
         action_category=capa.action_category,
         hierarchy_level=capa.hierarchy_level,
         responsible_person_id=capa.responsible_person_id,
-        responsible_person_name=_employee_name(db, capa.responsible_person_id),
+        responsible_person_name=_employee_name(db, capa.responsible_person_id, capa.organisation_id),
         due_date=capa.due_date,
         status=capa.status,
         severity_potential=capa.severity_potential,
@@ -416,6 +426,14 @@ def raise_capa(
 
     if not _subject_exists(db, fam, payload.subject_id, current_user.org_id):
         raise HTTPException(status_code=404, detail=f"No {fam} with id {payload.subject_id}")
+
+    if payload.responsible_person_id:
+        owner_in_org = db.execute(
+            text("SELECT id FROM employees WHERE id = :id AND organisation_id = :org_id"),
+            {"id": payload.responsible_person_id, "org_id": current_user.org_id},
+        ).scalar()
+        if not owner_in_org:
+            raise HTTPException(status_code=404, detail="No such employee")
 
     now = datetime.utcnow()
     prio = prioritise(
@@ -612,7 +630,8 @@ def assign_capa(
     _require_unlocked(capa)
 
     exists = db.execute(
-        text("SELECT id FROM employees WHERE id = :id"), {"id": payload.responsible_person_id}
+        text("SELECT id FROM employees WHERE id = :id AND organisation_id = :org_id"),
+        {"id": payload.responsible_person_id, "org_id": capa.organisation_id},
     ).scalar()
     if not exists:
         raise HTTPException(status_code=404, detail="No such employee")
@@ -720,7 +739,7 @@ def list_progress(
             "note": r.note,
             "percent_complete": r.percent_complete,
             "author_id": r.author_id,
-            "author_name": _employee_name(db, r.author_id),
+            "author_name": _employee_name(db, r.author_id, capa.organisation_id),
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
@@ -1295,6 +1314,11 @@ def _summary(db: Session, capa: CapaAction) -> dict:
         "id": capa.id,
         "capa_ref": capa.capa_ref,
         "description": capa.description,
+        # incident_id is the reliable column for incident-raised CAPAs — older
+        # rows (raised before migration 056) never got subject_family/subject_id
+        # backfilled, so that pair alone under-reports which CAPAs trace to an
+        # incident. incident_id stays populated for all of them.
+        "incident_id": capa.incident_id,
         "subject_family": capa.subject_family,
         "subject_id": capa.subject_id,
         "status": capa.status,
@@ -1307,7 +1331,7 @@ def _summary(db: Session, capa: CapaAction) -> dict:
         "is_overdue": stage["is_overdue"],
         "escalation_level": stage["escalation_level"],
         "responsible_person_id": capa.responsible_person_id,
-        "responsible_person_name": _employee_name(db, capa.responsible_person_id),
+        "responsible_person_name": _employee_name(db, capa.responsible_person_id, capa.organisation_id),
         "systemic_flag": bool(capa.systemic_flag),
         "reopened_count": capa.reopened_count or 0,
     }
@@ -1351,6 +1375,45 @@ def ageing_report(
         "counts": {k: len(v) for k, v in buckets.items()},
         "buckets": buckets,
         "systemic_flagged": sum(1 for c in rows if c.systemic_flag),
+    }
+
+
+@router.get("/all")
+def list_all_capa(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(25, ge=1, le=200),
+    overdue_only: bool = Query(False),
+    include_closed: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Paginated CAPA list backing the dashboard's "View All Actions" /
+    "View All Overdue CAPA" links — every action for this org, not just the
+    top-N preview shown on the dashboard.
+
+    overdue_only filters on the CapaAction.status field rather than a
+    due_date-vs-today comparison — see get_dashboard_stats in dashboard.py
+    for why that comparison is unreliable against this seed data's dates.
+    """
+    q = db.query(CapaAction).filter(CapaAction.organisation_id == current_user.org_id)
+    if overdue_only:
+        q = q.filter(CapaAction.status == "Overdue")
+    elif not include_closed:
+        q = q.filter(func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)))
+
+    total = q.count()
+    rows = (
+        q.order_by(CapaAction.due_date.is_(None), CapaAction.due_date)
+        .offset((page - 1) * pageSize)
+        .limit(pageSize)
+        .all()
+    )
+    return {
+        "data": [_summary(db, c) for c in rows],
+        "total": total,
+        "page": page,
+        "pageSize": pageSize,
+        "totalPages": math.ceil(total / pageSize) if total else 0,
     }
 
 

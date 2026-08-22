@@ -85,6 +85,22 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
     )
 
 
+def require_superadmin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Gate for platform-wide (cross-organisation) administration routes.
+
+    Unlike org-scoped tenant data, these routes act on every organisation at
+    once (user accounts, subscriptions, platform notifications) — they must
+    never be reachable by an org-scoped user, let alone an unauthenticated
+    caller.
+    """
+    if (current_user.role or "").strip().lower() != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SuperAdmin access required",
+        )
+    return current_user
+
+
 def get_current_user_optional(
     request: Request, db: Session = Depends(get_db)
 ) -> Optional[CurrentUser]:

@@ -422,6 +422,14 @@ def build_workflow_router(
             from app.models.capa_action import CapaAction
             from app.services.capa_priority import prioritise
 
+            if payload.capa_responsible_person_id:
+                owner_in_org = db.execute(
+                    text("SELECT id FROM employees WHERE id = :id AND organisation_id = :org_id"),
+                    {"id": payload.capa_responsible_person_id, "org_id": current_user.org_id},
+                ).scalar()
+                if not owner_in_org:
+                    raise HTTPException(status_code=404, detail="No such employee")
+
             prio = prioritise(
                 severity_potential=payload.capa_severity_potential,
                 systemic_risk=payload.capa_systemic_risk,

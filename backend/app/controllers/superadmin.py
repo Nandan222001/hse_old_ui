@@ -13,6 +13,7 @@ from datetime import date as dt_date
 
 from app.config.database import get_db
 from app.config.settings import get_settings
+from app.core.dependencies import require_superadmin
 from app.models.app_role import AppRole
 from app.models.organisation_invite import OrganisationInvite
 from app.models.organisation import Organisation
@@ -27,7 +28,7 @@ from app.schemas.organisation_invite import (
 from app.services.email_service import send_organisation_invite
 from app.utils.logger import get_logger
 
-router = APIRouter(prefix="/superadmin", tags=["SuperAdmin"])
+router = APIRouter(prefix="/superadmin", tags=["SuperAdmin"], dependencies=[Depends(require_superadmin)])
 settings = get_settings()
 logger = get_logger(__name__)
 

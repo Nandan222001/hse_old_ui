@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.utils.tenant import org_scoped_join
 from app.models.audit import Audit
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
@@ -221,7 +222,7 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
     # Person involved — group by employment_type of the employee who reported
     person_rows = (
         db.query(Employee.employment_type, func.count(Incident.id).label("cnt"))
-        .join(Incident, Incident.reported_by == Employee.id)
+        .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id))
         .filter(
             Employee.employment_type.isnot(None),
             *([Incident.organisation_id == org_id] if org_id is not None else []),
@@ -345,7 +346,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         db.query(PermitToWork, PermitType, WorkingStation, Employee)
         .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
         .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
-        .outerjoin(Employee, PermitToWork.issued_by == Employee.id)
+        .outerjoin(Employee, org_scoped_join(PermitToWork.issued_by == Employee.id, Employee.organisation_id, org_id))
         .filter(
             PermitToWork.status == "Active",
             *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
@@ -674,7 +675,7 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
     capa_rows = (
         _org_filter(
             db.query(CapaAction, Employee)
-            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
             .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
         )
@@ -808,7 +809,7 @@ def get_root_cause_analysis(
             db.query(Incident, WorkingStation, Site, Employee)
             .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
             .outerjoin(Site, WorkingStation.site_id == Site.id)
-            .outerjoin(Employee, Incident.reported_by == Employee.id),
+            .outerjoin(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id)),
             Incident, org_id,
         )
         .order_by(Incident.id.desc())
@@ -994,7 +995,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     nc_rows = (
         _org_filter(
             db.query(CapaAction, Employee, Incident)
-            .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+            .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
             .outerjoin(Incident, CapaAction.incident_id == Incident.id)
             .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])),
             CapaAction, org_id,
@@ -1345,7 +1346,7 @@ def get_engagement_summary(
     # Top recognitions — employees with most completed CAPA actions
     top_emp_rows = (
         db.query(Employee.full_name, func.count(CapaAction.id).label("cnt"))
-        .join(CapaAction, CapaAction.responsible_person_id == Employee.id)
+        .join(CapaAction, org_scoped_join(CapaAction.responsible_person_id == Employee.id, CapaAction.organisation_id, org_id))
         .filter(
             func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"]),
             *(
@@ -1437,7 +1438,7 @@ def get_violation_detail(
         db.query(Incident, WorkingStation, Site, Employee)
         .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
         .outerjoin(Site, WorkingStation.site_id == Site.id)
-        .outerjoin(Employee, Incident.reported_by == Employee.id)
+        .outerjoin(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id))
         .filter(Incident.id == incident_id)
         .filter(*([Incident.organisation_id == org_id] if org_id is not None else []))
         .first()
@@ -1449,7 +1450,7 @@ def get_violation_detail(
 
     capa_rows = (
         db.query(CapaAction, Employee)
-        .outerjoin(Employee, CapaAction.responsible_person_id == Employee.id)
+        .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
         .filter(CapaAction.incident_id == inc.id)
         .order_by(CapaAction.due_date.asc())
         .all()

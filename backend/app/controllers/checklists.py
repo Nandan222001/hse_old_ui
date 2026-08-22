@@ -17,8 +17,13 @@ from app.core.dependencies import (
     get_current_user_optional,
     CurrentUser,
 )
+from app.controllers.workflow_common import require_role
 
 router = APIRouter(prefix="/checklists", tags=["Checklists"])
+
+# Templates are shared, platform-wide config (no organisation_id column) — every
+# tenant sees the same checklist, so only admin-tier roles may edit one.
+TEMPLATE_ADMIN_ROLES = {"admin", "hse manager", "superadmin"}
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -40,11 +45,28 @@ def _tmpl(db: Session, checklist_type: str) -> dict:
     return dict(row)
 
 
-def _sub(db: Session, submission_uuid: str) -> dict:
-    row = db.execute(
-        text("SELECT * FROM checklist_submissions WHERE submission_uuid = :u"),
-        {"u": submission_uuid},
-    ).mappings().first()
+def _sub(db: Session, submission_uuid: str, org_id: Optional[int] = None) -> dict:
+    """Look up a submission by its UUID.
+
+    checklist_submissions carries no organisation_id of its own — the only
+    tenant link is site_id -> sites.organisation_id. When org_id is given,
+    that join is checked so a UUID for another org's submission (guessed or
+    enumerated) 404s instead of returning cross-tenant checklist data.
+    """
+    if org_id is not None:
+        row = db.execute(
+            text(
+                "SELECT cs.* FROM checklist_submissions cs "
+                "JOIN sites s ON cs.site_id = s.id "
+                "WHERE cs.submission_uuid = :u AND s.organisation_id = :org_id"
+            ),
+            {"u": submission_uuid, "org_id": org_id},
+        ).mappings().first()
+    else:
+        row = db.execute(
+            text("SELECT * FROM checklist_submissions WHERE submission_uuid = :u"),
+            {"u": submission_uuid},
+        ).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Submission not found")
     return dict(row)
@@ -143,6 +165,7 @@ def create_template(
 ) -> dict:
     """Create a new checklist template — lets an HSE Manager/Admin define a checklist
     from the web app instead of it being fixed in code."""
+    require_role(current_user.role, TEMPLATE_ADMIN_ROLES, "create a checklist template")
     display_name = (payload.get("display_name") or "").strip()
     items = payload.get("items") or []
     if not display_name:
@@ -221,6 +244,7 @@ def update_template(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
+    require_role(current_user.role, TEMPLATE_ADMIN_ROLES, "edit a checklist template")
     row = db.execute(
         text("SELECT * FROM checklist_templates WHERE checklist_type = :t"),
         {"t": checklist_type},
@@ -283,6 +307,7 @@ def deactivate_template(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Soft-delete — keeps history of past submissions against this template intact."""
+    require_role(current_user.role, TEMPLATE_ADMIN_ROLES, "deactivate a checklist template")
     db.execute(
         text("UPDATE checklist_templates SET is_active = 0 WHERE checklist_type = :t"),
         {"t": checklist_type},
@@ -380,7 +405,7 @@ def create_submission(
 
 @router.get("/submissions/{submission_uuid}")
 def get_submission(submission_uuid: str, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
-    sub  = _sub(db, submission_uuid)
+    sub  = _sub(db, submission_uuid, current_user.org_id)
     tmpl = _tmpl(db, sub["checklist_type"])
 
     items = db.execute(
@@ -441,7 +466,7 @@ def save_items(
     db: Session = Depends(get_db),
     current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
 ) -> dict:
-    sub = _sub(db, submission_uuid)
+    sub = _sub(db, submission_uuid, current_user.org_id if current_user else None)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be edited")
 
@@ -471,7 +496,7 @@ def submit_submission(
     db: Session = Depends(get_db),
     current_user: Optional[CurrentUser] = Depends(get_current_user_optional),
 ) -> dict:
-    sub = _sub(db, submission_uuid)
+    sub = _sub(db, submission_uuid, current_user.org_id if current_user else None)
     if sub["status"] != "draft":
         raise HTTPException(status_code=400, detail="Only draft submissions can be submitted")
 
@@ -498,7 +523,7 @@ def submit_submission(
 
 @router.post("/submissions/{submission_uuid}/validate")
 def validate_submission(submission_uuid: str, request: Request, payload: dict, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
-    sub = _sub(db, submission_uuid)
+    sub = _sub(db, submission_uuid, current_user.org_id)
     if sub["status"] != "submitted":
         raise HTTPException(status_code=400, detail="Only submitted checklists can be validated")
 

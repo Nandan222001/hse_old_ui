@@ -13,6 +13,7 @@ from app.models.organisation import Organisation
 from app.models.audit_log import AuditLog
 from app.services.audit_log import record_audit, resolve_employee_id
 from app.services.contractor_risk import DEFAULT_CONTRACTOR_WEIGHTS
+from app.utils.tenant import org_scoped_join
 
 router = APIRouter(prefix="/org-admin/settings", tags=["Settings"])
 
@@ -273,7 +274,7 @@ def list_audit_logs(
 
     rows = (
         db.query(AuditLog, Employee.full_name)
-        .outerjoin(Employee, AuditLog.employee_id == Employee.id)
+        .outerjoin(Employee, org_scoped_join(AuditLog.employee_id == Employee.id, Employee.organisation_id, current_user.org_id))
         .filter(AuditLog.organisation_id == current_user.org_id)
         .order_by(AuditLog.created_at.desc())
         .limit(min(limit, 500))

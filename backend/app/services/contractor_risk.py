@@ -7,6 +7,7 @@ from app.models.employee import Employee
 from app.models.incident import Incident
 from app.models.organisation import Organisation
 from app.models.permit_to_work import PermitToWork
+from app.utils.tenant import org_scoped_join
 
 CONTRACTOR_TYPE_PATTERN = "%contract%"
 
@@ -67,7 +68,7 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
 
     contractor_incidents = int(
         _org(db.query(func.count(Incident.id)), Incident)
-        .join(Employee, Incident.reported_by == Employee.id)
+        .join(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id))
         .filter(func.lower(Employee.employment_type).like(CONTRACTOR_TYPE_PATTERN))
         .scalar()
         or 0
@@ -78,7 +79,7 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
     # with contractors, and saturates the penalty cap for every organisation.
     contractor_violations = int(
         _org(db.query(func.count(PermitToWork.id)), PermitToWork)
-        .join(Employee, PermitToWork.issued_by == Employee.id)
+        .join(Employee, org_scoped_join(PermitToWork.issued_by == Employee.id, Employee.organisation_id, org_id))
         .filter(
             PermitToWork.deviation_reported == "Yes",
             func.lower(Employee.employment_type).like(CONTRACTOR_TYPE_PATTERN),

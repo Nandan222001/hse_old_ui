@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿﻿import { useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useNavigate } from "react-router";
 import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronRight } from "lucide-react";
@@ -57,7 +57,7 @@ async function repairOrgData() {
     if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
     void headers;
   } catch {
-    // silent â€” repair is best-effort
+    // silent — repair is best-effort
   }
 }
 
@@ -105,7 +105,7 @@ function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label:
       </div>
       <div className="mt-2 text-[15px]" style={{ color: '#111827', fontWeight: 700 }}>{label}</div>
       {threshold && (
-        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;â€¢&nbsp; {threshold}</div>
+        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;•&nbsp; {threshold}</div>
       )}
     </div>
   );
@@ -233,7 +233,7 @@ export function DashboardPage() {
         : `${leading.contractor_risk_label} / ${Number(leading.contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
       sub: leading.contractor_has_contractors === false
         ? "No contractor workforce recorded"
-        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "âš  Extreme Risk â€” Violations Present" : "Limiting Indicator",
+        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
       accent: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
       border: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
       inline: "",
@@ -402,8 +402,26 @@ export function DashboardPage() {
                   {capaActions.map((row) => {
                     const assignee = row.assignee || 'Unassigned';
                     const initials = assignee.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+                    const incidentRef = row.incident_id ? `INC-${String(row.incident_id).padStart(5, '0')}` : null;
+                    // Seed/legacy descriptions embed a made-up "INC00018"-style
+                    // reference that has no relation to the real incident_id —
+                    // strip it so it can't be mistaken for the incidentRef badge above.
+                    const label = (row.description || row.action_type || 'Corrective Action')
+                      .replace(/\s*\b(for|addressing)\s+INC-?\d+\b\.?/gi, '')
+                      .trim() || row.action_type || 'Corrective Action';
                     return <tr key={row.id} className="border-b last:border-b-0" style={{ borderColor: '#F1F5F9' }}>
-                      <td className="max-w-0 break-words px-2 py-3 first:pl-0 text-[13px]" style={{ color: '#111827' }}><span className="block break-words" title={row.description || row.action_type}>{row.description || row.action_type}</span></td>
+                      <td className="max-w-0 break-words px-2 py-3 first:pl-0 text-[13px]" style={{ color: '#111827' }}>
+                        {incidentRef && (
+                          <button
+                            onClick={() => navigate(`/violations/${incidentRef}`)}
+                            className="mb-0.5 block text-[11px] font-bold hover:underline"
+                            style={{ color: '#4A57B9' }}
+                          >
+                            {incidentRef}
+                          </button>
+                        )}
+                        <span className="block break-words" title={label}>{label}</span>
+                      </td>
                       <td className="px-2 py-3 text-[13px]"><span className="inline-flex rounded-full px-2 py-1 text-[11px] font-bold" style={{ background: row.priority === 'High' ? '#FFF1F2' : '#FFF7ED', color: row.priority === 'High' ? '#BE123C' : '#C2410C' }}>{row.priority}</span></td>
                       <td className="px-2 py-3 text-[13px] whitespace-nowrap" style={{ color: '#374151' }}>{formatDueDate(row.due_date)}</td>
                       <td className="break-words px-2 py-3 text-[13px]" style={{ color: '#374151' }}><span className="flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E9EDFF] text-[10px] font-bold text-[#4A57B9]">{initials}</span><span className="break-words">{assignee}</span></span></td>
@@ -412,15 +430,28 @@ export function DashboardPage() {
                 </tbody>
               </table>
             </div>
-            <button onClick={() => navigate('/work')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#D8E1F5] px-4 py-2.5 text-[13px] font-semibold text-[#4A57B9] hover:bg-[#F5F7FF]">View All Actions <ChevronRight className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/capa-actions')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#D8E1F5] px-4 py-2.5 text-[13px] font-semibold text-[#4A57B9] hover:bg-[#F5F7FF]">View All Actions <ChevronRight className="h-4 w-4" /></button>
           </div>
 
           <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
             <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Overdue CAPA</h2><AlertTriangle className="h-5 w-5 text-[#D97706]" /></div>
             <div className="flex-1 space-y-1">
-              {overdueCapa.map((item) => <div key={item.id} className="flex gap-3 border-b border-[#F1F5F9] py-3 last:border-b-0"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#64748B]" /><div className="min-w-0 text-[14px] leading-5" style={{ color: '#374151' }}><div>Incident #{item.incident_id} <span className="text-[#94A3B8]">•</span> {item.action_type || 'Corrective'}</div><div className="font-bold text-[#C2410C]">{item.days_overdue} days overdue</div></div></div>)}
+              {overdueCapa.map((item) => {
+                const incidentRef = item.incident_id ? `INC-${String(item.incident_id).padStart(5, '0')}` : null;
+                return <div
+                  key={item.id}
+                  className={`flex gap-3 border-b border-[#F1F5F9] py-3 last:border-b-0 ${incidentRef ? 'cursor-pointer hover:bg-[#FFFBF5]' : ''}`}
+                  onClick={incidentRef ? () => navigate(`/violations/${incidentRef}`) : undefined}
+                >
+                  <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#64748B]" />
+                  <div className="min-w-0 text-[14px] leading-5" style={{ color: '#374151' }}>
+                    <div>{incidentRef || `Incident #${item.incident_id}`} <span className="text-[#94A3B8]">•</span> {item.action_type || 'Corrective'}</div>
+                    <div className="font-bold text-[#C2410C]">{item.days_overdue} days overdue</div>
+                  </div>
+                </div>;
+              })}
             </div>
-            <button onClick={() => navigate('/work')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#F4D6B0] bg-[#FFF9F2] px-4 py-2.5 text-[13px] font-semibold text-[#B45309] hover:bg-[#FFF3E1]">View All Overdue CAPA <ChevronRight className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/capa-actions?overdue=1')} className="mt-4 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-[#F4D6B0] bg-[#FFF9F2] px-4 py-2.5 text-[13px] font-semibold text-[#B45309] hover:bg-[#FFF3E1]">View All Overdue CAPA <ChevronRight className="h-4 w-4" /></button>
           </div>
 
           <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
@@ -436,7 +467,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 rounded-2xl border px-5 py-4" style={{ borderColor: '#DCE4F3', background: '#FFFFFF' }}>
-        {/* top row â€” welcome + updated */}
+        {/* top row — welcome + updated */}
         <div className="flex items-center justify-between">
           <div>
             <h1>Welcome, {firstName}</h1>
@@ -446,7 +477,7 @@ export function DashboardPage() {
             <span className="text-[13px]" style={{ color: '#94A3B8' }}>
               {lastUpdated
                 ? `Updated: ${lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
-                : 'Loadingâ€¦'}
+                : 'Loading…'}
             </span>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#5B6DE8' }} />
           </div>

@@ -12,6 +12,7 @@ import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
+import { CapaActionsPage } from "./pages/CapaActionsPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AIAgentPage } from "./pages/AIAgentPage";
 import { CompliancePage } from "./pages/CompliancePage";
@@ -110,6 +111,7 @@ const ViolationDetailRoute = ViolationDetailPage;
 const ActionsRoute = ActionsPage;
 const ChecklistsRoute = ChecklistPage;
 const ComplianceRoute = CompliancePage;
+const SitesZonesRoute = SitesZonesPage;
 const AIAgentRoute = AIAgentPage;
 const AnalyticsRoute = AnalyticsPage;
 const NearMissRoute = NearMissPage;
@@ -198,6 +200,7 @@ export const router = createBrowserRouter([
       { path: "hazards/tracking", Component: HazardTrackingPage },
       { path: "violations/:id", Component: ViolationDetailRoute },
       { path: "actions", Component: ActionsRoute },
+      { path: "capa-actions", Component: CapaActionsPage },
       { path: "checklists", Component: ChecklistsRoute },
       { path: "compliance", Component: ComplianceRoute },
       // Literal paths before the :id one — "programme" must not be read as an id.

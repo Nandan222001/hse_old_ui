@@ -682,6 +682,13 @@ def supervisor_investigate(
 
     # Auto-create CAPA if details provided
     if payload.capa_description:
+        if payload.capa_responsible_person_id:
+            owner_in_org = db.execute(
+                text("SELECT id FROM employees WHERE id = :id AND organisation_id = :org_id"),
+                {"id": payload.capa_responsible_person_id, "org_id": current_user.org_id},
+            ).scalar()
+            if not owner_in_org:
+                raise HTTPException(status_code=404, detail="No such employee")
         # WF-04: the CAPA inherits its type from the incident's P1-P5 severity,
         # which sets the deadline. The matrix score needs severity potential and
         # systemic risk, which the supervisor supplies — without them the CAPA
