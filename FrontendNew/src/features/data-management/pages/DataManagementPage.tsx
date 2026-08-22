@@ -316,7 +316,7 @@ function ApiIntegrationsTab() {
   const activate = async () => {
     if (!activeSystem) return;
     try {
-      await createIntegration({ name: form.name, type: activeSystem.id, endpoint_url: form.endpoint_url, auth_type: "api_key", is_active: true, sync_frequency: form.sync_frequency, description: form.description }).unwrap();
+      await (createIntegration({ name: form.name, type: activeSystem.id, endpoint_url: form.endpoint_url, auth_type: "api_key", is_active: true, sync_frequency: form.sync_frequency, description: form.description }) as any).unwrap();
       setStep("done"); refetch();
     } catch (e: unknown) { setSaveError((e as Error).message || "Failed to save integration."); }
   };
@@ -1063,7 +1063,7 @@ function FullImportCard() {
   const handleFile = useCallback(async (f: File) => {
     setError(null); setResult(null);
     const fd = new FormData(); fd.append("file", f);
-    try { const res = await fullImport(fd).unwrap(); setResult(res); }
+    try { const res = await (fullImport(fd) as any).unwrap(); setResult(res); }
     catch (e: unknown) { setError((e as { data?: { detail?: string }; message?: string })?.data?.detail || (e as { message?: string })?.message || "Import failed"); }
   }, [fullImport]);
 

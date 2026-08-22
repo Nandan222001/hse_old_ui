@@ -55,6 +55,8 @@ react {
 
     /* Autolinking */
     autolinkLibrariesWithApp()
+    
+    entryFile = file("../../index.ts")
 }
 
 /**

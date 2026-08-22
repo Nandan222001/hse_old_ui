@@ -881,7 +881,7 @@ function Step7({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
 
   const toggle = (key: string) => setFeatures((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const aiIcons: Record<string, React.ComponentType<{ className?: string }>> = { aiAssistant: Brain, predictiveRiskEngine: BarChart3, complianceAI: Shield, aiRecommendations: Zap, benchmarkingEngine: BarChart3, fatigueAnalysis: Clock, trendAnalysis: BarChart3 };
+  const aiIcons: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = { aiAssistant: Brain, predictiveRiskEngine: BarChart3, complianceAI: Shield, aiRecommendations: Zap, benchmarkingEngine: BarChart3, fatigueAnalysis: Clock, trendAnalysis: BarChart3 };
 
   const handleNext = async () => {
     await saveStep7({ aiFeatures: AI_FEATURES.map(({ key, label }) => ({ name: label, enabled: features[key] })) });

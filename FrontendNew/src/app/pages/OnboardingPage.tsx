@@ -17,10 +17,12 @@ import {
 	startOnboardingProcessing,
 	fetchRequestStatusByEmail,
 	fetchOnboardingLayerOptions,
-	type OnboardingLayerOption,
-	type OnboardingProcessingQueueItem,
-	type RequestStatusResponse,
 } from '../../services/onboarding.service';
+import type {
+	OnboardingLayerOption,
+	OnboardingProcessingQueueItem,
+	RequestStatusResponse,
+} from '../../types';
 import { useAuth } from '../context/AuthContext';
 import './OnboardingPage.css';
 

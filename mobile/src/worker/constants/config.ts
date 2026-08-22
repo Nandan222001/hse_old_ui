@@ -3,7 +3,7 @@
 // a physical device needs `adb reverse tcp:8000 tcp:8000`.
 export const API_BASE_URL =
   process.env.API_BASE_URL ??
-  (__DEV__ ? 'http://localhost:8000/api/v1' : 'https://20.65.202.44/api/v1');
+  (__DEV__ ? 'http://localhost:8000/api/v1' : 'https://api.ehsera.com/api/v1');
 
 export const API_TIMEOUT = 15000;
 
