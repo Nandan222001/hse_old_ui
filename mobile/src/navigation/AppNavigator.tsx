@@ -45,6 +45,7 @@ import AssignTaskScreen from '../screens/AssignTaskScreen';
 import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
 import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
 import { RiskManagementScreen } from '../screens/RiskManagementScreen';
+import { HazardRegisterManagementScreen } from '../screens/HazardRegisterManagementScreen';
 import { DocumentManagementScreen } from '../screens/DocumentManagementScreen';
 import { AISafetyInsightsScreen } from '../screens/AISafetyInsightsScreen';
 // ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ─────────────────────────────
@@ -72,6 +73,8 @@ import ReportNearMissScreen from '../worker/screens/ReportNearMissScreen';
 import ReportUnsafeActScreen from '../worker/screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../worker/screens/ReportIncidentScreen';
 import ReportRiskScreen from '../worker/screens/ReportRiskScreen';
+import LogHazardScreen from '../worker/screens/LogHazardScreen';
+import MyHazardsScreen from '../worker/screens/MyHazardsScreen';
 import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
@@ -310,6 +313,10 @@ export function AppNavigator() {
               <Stack.Screen name="NearMissManagement" component={NearMissManagementScreen} />
               <Stack.Screen name="PermitRequestManagement" component={PermitRequestManagementScreen} />
               <Stack.Screen name="RiskManagement" component={RiskManagementScreen} />
+              {/* Flow 5 · stages 02 ASSESS -- 05 IMPROVE are the supervisor's.
+                  Separate from RiskManagement above, which is the risk_reports
+                  observation queue and carries no register lifecycle. */}
+              <Stack.Screen name="HazardRegisterManagement" component={HazardRegisterManagementScreen} />
               <Stack.Screen name="DocumentManagement" component={DocumentManagementScreen} />
               <Stack.Screen name="AISafetyInsights" component={AISafetyInsightsScreen} />
               <Stack.Screen name="AppSettings" component={AppSettingsScreen} />
@@ -336,6 +343,10 @@ export function AppNavigator() {
               <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="ReportRisk" component={ReportRiskScreen} options={{ presentation: 'modal' }} />
+              {/* Flow 5 · the standing hazard register. Separate from ReportRisk
+                  above, which writes a one-off observation to risk_reports. */}
+              <Stack.Screen name="LogHazard" component={LogHazardScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="MyHazards" component={MyHazardsScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />

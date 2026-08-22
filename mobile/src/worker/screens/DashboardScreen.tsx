@@ -214,6 +214,12 @@ export default function DashboardScreen({ navigation }: any) {
             <Icon name="edit-3" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Request Permit</Text>
           </TouchableOpacity>
+          {/* Flow 5 · logs into the standing register, which the worker can
+              then follow to closure on My Hazards. */}
+          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('LogHazard')}>
+            <Icon name="tool" style={styles.quickActionIcon} />
+            <Text style={styles.quickActionLabel}>Log Hazard</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportUnsafeAct')}>
             <Icon name="octagon" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Unsafe Act</Text>

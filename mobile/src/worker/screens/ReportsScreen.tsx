@@ -17,7 +17,10 @@ const REPORT_TYPES = [
   { id: 'near_miss',  icon: '⚠️', title: 'Near Miss',       desc: 'Report a near miss event',      color: Colors.warning,  bg: Colors.warningBg,  screen: 'ReportNearMiss'  },
   { id: 'incident',   icon: '🚨', title: 'Incident',         desc: 'Report a safety incident',      color: Colors.critical, bg: Colors.criticalBg, screen: 'ReportIncident'  },
   { id: 'unsafe_act', icon: '👁️', title: 'Unsafe Act',       desc: 'Report an unsafe behaviour',   color: Colors.blue,     bg: '#E3F2FD',         screen: 'ReportUnsafeAct' },
-  { id: 'risk',       icon: '🛡️', title: 'Hazard',           desc: 'Report a hazard or unsafe condition', color: '#7C3AED',    bg: '#F3E8FF',         screen: 'ReportRisk'      },
+  { id: 'risk',       icon: '🛡️', title: 'Risk Observation', desc: 'One-off unsafe condition you saw', color: '#7C3AED',    bg: '#F3E8FF',         screen: 'ReportRisk'      },
+  // Flow 5. Kept apart from the risk observation above: a register entry is a
+  // standing condition that runs all eight stages, and the worker can follow it.
+  { id: 'hazard',     icon: '⛏️', title: 'Hazard Register',  desc: 'Log a hazard that needs controlling', color: '#B45309',    bg: '#FEF3C7',         screen: 'LogHazard'       },
 ];
 
 const INCIDENT_TYPE_LABEL: Record<IncidentType, string> = {
@@ -89,6 +92,22 @@ export default function ReportsScreen({ navigation }: any) {
           <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
         }
       >
+        {/* Flow 5 · the standing register the worker can follow to closure.
+            Recent Submissions below lists incidents, so hazards need their
+            own way in rather than a filter on that list. */}
+        <TouchableOpacity
+          style={styles.registerLink}
+          onPress={() => navigation.navigate('MyHazards')}
+          activeOpacity={0.8}
+        >
+          <Icon name="list" style={styles.registerIcon} color="#B45309" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.registerTitle}>My Hazards</Text>
+            <Text style={styles.registerDesc}>Track the hazards you logged through all eight stages</Text>
+          </View>
+          <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* New Report grid */}
         <Text style={styles.sectionTitle}>New Report</Text>
         <View style={styles.reportGrid}>
@@ -167,6 +186,15 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, padding: 16 },
 
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.textDark, marginBottom: 12, marginTop: 4 },
+
+  registerLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FEF3C7', borderRadius: 16, padding: 16, marginBottom: 20,
+  },
+  registerIcon: { fontSize: 22 },
+  registerTitle: { fontSize: 15, fontWeight: '700', color: '#B45309', marginBottom: 2 },
+  registerDesc: { fontSize: 12, color: Colors.textMuted },
+  registerChevron: { fontSize: 18 },
 
   reportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
   reportCard: { width: '47%', borderRadius: 16, padding: 18 },

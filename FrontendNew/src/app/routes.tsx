@@ -6,6 +6,9 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ViolationsPage } from "./pages/ViolationsPage";
 import { ViolationDetailPage } from "./pages/ViolationDetailPage";
 import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
+// Flow 5 · the hazard register, on the same eight stages as an incident
+import { HazardRegisterPage } from "./pages/HazardRegisterPage";
+import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
@@ -39,6 +42,9 @@ import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
 import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
 import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
 import { SuperAdminRolesPage } from "./pages/SuperAdminRolesPage";
+// Restores a reference the "sites-zones" route below still makes. Commit
+// 3d17a20 dropped this import but left the route, which broke the build.
+import { SitesZonesPage } from "./pages/SitesZonesPage";
 import type { ComponentType } from "react";
 
 function RouteErrorFallback() {
@@ -188,6 +194,8 @@ export const router = createBrowserRouter([
       // Own top-level path rather than `violations/tracking`, which would sit
       // alongside `violations/:id` and read as an incident with id "tracking".
       { path: "incidents/tracking", Component: IncidentTrackingPage },
+      { path: "hazards", Component: HazardRegisterPage },
+      { path: "hazards/tracking", Component: HazardTrackingPage },
       { path: "violations/:id", Component: ViolationDetailRoute },
       { path: "actions", Component: ActionsRoute },
       { path: "checklists", Component: ChecklistsRoute },
@@ -198,7 +206,7 @@ export const router = createBrowserRouter([
       { path: "audits/trends", Component: AuditTrendsPage },
       { path: "audits/templates", Component: AuditTemplatesPage },
       { path: "audits/:id", Component: AuditDetailPage },
-      { path: "sites-zones", Component: SitesZonesRoute },
+      { path: "sites-zones", Component: SitesZonesPage },
       { path: "policies", Component: PoliciesRoute },
       { path: "users", Component: UsersRoute },
       { path: "analytics", Component: AnalyticsRoute },

@@ -213,6 +213,20 @@ export function OperationsScreen({ navigation }: Props) {
             <Text style={styles.gridLabel}>Observations</Text>
             <Text style={styles.gridDesc}>2 Unresolved</Text>
           </TouchableOpacity>
+
+          {/* Flow 5 · the standing register. The supervisor owns stages 02-05,
+              so this is where a hazard gets assessed, contained and controlled. */}
+          <TouchableOpacity
+            style={styles.gridCard}
+            onPress={() => navigation.navigate('HazardRegisterManagement')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="warning-outline" size={26} color="#B45309" />
+            </View>
+            <Text style={styles.gridLabel}>Hazard Register</Text>
+            <Text style={styles.gridDesc}>Assess &amp; control</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Shift Focus Areas */}

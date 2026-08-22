@@ -21,6 +21,8 @@ import ReportNearMissScreen from '../screens/ReportNearMissScreen';
 import ReportUnsafeActScreen from '../screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../screens/ReportIncidentScreen';
 import ReportRiskScreen from '../screens/ReportRiskScreen';
+import LogHazardScreen from '../screens/LogHazardScreen';
+import MyHazardsScreen from '../screens/MyHazardsScreen';
 import SafetyChecklistScreen from '../screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
@@ -146,6 +148,10 @@ export default function AppNavigator() {
         <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportRisk" component={ReportRiskScreen} options={{ presentation: 'modal' }} />
+        {/* Flow 5 · the standing hazard register. Separate from ReportRisk
+            above, which writes a one-off observation to risk_reports. */}
+        <Stack.Screen name="LogHazard" component={LogHazardScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="MyHazards" component={MyHazardsScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="Permits" component={PermitsScreen} options={{ presentation: 'card' }} />

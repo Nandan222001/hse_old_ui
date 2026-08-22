@@ -78,6 +78,23 @@ export const ENDPOINTS = {
     LIST: '/hazards/',
   },
 
+  /**
+   * The standing hazard register (flow 5) — the `hazards` table, carried
+   * through the same eight stages as an incident.
+   *
+   * A third distinct thing from the two above, and the distinction matters:
+   * HAZARDS is the read-only catalog, RISK is a worker's one-off risk
+   * observation on `risk_reports`, and this is the register entry that gets
+   * assessed, contained, controlled, verified and closed. A worker logs to it
+   * and can then follow it through all eight stages.
+   */
+  HAZARD_REGISTER: {
+    LOG: '/hazard-register/log',
+    MY_LOGS: '/hazard-register/my-logs',
+    DETAIL: (id: string | number) => `/hazard-register/${id}`,
+    NEXT_ACTION: (id: string | number) => `/hazard-register/${id}/next-action`,
+  },
+
   // Reference data used to resolve foreign keys on report forms.
   LOOKUPS: {
     WORKING_STATIONS: '/working-stations/',

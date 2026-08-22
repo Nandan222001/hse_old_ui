@@ -33,7 +33,74 @@ const WORKFLOW_SEVERITY: Record<string, string> = {
   fatal: 'critical',
 };
 
+/** What a worker logs into the standing hazard register. */
+export interface LogHazardRequest {
+  hazard_name: string;
+  category_id?: number;
+  description?: string;
+  severity?: string;
+  probability?: string;
+  location?: string;
+  location_station_id?: number;
+  controls?: string;
+  persons_exposed?: number;
+  gps_latitude?: string;
+  gps_longitude?: string;
+}
+
+/** One register entry as the worker sees it, with its derived stage. */
+export interface MyHazard {
+  id: number;
+  reference: string | null;
+  hazard_name: string | null;
+  description: string | null;
+  severity: string | null;
+  probability: string | null;
+  register_status: string | null;
+  assessed_priority: string | null;
+  risk_score: number | null;
+  interim_control: string | null;
+  planned_controls: string | null;
+  station_name: string | null;
+  category_name: string | null;
+  logged_at: string | null;
+  response_due_at: string | null;
+  is_overdue: boolean | null;
+  stage: string | null;
+  stage_number: number | null;
+  stage_label: string | null;
+  completed_stages: string[];
+  total_stages: number | null;
+}
+
 export const hazardService = {
+  /**
+   * Log a hazard into the standing register.
+   *
+   * Distinct from `reportRisk` below, which writes a one-off observation to
+   * `risk_reports`. This creates a register entry a supervisor assesses,
+   * contains and controls, and which the worker can then follow through all
+   * eight stages — the same lifecycle an incident runs.
+   */
+  async logHazard(payload: LogHazardRequest): Promise<SubmitResult<MyHazard>> {
+    return submitOrQueue<MyHazard>(
+      ENDPOINTS.HAZARD_REGISTER.LOG,
+      payload,
+      { client: 'worker', label: 'Hazard register entry' },
+    );
+  },
+
+  /** Every hazard this worker logged, newest first, each with its stage. */
+  async myHazards(): Promise<MyHazard[]> {
+    const { data } = await apiClient.get<MyHazard[]>(ENDPOINTS.HAZARD_REGISTER.MY_LOGS);
+    return data ?? [];
+  },
+
+  async getHazard(id: number): Promise<MyHazard> {
+    const { data } = await apiClient.get<MyHazard>(ENDPOINTS.HAZARD_REGISTER.DETAIL(id));
+    return data;
+  },
+
   async reportRisk(payload: ReportRiskRequest): Promise<SubmitResult<unknown>> {
     const key = (payload.severity ?? '').trim().toLowerCase();
 

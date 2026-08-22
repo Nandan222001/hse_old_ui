@@ -47,6 +47,7 @@ from app.controllers import (
     risk_workflow as risk_workflow_controller,
     permit_workflow as permit_workflow_controller,
     hazard_register as hazard_register_controller,
+    hazard_trail as hazard_trail_controller,
     audit as audit_controller,
     audit_trail as audit_trail_controller,
     incident_trail as incident_trail_controller,
@@ -167,6 +168,7 @@ def create_app() -> FastAPI:
     # Permit to Work (flow 6) and Hazard register (flow 5) role workflows.
     app.include_router(permit_workflow_controller.router, prefix=prefix)
     app.include_router(hazard_register_controller.router, prefix=prefix)
+    app.include_router(hazard_trail_controller.router, prefix=prefix)
 
     # ── WF-06 … WF-09 · competence gates the permit, so it registers first ────
     app.include_router(competence_controller.router, prefix=prefix)

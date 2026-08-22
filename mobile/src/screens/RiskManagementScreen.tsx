@@ -12,8 +12,12 @@ export function RiskManagementScreen({ navigation }: any) {
     <ReportWorkflowList
       navigation={navigation}
       reportType="risk"
-      title="Hazard Management"
-      emptyTitle="No hazard reports to review"
+      // Titled for what it actually reads. "Hazard Management" collided with
+      // the hazard register (flow 5), which is a different table and a
+      // different lifecycle -- two screens under one name is how a supervisor
+      // ends up looking for a register entry in the observation queue.
+      title="Risk Observations"
+      emptyTitle="No risk observations to review"
       emptyIcon="alert-circle-outline"
     />
   );

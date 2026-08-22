@@ -5,7 +5,7 @@ import {
   Lightbulb, ClipboardCheck, BarChart3, ChevronDown,
   FolderClosed, AlertTriangle, ListChecks, GitBranch,
   LogOut, Settings, X, Database, HardHat, MapPin,
-  ShieldCheck, CalendarClock, TrendingUp, type LucideIcon
+  ShieldCheck, CalendarClock, TrendingUp, Siren, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -51,6 +51,17 @@ const navGroups: NavGroup[] = [
         children: [
           { name: "Overview", icon: ListChecks, path: "/violations" },
           { name: "Lifecycle Tracking", icon: GitBranch, path: "/incidents/tracking" },
+        ],
+      },
+      {
+        // Flow 5. Sits next to Incidents rather than under Risk because it runs
+        // the same eight-stage lifecycle and the two are read together.
+        name: "Hazards",
+        icon: Siren,
+        path: "/hazards",
+        children: [
+          { name: "Register", icon: ListChecks, path: "/hazards" },
+          { name: "Lifecycle Tracking", icon: GitBranch, path: "/hazards/tracking" },
         ],
       },
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },

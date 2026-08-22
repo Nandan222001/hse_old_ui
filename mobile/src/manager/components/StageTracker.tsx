@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Check } from 'lucide-react-native';
-import type { IncidentNextAction, TrackStage } from '../../services/incidentWorkflowService';
+import type { TrackStage } from '../../services/incidentWorkflowService';
 
 /**
  * The eight-stage progress tracker for one incident, plus "you are here".
@@ -15,8 +15,34 @@ import type { IncidentNextAction, TrackStage } from '../../services/incidentWork
  * component and the dashboard queue always agree on which stage is current.
  */
 
+/**
+ * Structural rather than `IncidentNextAction`, so the hazard register renders
+ * the same tracker. The two endpoints return an identical shape apart from the
+ * status field's name — incidents call it `workflow_status`, the register
+ * `register_status` — and both are accepted below. A second copy of this
+ * component for hazards would drift from this one the first time a stage was
+ * restyled.
+ */
+export interface StageTrackerInfo {
+  stage: string | null;
+  stage_number: number | null;
+  stage_label?: string | null;
+  is_closed: boolean;
+  is_mine: boolean;
+  track: TrackStage[];
+  next_action: {
+    action: string;
+    detail: string;
+    owner_role: string;
+    cta: string;
+    unblocks: string | null;
+  } | null;
+  workflow_status?: string | null;
+  register_status?: string | null;
+}
+
 interface Props {
-  info: IncidentNextAction;
+  info: StageTrackerInfo;
 }
 
 function Dot({ stage }: { stage: TrackStage }) {
@@ -91,8 +117,8 @@ export function StageTracker({ info }: Props) {
         </View>
       ) : (
         <Text style={styles.unknown}>
-          This incident's status ({info.workflow_status}) is not part of the eight-stage
-          lifecycle, so no next step can be derived.
+          This record's status ({info.workflow_status ?? info.register_status}) is not part
+          of the eight-stage lifecycle, so no next step can be derived.
         </Text>
       )}
     </View>

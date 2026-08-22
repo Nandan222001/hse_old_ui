@@ -60,11 +60,12 @@ def _is_recurring(db: Session, table: str, record, type_column: str) -> bool:
 
     # Each table names its own "when it happened" column: incidents use
     # incident_date_time, unsafe acts observed_date_time, near misses
-    # event_date_time.
+    # event_date_time, the hazard register logged_at.
     reference = (
         getattr(record, "incident_date_time", None)
         or getattr(record, "observed_date_time", None)
         or getattr(record, "event_date_time", None)
+        or getattr(record, "logged_at", None)
         or getattr(record, "reported_at", None)
         or datetime.utcnow()
     )
@@ -250,11 +251,91 @@ def _finish(priority, is_hipo, recurring, record, trace, extra=None) -> Assessme
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Hazard register
+#
+# The standing register (`hazards`), not the worker-reported hazard on
+# `risk_reports` — that one is family `hazard` above and runs assess_risk.
+#
+# A register hazard is scored on the same 5x5 matrix, but its two axes are
+# stored under different names and a different vocabulary: `probability` rather
+# than likelihood, and a Low/Medium/High/Critical severity rather than the
+# negligible..catastrophic scale `score_risk` knows. Translating here rather
+# than widening SEVERITY keeps the shared table honest about what the words in
+# it mean — "Low" is not a synonym for "negligible", it is the register's own
+# four-point scale and lands on 2.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_HAZARD_SEVERITY = {
+    "low": 2, "medium": 3, "high": 4, "critical": 5,
+    # The register form has always offered these four, but seed data and the
+    # website catalog also carry the 5x5 words, so both resolve.
+    "negligible": 1, "minor": 2, "moderate": 3, "major": 4, "catastrophic": 5,
+}
+
+
+def assess_hazard_register(db: Session, record) -> Assessment:
+    """Stage 02 for a hazard on the standing register."""
+    severity = _HAZARD_SEVERITY.get(str(getattr(record, "severity", "") or "").strip().lower())
+    result = score_risk(
+        likelihood=getattr(record, "probability", None),
+        severity=severity,
+        # A hazard is a standing condition, not a task, so none of the four
+        # WF-01 uplifts (RAMS, new worker, night shift, temporary control)
+        # applies to it. The raw L x S is the whole score.
+        raw_score=getattr(record, "risk_score", None),
+    )
+    priority = _BAND_PRIORITY.get(result.band or "", "P5")
+    recurring = _is_recurring(db, "hazards", record, "category_id")
+
+    trace = [result.explanation or "Severity or probability not stated — unscored"]
+    if recurring:
+        trace.append("Same hazard category at this station within 12 months -> systemic review")
+
+    exposed = getattr(record, "persons_exposed", None) or 0
+    if exposed >= 5 and priority not in ("P1", "P2"):
+        # Numbers exposed is a multiplier the L x S matrix does not carry. A
+        # Medium hazard reaching a whole shift is not a Medium problem.
+        trace.append(f"{exposed} people exposed -> priority raised one band")
+        priority = {"P3": "P2", "P4": "P3", "P5": "P4"}.get(priority, priority)
+
+    return _finish(
+        priority, result.band == "Critical", recurring, record, trace,
+        extra={
+            "raw_score": result.raw_score, "band": result.band,
+            "colour": result.colour, "review_frequency": result.review_frequency,
+            "blocks_work": result.blocks_work,
+        },
+    )
+
+
+def apply_to_hazard_register(record, assessment: Optional[Assessment]) -> None:
+    """Write an assessment onto a `hazards` row. Caller commits.
+
+    Separate from `apply_to` because the register carries only the four shared
+    assessment columns from migration 066 — it has no is_hipo, min_investigator
+    or assessment_trace. Calling the generic writer would raise on the first
+    missing attribute.
+    """
+    if assessment is None:
+        return
+    record.assessed_priority = assessment.priority
+    record.assessed_label = assessment.label
+    record.response_due_at = assessment.response_due_at
+    record.risk_score = assessment.extra.get("raw_score")
+    # datetime.now(), not utcnow(): every other timestamp on `hazards` is
+    # written by hazard_register in local time. Mixing the two put the
+    # assessment five hours before the log it followed, which sorted it to the
+    # top of the trail and made the hazard look assessed before it existed.
+    record.assessed_at = datetime.now()
+
+
 ASSESSORS = {
     "near_miss": assess_near_miss,
     "unsafe_act": assess_unsafe_act,
     "risk": assess_risk,
     "hazard": assess_risk,
+    "hazard_register": assess_hazard_register,
 }
 
 

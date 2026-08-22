@@ -142,11 +142,38 @@ export const PERMIT_WORKFLOW = {
 /**
  * Hazard register workflow (flow 5): log → review → auditor verification.
  */
+/**
+ * The hazard register runs the same eight stages as every other safety event.
+ * One verb per stage, mirroring /incident-workflow — `REVIEW` is the older
+ * generic status setter and is kept only for callers that already use it, since
+ * it records no stage ownership.
+ */
 export const HAZARD_REGISTER = {
+  // 01 RECORD
   LOG: '/hazard-register/log',
   LIST: '/hazard-register',
   MY_LOGS: '/hazard-register/my-logs',
+  DETAIL: (id: string | number) => `/hazard-register/${id}`,
+
+  // 02..08 — one verb per stage
+  ASSESS: (id: string | number) => `/hazard-register/${id}/assess`,
+  INTERIM_CONTROL: (id: string | number) => `/hazard-register/${id}/interim-control`,
+  START_REVIEW: (id: string | number) => `/hazard-register/${id}/start-review`,
+  FINDINGS: (id: string | number) => `/hazard-register/${id}/findings`,
+  PLAN_CONTROLS: (id: string | number) => `/hazard-register/${id}/plan-controls`,
+  SUBMIT_VERIFICATION: (id: string | number) => `/hazard-register/${id}/submit-verification`,
+  VERIFY_CONTROLS: (id: string | number) => `/hazard-register/${id}/verify-controls`,
+  LESSON: (id: string | number) => `/hazard-register/${id}/lesson`,
+  CLOSE: (id: string | number) => `/hazard-register/${id}/close`,
+
+  // "What is waiting on me", and the stage tracker for one hazard
+  NEXT_ACTIONS: '/hazard-register/next-actions',
+  NEXT_ACTION: (id: string | number) => `/hazard-register/${id}/next-action`,
+
+  // Pre-stage escape hatch — sets status directly, records no stage ownership
   REVIEW: (id: string | number) => `/hazard-register/${id}/review`,
+
+  // Auditor — post-closure assurance, gates nothing
   AUDIT_LIST: '/hazard-register/audit-list',
   VERIFY: (id: string | number) => `/hazard-register/${id}/verify`,
   STATS: '/hazard-register/stats/summary',
