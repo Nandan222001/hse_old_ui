@@ -6,6 +6,7 @@ export * from './violations.service';
 export * from './compliance.service';
 export * from './checklists.service';
 export * from './analytics.service';
+export { getViolationDetail } from './analytics.service';
 export * from './onboarding.service';
 export * from './auth.service';
 export * from './ai.service';

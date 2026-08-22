@@ -263,7 +263,7 @@ export const KPI_REGISTRY: KPI[] = [
   {
     id: "violation_acknowledgement_rate",
     label: "Violation Acknowledgement Rate",
-    category: "Violations",
+    category: "Incidents",
     pages: ["Violations", "Analytics"],
     dataSource: "/api/violations",
     computation: "count(Status != 'Open') / total violations × 100",

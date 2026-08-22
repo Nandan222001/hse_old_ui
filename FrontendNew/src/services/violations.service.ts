@@ -72,6 +72,14 @@ export const updateCapaAction = (
   payload: { due_date?: string; responsible_person_id?: number },
 ) => axiosInstance.put(`/capa-actions/${actionId}`, payload);
 
+export const completeCapaAction = (
+  actionId: number,
+  effectivenessRating?: number,
+) =>
+  axiosInstance.post(`/incident-workflow/capa/${actionId}/complete`, {
+    effectiveness_rating: effectivenessRating ?? 5,
+  });
+
 export const getActions = (_violationId?: string, _status?: string) =>
   axiosInstance.get<BackendCapa[]>('/capa-actions/').then((r) =>
     r.data.map((a) => ({

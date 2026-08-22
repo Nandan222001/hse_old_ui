@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getViolationDetail, type ViolationDetail } from "../../services/analytics.service";
-import { updateIncidentStatus, updateCapaAction } from "../../services/violations.service";
+import { updateIncidentStatus, updateCapaAction, completeCapaAction } from "../../services/violations.service";
 import axiosInstance from "../../api/axiosInstance";
 
 const STATUS_STEPS = ["Detected", "Assigned", "Acknowledged", "In Progress", "Closed"];
@@ -41,6 +41,7 @@ export function ViolationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [employees, setEmployees] = useState<{ id: number; full_name: string }[]>([]);
   const [assignedEmployeeId, setAssignedEmployeeId] = useState<string>("");
 
   useEffect(() => {
@@ -53,17 +54,19 @@ export function ViolationDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    axiosInstance.get<{ id: number; full_name: string }[]>('/employees/')
+      .then((r) => setEmployees(r.data))
+      .catch((e) => console.error("Error loading employees", e));
+  }, []);
+
+  useEffect(() => {
     if (!detail?.assignee) {
       setAssignedEmployeeId("");
       return;
     }
-    axiosInstance.get<{ id: number; full_name: string }[]>('/employees/')
-      .then((r) => {
-        const match = r.data.find((emp) => emp.full_name === detail.assignee?.name);
-        setAssignedEmployeeId(match ? String(match.id) : "");
-      })
-      .catch(() => setAssignedEmployeeId(""));
-  }, [detail?.assignee]);
+    const match = employees.find((emp) => emp.full_name === detail.assignee?.name);
+    setAssignedEmployeeId(match ? String(match.id) : "");
+  }, [detail?.assignee, employees]);
 
   const incidentId = id ? parseInt(id.replace(/^INC-0*/i, ""), 10) : NaN;
 
@@ -110,6 +113,22 @@ export function ViolationDetailPage() {
     try {
       await updateCapaAction(actionId, { responsible_person_id: Number(assignedEmployeeId) });
       await refreshDetail();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAcceptCapa = async (rawId: string) => {
+    const match = rawId.match(/(\d+)/);
+    const actionId = match ? Number(match[1]) : NaN;
+    if (Number.isNaN(actionId)) return;
+    setActionLoading(true);
+    try {
+      await completeCapaAction(actionId);
+      await refreshDetail();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to accept CAPA action");
     } finally {
       setActionLoading(false);
     }
@@ -265,7 +284,7 @@ export function ViolationDetailPage() {
               <table className="w-full">
                 <thead>
                   <tr style={{ background: '#F4F7F4' }}>
-                    {["ID", "Action", "Description", "Owner", "Due Date", "Status"].map(h => (
+                    {["ID", "Action", "Description", "Owner", "Due Date", "Status", "Actions"].map(h => (
                       <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: '#9CA3AF', fontWeight: 600 }}>{h}</th>
                     ))}
                   </tr>
@@ -279,6 +298,17 @@ export function ViolationDetailPage() {
                       <td className="px-3 py-2 text-[13px]" style={{ color: '#4A5568' }}>{c.responsible_person}</td>
                       <td className="px-3 py-2 text-[13px]" style={{ color: '#4A5568' }}>{c.due_date || "—"}</td>
                       <td className="px-3 py-2"><StatusBadge status={c.status} size="sm" /></td>
+                      <td className="px-3 py-2">
+                        {c.status !== "Completed" && c.status !== "Closed" && c.status !== "Verified" && c.status !== "Done" && (
+                          <button
+                            onClick={() => handleAcceptCapa(c.id)}
+                            disabled={actionLoading}
+                            className="px-2 py-1 text-[12px] bg-green-700 text-white rounded hover:bg-green-800 disabled:opacity-50 font-medium"
+                          >
+                            Accept
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -343,8 +373,24 @@ export function ViolationDetailPage() {
             ) : (
               <p className="text-[13px] mb-4" style={{ color: '#9CA3AF' }}>No assignee yet</p>
             )}
+            <div className="mb-4">
+              <label className="block mb-1.5 text-[13px]" style={{ color: '#4A5568', fontWeight: 600 }}>Assign to Employee</label>
+              <select
+                value={assignedEmployeeId}
+                onChange={(e) => setAssignedEmployeeId(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border text-[14px] bg-white focus:outline-none"
+                style={{ borderColor: '#E2E8E2', color: '#0A0A0A' }}
+              >
+                <option value="">Select Employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={String(emp.id)}>
+                    {emp.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button onClick={reassignAction} disabled={actionLoading || !assignedEmployeeId} className="w-full py-2 rounded-lg border text-[14px] transition-colors hover:bg-[#F4F7F4]" style={{ borderColor: '#E2E8E2', color: '#2E7D32', fontWeight: 500 }}>
-              Reassign
+              {detail.assignee ? "Reassign" : "Assign"}
             </button>
             {detail.due_date && (
               <div className="mt-4">
