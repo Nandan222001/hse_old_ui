@@ -1,7 +1,9 @@
+import math
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import case, func, or_
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import case, func, or_, String
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -34,6 +36,20 @@ def _org_filter(query, model, org_id):
     return query
 
 
+_FAKE_INCIDENT_REF_RE = re.compile(r"\s*\b(for|addressing)\s+INC-?\d+\b\.?", re.IGNORECASE)
+
+
+def _clean_capa_description(capa) -> str:
+    """Seed/legacy CAPA descriptions embed a made-up "INC00018"-style number
+    unrelated to the real incident_id — see DashboardPage.tsx / vendor.py's
+    _capa_label for the same fix elsewhere. Strips it so it can't be mistaken
+    for a real incident reference; prefixes the real one when known."""
+    desc = (capa.description or capa.action_type or "CAPA action")
+    desc = _FAKE_INCIDENT_REF_RE.sub("", desc).strip() or (capa.action_type or "CAPA action")
+    ref = f"INC-{capa.incident_id:05d} " if getattr(capa, "incident_id", None) else ""
+    return f"{ref}{desc}"
+
+
 @router.get("/violations-summary")
 def get_violations_summary(months: int = 10, db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     today = date.today()
@@ -53,8 +69,8 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
     by_type = [{"label": r.incident_type, "value": r.cnt} for r in by_type_rows]
 
     by_location_rows = (
-        db.query(WorkingStation.station_name, func.count(Incident.id).label("cnt"))
-        .join(Incident, Incident.location_station_id == WorkingStation.id)
+        _org_filter(db.query(WorkingStation.station_name, func.count(Incident.id).label("cnt")), WorkingStation, org_id)
+        .join(Incident, org_scoped_join(Incident.location_station_id == WorkingStation.id, Incident.organisation_id, org_id))
         .filter(Incident.organisation_id == org_id if org_id is not None else True)
         .group_by(WorkingStation.station_name)
         .order_by(func.count(Incident.id).desc())
@@ -177,7 +193,7 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
         .all()
     )
     open_capa_items = [
-        f"{c.description or c.action_type or 'CAPA'} (#{c.id})"
+        f"{_clean_capa_description(c)} (#{c.id})"
         for c in open_capa
     ]
 
@@ -301,7 +317,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         .join(PermitToWork, PermitToWork.permit_type_id == PermitType.id)
         .filter(
             PermitToWork.status == "Active",
-            *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
+            *([PermitToWork.organisation_id == org_id, PermitType.organisation_id == org_id] if org_id is not None else []),
         )
         .group_by(PermitType.permit_type_name, PermitType.risk_level)
         .order_by(func.count(PermitToWork.id).desc())
@@ -325,7 +341,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
     # Uses permits with deviation_reported = "Yes" — single source of truth
     viol_rows = (
         db.query(PermitToWork, WorkingStation)
-        .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
+        .outerjoin(WorkingStation, org_scoped_join(PermitToWork.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .filter(
             PermitToWork.deviation_reported == "Yes",
             *([PermitToWork.organisation_id == org_id] if org_id is not None else []),
@@ -344,8 +360,8 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
 
     active_rows = (
         db.query(PermitToWork, PermitType, WorkingStation, Employee)
-        .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
-        .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
+        .outerjoin(PermitType, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitType.organisation_id, org_id))
+        .outerjoin(WorkingStation, org_scoped_join(PermitToWork.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Employee, org_scoped_join(PermitToWork.issued_by == Employee.id, Employee.organisation_id, org_id))
         .filter(
             PermitToWork.status == "Active",
@@ -366,7 +382,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
             "id": f"PTW-{ptw.id:04d}",
             "type": pt.permit_type_name if pt else "Unknown",
             "issued_by": emp.full_name if emp else "Unassigned",
-            "location": ws.station_name if ws else f"Station {ptw.location_station_id}",
+            "location": ws.station_name if ws else (f"Station {ptw.location_station_id}" if ptw.location_station_id else "Unknown"),
             "status": ptw.status,
             "expiry": fmt_expiry(ptw.validity_end),
         }
@@ -441,7 +457,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
 
     deviation_rows = (
         db.query(PermitToWork, PermitType)
-        .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
+        .outerjoin(PermitType, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitType.organisation_id, org_id))
         .filter(
             PermitToWork.status == "Active",
             PermitToWork.deviation_reported == "Yes",
@@ -459,7 +475,7 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
     type_status_rows = (
         db.query(PermitType.permit_type_name, PermitToWork.status, func.count(PermitToWork.id))
         .join(PermitToWork, PermitToWork.permit_type_id == PermitType.id)
-        .filter(*([PermitToWork.organisation_id == org_id] if org_id is not None else []))
+        .filter(*([PermitToWork.organisation_id == org_id, PermitType.organisation_id == org_id] if org_id is not None else []))
         .group_by(PermitType.permit_type_name, PermitToWork.status)
         .all()
     )
@@ -489,6 +505,115 @@ def get_permits_summary(db: Session = Depends(get_db), current_user: CurrentUser
         "work_by_type": work_by_type,
         "contractor_compliant_pct": contractor_compliant_pct,
         "contractor_non_compliant_pct": contractor_non_compliant_pct,
+    }
+
+
+@router.get("/permits/all")
+def get_all_permits(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(25, ge=1, le=200),
+    status: Optional[str] = Query(None),
+    permit_type: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Matches permit ref, type, issuer, or location"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Paginated permit list backing the Equipment Certification page's
+    "Active Permit Watchlist" table — every permit for this org, not a
+    client-side-fabricated row count. See EquipmentCertificationPage.tsx."""
+    org_id = current_user.org_id
+
+    base = (
+        db.query(PermitToWork, PermitType, WorkingStation, Employee)
+        .outerjoin(PermitType, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitType.organisation_id, org_id))
+        .outerjoin(WorkingStation, org_scoped_join(PermitToWork.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
+        .outerjoin(Employee, org_scoped_join(PermitToWork.issued_by == Employee.id, Employee.organisation_id, org_id))
+        .filter(*([PermitToWork.organisation_id == org_id] if org_id is not None else []))
+    )
+    if status and status != "All Status":
+        base = base.filter(PermitToWork.status == status)
+    if permit_type and permit_type != "All Types":
+        base = base.filter(PermitType.permit_type_name == permit_type)
+    if location and location != "All Locations":
+        base = base.filter(WorkingStation.station_name == location)
+    if q:
+        like = f"%{q}%"
+        conditions = [
+            PermitToWork.work_description.ilike(like),
+            PermitType.permit_type_name.ilike(like),
+            Employee.full_name.ilike(like),
+            WorkingStation.station_name.ilike(like),
+        ]
+        # The displayed permit ref is "PTW-{id}", not a stored column — match
+        # digits typed/pasted from that ref (with or without the prefix)
+        # against the real id so searching a shown ref actually finds it.
+        digits = re.sub(r"[^0-9]", "", q)
+        if digits:
+            conditions.append(func.cast(PermitToWork.id, String).like(f"%{digits}%"))
+        base = base.filter(or_(*conditions))
+
+    total = base.count()
+    rows = (
+        base.order_by(case((PermitToWork.validity_end.is_(None), 1), else_=0), PermitToWork.validity_end.asc())
+        .offset((page - 1) * pageSize)
+        .limit(pageSize)
+        .all()
+    )
+
+    def fmt_expiry(end_dt) -> str:
+        if not end_dt:
+            return "N/A"
+        return end_dt.strftime("%b %d, %H:%M") if hasattr(end_dt, "hour") else end_dt.strftime("%b %d, %Y")
+
+    data = [
+        {
+            "id": f"PTW-{ptw.id:04d}",
+            "type": pt.permit_type_name if pt else "Unknown",
+            "issued_by": emp.full_name if emp else "Unassigned",
+            "location": ws.station_name if ws else (f"Station {ptw.location_station_id}" if ptw.location_station_id else "Unknown"),
+            "status": ptw.status,
+            "expiry": fmt_expiry(ptw.validity_end),
+        }
+        for ptw, pt, ws, emp in rows
+    ]
+    return {
+        "data": data,
+        "total": total,
+        "page": page,
+        "pageSize": pageSize,
+        "totalPages": math.ceil(total / pageSize) if total else 0,
+    }
+
+
+@router.get("/permits/filter-options")
+def get_permit_filter_options(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Distinct permit types and locations actually in use for this org, so
+    the watchlist's filter dropdowns only ever offer real, selectable values."""
+    org_id = current_user.org_id
+
+    type_rows = (
+        db.query(PermitType.permit_type_name)
+        .join(PermitToWork, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitToWork.organisation_id, org_id))
+        .filter(*([PermitType.organisation_id == org_id] if org_id is not None else []))
+        .distinct()
+        .order_by(PermitType.permit_type_name)
+        .all()
+    )
+    location_rows = (
+        db.query(WorkingStation.station_name)
+        .join(PermitToWork, org_scoped_join(PermitToWork.location_station_id == WorkingStation.id, PermitToWork.organisation_id, org_id))
+        .filter(*([WorkingStation.organisation_id == org_id] if org_id is not None else []))
+        .distinct()
+        .order_by(WorkingStation.station_name)
+        .all()
+    )
+    return {
+        "types": [r[0] for r in type_rows if r[0]],
+        "locations": [r[0] for r in location_rows if r[0]],
     }
 
 
@@ -661,9 +786,9 @@ def get_risk_summary(db: Session = Depends(get_db), current_user: CurrentUser = 
     )
 
     zone_rows = (
-        db.query(Site.site_name, func.count(Incident.id).label("cnt"))
-        .join(WorkingStation, WorkingStation.site_id == Site.id)
-        .join(Incident, Incident.location_station_id == WorkingStation.id)
+        _org_filter(db.query(Site.site_name, func.count(Incident.id).label("cnt")), Site, org_id)
+        .join(WorkingStation, org_scoped_join(WorkingStation.site_id == Site.id, WorkingStation.organisation_id, org_id))
+        .join(Incident, org_scoped_join(Incident.location_station_id == WorkingStation.id, Incident.organisation_id, org_id))
         .filter(*([Incident.organisation_id == org_id] if org_id is not None else []))
         .group_by(Site.site_name)
         .order_by(func.count(Incident.id).desc())
@@ -807,7 +932,7 @@ def get_root_cause_analysis(
     rows = (
         _org_filter(
             db.query(Incident, WorkingStation, Site, Employee)
-            .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
+            .outerjoin(WorkingStation, org_scoped_join(Incident.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
             .outerjoin(Site, WorkingStation.site_id == Site.id)
             .outerjoin(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id)),
             Incident, org_id,
@@ -894,7 +1019,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     # Not a true field-audit result — indicative only, per client's own methodology note.
     lockout_permits_q = (
         _org_filter(db.query(PermitToWork), PermitToWork, org_id)
-        .join(PermitType, PermitToWork.permit_type_id == PermitType.id)
+        .join(PermitType, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitType.organisation_id, org_id))
         .filter(PermitType.permit_type_name == "Equipment Isolation/Lockout")
     )
     total_lockout_permits = lockout_permits_q.count()
@@ -921,9 +1046,13 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     distinct_policy_categories = _org_filter(
         db.query(func.count(func.distinct(Policy.category))), Policy, org_id
     ).scalar() or 0
-    distinct_hazard_categories = (
-        db.query(func.count(func.distinct(HazardCategory.category_name))).scalar() or 0
-    )
+    # Each org defines its own hazard categories — an unscoped count here mixes
+    # every tenant's category names into one denominator (18 distinct names
+    # across all orgs vs. ~10 for any one org), understating every org's real
+    # coverage against its own hazard register.
+    distinct_hazard_categories = _org_filter(
+        db.query(func.count(func.distinct(HazardCategory.category_name))), HazardCategory, org_id
+    ).scalar() or 0
     legal_register_pct = (
         min(100, round(distinct_policy_categories / distinct_hazard_categories * 100))
         if distinct_hazard_categories else 0
@@ -1436,7 +1565,7 @@ def get_violation_detail(
 
     row = (
         db.query(Incident, WorkingStation, Site, Employee)
-        .outerjoin(WorkingStation, Incident.location_station_id == WorkingStation.id)
+        .outerjoin(WorkingStation, org_scoped_join(Incident.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Site, WorkingStation.site_id == Site.id)
         .outerjoin(Employee, org_scoped_join(Incident.reported_by == Employee.id, Employee.organisation_id, org_id))
         .filter(Incident.id == incident_id)

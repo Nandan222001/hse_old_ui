@@ -50,17 +50,6 @@ function presetDates(preset: Preset): { start?: string; end?: string } {
   }
 }
 
-async function repairOrgData() {
-  try {
-    const jwt = localStorage.getItem("hse_jwt_token");
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (jwt) headers["Authorization"] = `Bearer ${jwt}`;
-    void headers;
-  } catch {
-    // silent — repair is best-effort
-  }
-}
-
 function formatDueDate(dateStr: string | null): string {
   if (!dateStr) return 'No Date';
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -78,37 +67,6 @@ function formatFilterDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function GaugeCard({ value, label, threshold }: Readonly<{ value: number; label: string; threshold?: string }>) {
-  const angle = Math.round((Math.max(0, Math.min(value, 100)) / 100) * 240);
-  const blueEnd = Math.min(angle, 140);
-  const cyanEnd = Math.min(angle, 205);
-  const yellowEnd = Math.min(angle, 240);
-  const ringStyle = {
-    background: `conic-gradient(from 150deg, #4F62B8 0deg ${blueEnd}deg, #3AAFC9 ${blueEnd}deg ${cyanEnd}deg, #F1B435 ${cyanEnd}deg ${yellowEnd}deg, #E5E7EB ${yellowEnd}deg 360deg)`,
-  };
-
-  return (
-    <div className="flex flex-col items-center">
-      <div className="relative h-[138px] w-[138px]">
-        <div className="absolute inset-0 rounded-full" style={ringStyle} />
-        <div className="absolute inset-[12px] rounded-full bg-white" />
-        <div className="absolute inset-[23px] rounded-full border-[10px] border-white" />
-        <div
-          className="absolute left-1/2 top-1/2 h-[2px] w-[48px] origin-left -translate-y-1/2"
-          style={{ transform: `translateY(-50%) rotate(${angle}deg)`, background: '#111827' }}
-        />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[clamp(1.8rem,3.8vw,2.2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{value}%</span>
-        </div>
-      </div>
-      <div className="mt-2 text-[15px]" style={{ color: '#111827', fontWeight: 700 }}>{label}</div>
-      {threshold && (
-        <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Target &nbsp;•&nbsp; {threshold}</div>
-      )}
-    </div>
-  );
 }
 
 export function DashboardPage() {
@@ -240,9 +198,6 @@ export function DashboardPage() {
       trendDown: false,
     },
   ] : [];
-
-  // Keep demoKpis for backward compat (unused after layout change)
-  const demoKpis = [...leadingKpis, ...limitingKpis];
 
   const content = (
       <div className="w-full space-y-4">

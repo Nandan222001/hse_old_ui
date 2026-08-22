@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
   House, BookOpenText, Users, CircleAlert, Briefcase,
-  Lightbulb, ClipboardCheck, BarChart3, ChevronDown,
-  FolderClosed, AlertTriangle, ListChecks, GitBranch,
+  Lightbulb, ClipboardCheck, ChevronDown,
+  FolderClosed, AlertTriangle,
   LogOut, Settings, X, Database, HardHat, MapPin,
-  ShieldCheck, CalendarClock, TrendingUp, Siren, type LucideIcon
+  ShieldCheck, Siren, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -32,41 +32,32 @@ const navGroups: NavGroup[] = [
       { name: "Assets", icon: FolderClosed, path: "/equipment-certification" },
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },
       {
+        // Sub-sections (Register/Programme/Trends/Templates) show as tabs at
+        // the top of the audits pages instead of a sidebar submenu.
         name: "Audits",
         icon: ShieldCheck,
         path: "/audits",
-        children: [
-          { name: "Register", icon: ListChecks, path: "/audits" },
-          { name: "Programme", icon: CalendarClock, path: "/audits/programme" },
-          { name: "Trends", icon: TrendingUp, path: "/audits/trends" },
-          { name: "Templates", icon: BookOpenText, path: "/audits/templates" },
-        ],
       },
       { name: "Risk", icon: CircleAlert, path: "/root-cause-analysis" },
       { name: "Work", icon: Briefcase, path: "/actions" },
       {
+        // Sub-sections (Overview/Lifecycle Tracking) show as tabs at the top
+        // of the incidents pages instead of a sidebar submenu.
         name: "Incidents",
         icon: AlertTriangle,
         path: "/violations",
-        children: [
-          { name: "Overview", icon: ListChecks, path: "/violations" },
-          { name: "Lifecycle Tracking", icon: GitBranch, path: "/incidents/tracking" },
-        ],
       },
       {
         // Flow 5. Sits next to Incidents rather than under Risk because it runs
         // the same eight-stage lifecycle and the two are read together.
+        // Sub-sections show as tabs at the top of the hazards pages instead
+        // of a sidebar submenu.
         name: "Hazards",
         icon: Siren,
         path: "/hazards",
-        children: [
-          { name: "Register", icon: ListChecks, path: "/hazards" },
-          { name: "Lifecycle Tracking", icon: GitBranch, path: "/hazards/tracking" },
-        ],
       },
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Checklists", icon: BookOpenText, path: "/checklists" },
-      { name: "Reports", icon: BarChart3, path: "/analytics" },
       { name: "Data", icon: Database, path: "/data-management" },
       { name: "Settings", icon: Settings, path: "/settings" },
     ],

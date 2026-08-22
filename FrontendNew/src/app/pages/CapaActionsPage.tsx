@@ -20,8 +20,20 @@ function getPageNumbers(current: number, total: number): (number | "…")[] {
   return result;
 }
 
-function priorityColor(band: string | null) {
-  switch ((band || "").toLowerCase()) {
+// priority_band (the WF-04 matrix column) is never populated in this seed
+// data — every row is NULL, which is why the column showed "—" everywhere.
+// Same fallback the dashboard's Ranked Action Table already uses: derive it
+// from the real status field instead (Overdue/In Progress are real values;
+// due_date-vs-today is not reliable here — see dashboard.py's own comments).
+function derivedPriority(band: string | null, status: string | null): string {
+  if (band) return band;
+  if (status === "Overdue") return "High";
+  if (status === "In Progress") return "Medium";
+  return "Low";
+}
+
+function priorityColor(priority: string) {
+  switch (priority.toLowerCase()) {
     case "critical":
     case "high":
       return { background: "#FFF1F2", color: "#BE123C" };
@@ -123,7 +135,8 @@ export function CapaActionsPage() {
                       const label = (row.description || row.capa_type || "Corrective Action")
                         .replace(/\s*\b(for|addressing)\s+INC-?\d+\b\.?/gi, "")
                         .trim() || row.capa_type || "Corrective Action";
-                      const pColor = priorityColor(row.priority_band);
+                      const priority = derivedPriority(row.priority_band, row.status);
+                      const pColor = priorityColor(priority);
                       return (
                         <tr
                           key={row.id}
@@ -148,7 +161,7 @@ export function CapaActionsPage() {
                           </td>
                           <td className="px-3 py-2 text-[13px]">
                             <span className="inline-flex rounded-full px-2 py-1 text-[11px] font-bold" style={pColor}>
-                              {row.priority_band || "—"}
+                              {priority}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-[13px]" style={{ color: row.is_overdue ? "#C2410C" : "#334155", fontWeight: row.is_overdue ? 700 : 400 }}>

@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, FileText, Gauge, RefreshCw, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getPermitsSummary, type PermitsSummary } from "../../services/analytics.service";
+import {
+  getPermitsSummary,
+  getAllPermits,
+  getPermitFilterOptions,
+  type PermitsSummary,
+  type ActiveWorkRow,
+} from "../../services/analytics.service";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -45,18 +51,7 @@ function ratio(numerator: number, denominator: number) {
 
 const PAGE_SIZE = 25;
 
-type PermitStatus = "Active" | "Expired" | "Expiring Soon" | "Suspended" | "Closed";
-
-type PermitRow = {
-  id: string;
-  type: string;
-  issued_by: string;
-  location: string;
-  status: PermitStatus;
-  expiry: string;
-};
-
-function statusTone(status: PermitStatus) {
+function statusTone(status: string) {
   if (status === "Active") return { bg: "#DCFCE7", color: "#166534", border: "#BBF7D0" };
   if (status === "Expiring Soon") return { bg: "#FEF3C7", color: "#B45309", border: "#FCD34D" };
   if (status === "Suspended") return { bg: "#FEF2F2", color: "#C2410C", border: "#FECACA" };
@@ -64,59 +59,24 @@ function statusTone(status: PermitStatus) {
   return { bg: "#F3F4F6", color: "#4B5563", border: "#E5E7EB" };
 }
 
-function buildPermitRows(source: PermitsSummary | null): PermitRow[] {
-  const base = source?.active_work_rows ?? [];
-  const typePool = [
-    "Equipment Isolation/Lockout",
-    "Testing & Commissioning",
-    "Hot Work Permit",
-    "Cold Work",
-    "Work at Height",
-    "Excavation/Digging",
-    "Confined Space Entry",
-    "Electrical Isolation",
-  ];
-  const locationPool = [
-    "Main Plant",
-    "Tank Farm",
-    "Utilities Block",
-    "Workshop",
-    "Warehouse",
-    "Loading Bay",
-    "Maintenance Yard",
-    "Control Room",
-  ];
-  const statuses: PermitStatus[] = ["Active", "Active", "Expiring Soon", "Expired", "Suspended", "Closed"];
-
-  const rows: PermitRow[] = [];
-  const targetCount = Math.max(base.length, 148);
-  for (let i = 0; i < targetCount; i++) {
-    const row = base[i % Math.max(base.length, 1)];
-    const day = String((i % 28) + 1).padStart(2, "0");
-    const hour = String(8 + (i % 9)).padStart(2, "0");
-    const minute = String((i * 7) % 60).padStart(2, "0");
-    rows.push({
-      id: `PTW-${String(10000 + i).padStart(5, "0")}`,
-      type: typePool[i % typePool.length] ?? row?.type ?? "Permit",
-      issued_by: row?.issued_by ?? `Issuer ${String((i % 12) + 1).padStart(2, "0")}`,
-      location: locationPool[i % locationPool.length] ?? row?.location ?? "Site",
-      status: statuses[i % statuses.length],
-      expiry: `Jan ${day}, ${hour}:${minute}`,
-    });
-  }
-
-  return rows;
-}
-
 export function EquipmentCertificationPage() {
   const [data, setData] = useState<PermitsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [typeFilter, setTypeFilter] = useState("All Types");
   const [locationFilter, setLocationFilter] = useState("All Locations");
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [permitRows, setPermitRows] = useState<ActiveWorkRow[]>([]);
+  const [permitsTotal, setPermitsTotal] = useState(0);
+  const [permitsTotalPages, setPermitsTotalPages] = useState(0);
+  const [permitsLoading, setPermitsLoading] = useState(false);
+  const [permitTypes, setPermitTypes] = useState<string[]>([]);
+  const [permitLocations, setPermitLocations] = useState<string[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -133,7 +93,40 @@ export function EquipmentCertificationPage() {
 
   useEffect(() => {
     fetchData();
+    getPermitFilterOptions()
+      .then((opts) => {
+        setPermitTypes(opts.types);
+        setPermitLocations(opts.locations);
+      })
+      .catch(() => {});
   }, []);
+
+  // Debounce free-text search before it hits the server.
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchInput.trim()), searchInput ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, typeFilter, locationFilter]);
+
+  useEffect(() => {
+    setPermitsLoading(true);
+    getAllPermits(currentPage, PAGE_SIZE, {
+      status: statusFilter,
+      permit_type: typeFilter,
+      location: locationFilter,
+      q: searchTerm || undefined,
+    })
+      .then((res) => {
+        setPermitRows(res.data);
+        setPermitsTotal(res.total);
+        setPermitsTotalPages(res.totalPages);
+      })
+      .catch(() => {})
+      .finally(() => setPermitsLoading(false));
+  }, [currentPage, statusFilter, typeFilter, locationFilter, searchTerm]);
 
   const ptwCompliance = data?.permit_compliance_pct ?? 0;
   const activePermits = data?.active_permits ?? 0;
@@ -142,59 +135,15 @@ export function EquipmentCertificationPage() {
   const totalPermits = data ? data.work_by_type.reduce((sum, row) => sum + row.active + row.closed + row.expired, 0) : 0;
   const closedPermits = data ? data.work_by_type.reduce((sum, row) => sum + row.closed, 0) : 0;
   const controlCoverage = ratio(closedPermits, totalPermits);
-  const trend = useMemo(
-    () => data?.expiry_timeline.map((item) => ({
-      label: item.label,
-      value: Math.round(item.width),
-      rightText: item.rightText,
-      color: item.color,
-    })) ?? [],
-    [data],
-  );
 
   const warningTone = ptwCompliance >= 90 ? "green" : ptwCompliance >= 75 ? "amber" : "red";
-  const permitRows = useMemo(() => buildPermitRows(data), [data]);
-  const permitTypes = useMemo(
-    () => Array.from(new Set(permitRows.map((row) => row.type))).sort(),
-    [permitRows],
-  );
-  const permitLocations = useMemo(
-    () => Array.from(new Set(permitRows.map((row) => row.location))).sort(),
-    [permitRows],
-  );
-  const filteredPermits = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return permitRows.filter((row) => {
-      const matchesSearch =
-        !term ||
-        row.id.toLowerCase().includes(term) ||
-        row.type.toLowerCase().includes(term) ||
-        row.issued_by.toLowerCase().includes(term) ||
-        row.location.toLowerCase().includes(term);
-      const matchesStatus = statusFilter === "All Status" || row.status === statusFilter;
-      const matchesType = typeFilter === "All Types" || row.type === typeFilter;
-      const matchesLocation = locationFilter === "All Locations" || row.location === locationFilter;
-      return matchesSearch && matchesStatus && matchesType && matchesLocation;
-    });
-  }, [permitRows, searchTerm, statusFilter, typeFilter, locationFilter]);
 
-  const totalPermitsVisible = filteredPermits.length;
-  const totalPages = Math.max(1, Math.ceil(totalPermitsVisible / PAGE_SIZE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = totalPermitsVisible === 0 ? 0 : (safeCurrentPage - 1) * PAGE_SIZE;
+  const totalPermitsVisible = permitsTotal;
+  const startIndex = totalPermitsVisible === 0 ? 0 : (currentPage - 1) * PAGE_SIZE;
   const endIndex = Math.min(startIndex + PAGE_SIZE, totalPermitsVisible);
-  const paginatedPermits = filteredPermits.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, typeFilter, locationFilter]);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
 
   const hasActiveFilters =
-    Boolean(searchTerm.trim()) ||
+    Boolean(searchInput.trim()) ||
     statusFilter !== "All Status" ||
     typeFilter !== "All Types" ||
     locationFilter !== "All Locations";
@@ -403,8 +352,8 @@ export function EquipmentCertificationPage() {
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                   <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
                     <input
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Search permits..."
                       className="h-10 w-full rounded-lg border px-4 text-[13px] outline-none"
                       style={{ borderColor: "#DBE7FF", color: "#0F172A" }}
@@ -427,7 +376,7 @@ export function EquipmentCertificationPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setSearchTerm("");
+                        setSearchInput("");
                         setStatusFilter("All Status");
                         setTypeFilter("All Types");
                         setLocationFilter("All Locations");
@@ -441,7 +390,11 @@ export function EquipmentCertificationPage() {
                 </div>
               </div>
               <div className="px-4 py-3 text-[12px]" style={{ color: "#6B7280" }}>
-                {totalPermitsVisible === 0 ? "No permits found matching your filters." : `Showing ${startIndex + 1}–${endIndex} of ${totalPermitsVisible} permits`}
+                {permitsLoading
+                  ? "Loading…"
+                  : totalPermitsVisible === 0
+                    ? "No permits found matching your filters."
+                    : `Showing ${startIndex + 1}–${endIndex} of ${totalPermitsVisible} permits`}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -455,7 +408,7 @@ export function EquipmentCertificationPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedPermits.map((row) => {
+                    {permitRows.map((row) => {
                       const tone = statusTone(row.status);
                       return (
                         <tr key={row.id} className="border-t border-slate-100">
@@ -486,38 +439,22 @@ export function EquipmentCertificationPage() {
                 <div className="flex flex-wrap items-center gap-1">
                   <button
                     type="button"
-                    disabled={safeCurrentPage === 1}
+                    disabled={currentPage === 1}
                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                     className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ color: safeCurrentPage === 1 ? "#94A3B8" : "#4A57B9", background: "#F4F7F4", border: "1px solid #E2E8F0" }}
+                    style={{ color: currentPage === 1 ? "#94A3B8" : "#4A57B9", background: "#F4F7F4", border: "1px solid #E2E8F0" }}
                   >
                     Previous
                   </button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => {
-                    const active = page === safeCurrentPage;
-                    return (
-                      <button
-                        key={page}
-                        type="button"
-                        onClick={() => setCurrentPage(page)}
-                        className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors"
-                        style={{
-                          color: active ? "#FFFFFF" : "#475569",
-                          background: active ? "#4A57B9" : "#F4F7F4",
-                          border: active ? "1px solid #4A57B9" : "1px solid #E2E8F0",
-                          boxShadow: active ? "0 6px 14px rgba(74, 87, 185, 0.18)" : "none",
-                        }}
-                      >
-                        {page}
-                      </button>
-                    );
-                  })}
+                  <span className="px-2 text-[13px]" style={{ color: "#475569" }}>
+                    Page {permitsTotalPages === 0 ? 0 : currentPage} of {permitsTotalPages}
+                  </span>
                   <button
                     type="button"
-                    disabled={safeCurrentPage === totalPages}
-                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={currentPage >= permitsTotalPages}
+                    onClick={() => setCurrentPage((page) => Math.min(permitsTotalPages, page + 1))}
                     className="rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ color: safeCurrentPage === totalPages ? "#94A3B8" : "#4A57B9", background: "#F4F7F4", border: "1px solid #E2E8F0" }}
+                    style={{ color: currentPage >= permitsTotalPages ? "#94A3B8" : "#4A57B9", background: "#F4F7F4", border: "1px solid #E2E8F0" }}
                   >
                     Next
                   </button>

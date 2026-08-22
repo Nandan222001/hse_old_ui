@@ -23,6 +23,10 @@ class WorkerIncidentReport(BaseModel):
     incident_type: str = Field(..., description="Injury | Near Miss | Unsafe Act | Unsafe Condition | Property Damage | Environmental Spill")
     severity: str = Field(..., description="Minor | Moderate | Serious | Critical")
     description: str = Field(..., min_length=5)
+    # Required — without it the incident has no hazard/category link, which is
+    # what backs the dashboard's "Top Incident Categories" chart. Left optional
+    # historically, so hazard_id silently went unset on most incidents.
+    hazard_id: int
     anyone_injured: str = Field(default="No", description="Yes | No")
     injured_person_name: Optional[str] = None
     injured_body_part: Optional[str] = None

@@ -91,6 +91,31 @@ export interface PermitsSummary {
 export const getPermitsSummary = () =>
   axiosInstance.get<PermitsSummary>('/analytics/permits-summary').then((r) => r.data);
 
+export interface PermitsPage {
+  data: ActiveWorkRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export const getAllPermits = (
+  page = 1,
+  pageSize = 25,
+  filters?: { status?: string; permit_type?: string; location?: string; q?: string },
+) =>
+  axiosInstance
+    .get<PermitsPage>('/analytics/permits/all', { params: { page, pageSize, ...filters } })
+    .then((r) => r.data);
+
+export interface PermitFilterOptions {
+  types: string[];
+  locations: string[];
+}
+
+export const getPermitFilterOptions = () =>
+  axiosInstance.get<PermitFilterOptions>('/analytics/permits/filter-options').then((r) => r.data);
+
 // ── Compliance Summary ──────────────────────────────────────────────────────────
 
 export interface NonConformanceRow {

@@ -1,3 +1,4 @@
+import re
 from typing import List, Dict, Tuple, Set, Optional
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
@@ -11,7 +12,9 @@ from app.models.employee import Employee
 from app.models.incident import Incident
 from app.models.permit_to_work import PermitToWork
 from app.models.training_program import TrainingProgram
+from app.models.competence import TrainingRecord
 from app.services.contractor_risk import compute_contractor_risk
+from app.utils.tenant import org_scoped_join
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
 
@@ -39,6 +42,20 @@ def _capa_status(s: Optional[str]) -> str:
     return "In Progress"
 
 
+_FAKE_INCIDENT_REF_RE = re.compile(r"\s*\b(for|addressing)\s+INC-?\d+\b\.?", re.IGNORECASE)
+
+
+def _capa_label(capa) -> str:
+    """CAPA-{id}: {description}, with the real incident reference in front when
+    known. Seed/legacy descriptions embed a made-up "INC00018"-style number
+    unrelated to the real incident_id — see DashboardPage.tsx for the same fix
+    on the web dashboard. Stripped here so it can't be mistaken for real data."""
+    desc = (capa.description or "Action")
+    desc = _FAKE_INCIDENT_REF_RE.sub("", desc).strip() or "Action"
+    ref = f"INC-{capa.incident_id:05d} " if capa.incident_id else ""
+    return f"CAPA-{capa.id}: {ref}{desc[:30]}"
+
+
 @router.get("/summary")
 def get_vendor_summary(
     db: Session = Depends(get_db),
@@ -46,7 +63,6 @@ def get_vendor_summary(
 ):
     org_id = current_user.org_id
     today = date.today()
-    ninety_ago = today - timedelta(days=90)
     nine_months_ago = today - timedelta(days=270)
 
     # ── Contractors ──────────────────────────────────────────────────────────
@@ -98,47 +114,12 @@ def get_vendor_summary(
         {"name": "Pending",       "value": pending_pct,       "color": "#CBD5E1"},
     ]
 
-    # ── Risk Score (10 − penalty from incident rate) ─────────────────────────
-    # Use all-time incidents since the data window is 2024-2025 (historical).
-    # A 90-day rolling window would give 0 incidents for all contractors in 2026
-    # because no new incidents have been recorded, producing a misleading 10.0/10 score.
-    prev_ninety_ago = today - timedelta(days=180)
+    # Risk score is computed below via the shared contractor_risk service.
 
-    inc_count = 0
-    prev_inc_count = 0
-    if contractor_ids:
-        inc_count = (
-            db.query(func.count(Incident.id))
-            .filter(
-                Incident.organisation_id == org_id,
-                Incident.reported_by.in_(contractor_ids),
-            )
-            .scalar() or 0
-        )
-        # Previous period — incidents more than 6 months before latest incident date
-        latest_inc_date = (
-            db.query(func.max(Incident.report_date))
-            .filter(
-                Incident.organisation_id == org_id,
-                Incident.reported_by.in_(contractor_ids),
-            )
-            .scalar()
-        )
-        if latest_inc_date:
-            prev_cutoff = latest_inc_date - timedelta(days=180)
-            prev_inc_count = (
-                db.query(func.count(Incident.id))
-                .filter(
-                    Incident.organisation_id == org_id,
-                    Incident.reported_by.in_(contractor_ids),
-                    Incident.report_date < prev_cutoff,
-                )
-                .scalar() or 0
-            )
-
-    # Risk score final calculation happens after permit_violations count (see below)
-
-    # ── Exposure Hours per month (permits) ───────────────────────────────────
+    # ── Exposure Hours per month (permits issued to contractors only) ───────
+    # Scoped to contractor_ids — an org-wide query here would title the chart
+    # "Contractor Exposure Hours" while actually counting every permit,
+    # contractor or not.
     permit_rows = (
         db.query(
             func.month(PermitToWork.date_issued).label("m"),
@@ -150,6 +131,7 @@ def get_vendor_summary(
         .filter(
             PermitToWork.organisation_id == org_id,
             PermitToWork.date_issued >= nine_months_ago,
+            PermitToWork.issued_by.in_(contractor_ids) if contractor_ids else False,
         )
         .group_by(func.month(PermitToWork.date_issued))
         .order_by(func.month(PermitToWork.date_issued))
@@ -165,29 +147,38 @@ def get_vendor_summary(
     avg_h = sum(r["hours"] for r in exposure_hours) / max(len(exposure_hours), 1)
     threshold = max(int(avg_h * 1.2), 100)
 
-    # ── Certifications (training programs) ──────────────────────────────────
-    training_rows = (
-        db.query(
-            TrainingProgram.training_name,
-            func.count(TrainingProgram.id).label("cnt"),
+    # ── Certifications — % of contractors with a valid pass on record ───────
+    # Previously this counted TrainingProgram *catalog* rows (org_id, name,
+    # duration...) grouped by name — since a program is defined once, count
+    # was always 1 and every bar always rendered exactly 100%, regardless of
+    # whether anyone had actually completed anything. TrainingRecord is the
+    # real per-employee completion table (employee_id, result, expires_at);
+    # this now measures the thing the card claims to measure.
+    certifications = []
+    if contractor_ids:
+        programs = (
+            db.query(TrainingProgram)
+            .filter(TrainingProgram.organisation_id == org_id)
+            .order_by(TrainingProgram.training_name)
+            .limit(4)
+            .all()
         )
-        .filter(TrainingProgram.organisation_id == org_id)
-        .group_by(TrainingProgram.training_name)
-        .order_by(func.count(TrainingProgram.id).desc())
-        .limit(4)
-        .all()
-    )
-    fallback_labels = ["Site Induction", "Electrical Safety", "Work at Height", "Categories"]
-    if training_rows:
-        max_cnt = max(r.cnt for r in training_rows) or 1
-        certifications = [
-            {"label": r.training_name[:28], "pct": min(100, round(r.cnt / max_cnt * 100))}
-            for r in training_rows
-        ]
-        while len(certifications) < 4:
-            certifications.append({"label": fallback_labels[len(certifications)], "pct": 0})
-    else:
-        certifications = [{"label": l, "pct": 0} for l in fallback_labels]
+        for prog in programs:
+            valid_count = (
+                db.query(func.count(func.distinct(TrainingRecord.employee_id)))
+                .filter(
+                    TrainingRecord.organisation_id == org_id,
+                    TrainingRecord.training_program_id == prog.id,
+                    TrainingRecord.employee_id.in_(contractor_ids),
+                    TrainingRecord.result == "pass",
+                    (TrainingRecord.expires_at.is_(None)) | (TrainingRecord.expires_at >= today),
+                )
+                .scalar() or 0
+            )
+            certifications.append({
+                "label": prog.training_name[:28],
+                "pct": round(valid_count / total * 100) if total else 0,
+            })
 
     # ── High Risk Contractors ────────────────────────────────────────────────
     high_risk: List[dict] = []
@@ -197,7 +188,7 @@ def get_vendor_summary(
                 Employee.full_name,
                 func.count(Incident.id).label("cnt"),
             )
-            .join(Incident, Incident.reported_by == Employee.id)
+            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
             .filter(
                 Employee.organisation_id == org_id,
                 Employee.id.in_(contractor_ids),
@@ -257,7 +248,7 @@ def get_vendor_summary(
                 Employee.full_name,
                 func.count(Incident.id).label("cnt"),
             )
-            .join(Incident, Incident.reported_by == Employee.id)
+            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
             .filter(
                 Employee.organisation_id == org_id,
                 Employee.id.in_(contractor_ids),
@@ -281,7 +272,7 @@ def get_vendor_summary(
                 Employee.full_name,
                 func.count(Incident.id).label("cnt"),
             )
-            .join(Incident, Incident.reported_by == Employee.id)
+            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
             .filter(
                 Employee.organisation_id == org_id,
                 Employee.id.in_(contractor_ids),
@@ -346,7 +337,7 @@ def get_vendor_summary(
         )
     open_actions = [
         {
-            "label": f"CAPA-{r.id}: {(r.description or 'Action')[:30]}",
+            "label": _capa_label(r),
             "due": _due_label(r.due_date, today),
         }
         for r in open_rows_list

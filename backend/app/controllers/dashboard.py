@@ -486,12 +486,17 @@ def get_incidents_by_category(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
-    inc_q = db.query(
+    # HazardCategory and Hazard are themselves org-owned (each org can define its
+    # own categories/hazards), and hazard_id/category_id are global-PK foreign
+    # keys — an unscoped join can pull another org's category name or hazard
+    # into this org's incident count. Every hop is constrained to org_id.
+    inc_q = _org_filter(db.query(
             HazardCategory.category_name,
             func.count(Incident.id).label("count"),
-        ).outerjoin(Hazard, Hazard.category_id == HazardCategory.id)\
-         .outerjoin(Incident, Incident.hazard_id == Hazard.id)\
-         .filter(Incident.organisation_id == org_id if org_id is not None else True)
+        ), HazardCategory, org_id) \
+        .outerjoin(Hazard, org_scoped_join(Hazard.category_id == HazardCategory.id, Hazard.organisation_id, org_id)) \
+        .outerjoin(Incident, org_scoped_join(Incident.hazard_id == Hazard.id, Incident.organisation_id, org_id)) \
+        .filter(Incident.organisation_id == org_id if org_id is not None else True)
     if start_date:
         inc_q = inc_q.filter(func.date(Incident.incident_date_time) >= start_date)
     if end_date:
@@ -557,7 +562,7 @@ def get_safety_walks_recent(
     org_id = current_user.org_id
     rows = (
         _org_filter(db.query(SafetyWalk, WorkingStation, Employee), SafetyWalk, org_id)
-        .outerjoin(WorkingStation, SafetyWalk.location_station_id == WorkingStation.id)
+        .outerjoin(WorkingStation, org_scoped_join(SafetyWalk.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
         .order_by(SafetyWalk.inspection_date_time.desc())
         .limit(limit)
@@ -568,7 +573,7 @@ def get_safety_walks_recent(
         result.append({
             "id": sw.id,
             "inspection_date_time": sw.inspection_date_time.isoformat() if sw.inspection_date_time else None,
-            "location": ws.station_name if ws else f"Station {sw.location_station_id}",
+            "location": ws.station_name if ws else (f"Station {sw.location_station_id}" if sw.location_station_id else "Unknown"),
             "inspector": emp.full_name if emp else "Unknown",
             "inspection_type": sw.inspection_type,
             "issues_found": sw.issues_found or 0,
@@ -589,7 +594,7 @@ def get_near_misses_recent(
     org_id = current_user.org_id
     rows = (
         _org_filter(db.query(NearMiss, WorkingStation, Employee), NearMiss, org_id)
-        .outerjoin(WorkingStation, NearMiss.location_station_id == WorkingStation.id)
+        .outerjoin(WorkingStation, org_scoped_join(NearMiss.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Employee, org_scoped_join(NearMiss.reported_by == Employee.id, Employee.organisation_id, org_id))
         .order_by(NearMiss.event_date_time.desc())
         .limit(limit)
@@ -601,7 +606,7 @@ def get_near_misses_recent(
             "id": nm.id,
             "report_date": nm.report_date.isoformat() if nm.report_date else None,
             "event_date_time": nm.event_date_time.isoformat() if nm.event_date_time else None,
-            "location": ws.station_name if ws else f"Station {nm.location_station_id}",
+            "location": ws.station_name if ws else (f"Station {nm.location_station_id}" if nm.location_station_id else "Unknown"),
             "description": nm.description,
             "potential_consequence": nm.potential_consequence,
             "underlying_cause": nm.underlying_cause,
@@ -621,8 +626,8 @@ def get_active_permits(
     org_id = current_user.org_id
     rows = (
         _org_filter(db.query(PermitToWork, PermitType, WorkingStation), PermitToWork, org_id)
-        .outerjoin(PermitType, PermitToWork.permit_type_id == PermitType.id)
-        .outerjoin(WorkingStation, PermitToWork.location_station_id == WorkingStation.id)
+        .outerjoin(PermitType, org_scoped_join(PermitToWork.permit_type_id == PermitType.id, PermitType.organisation_id, org_id))
+        .outerjoin(WorkingStation, org_scoped_join(PermitToWork.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .filter(PermitToWork.status == "Active")
         .order_by(PermitToWork.validity_end.asc())
         .limit(limit)
@@ -634,7 +639,7 @@ def get_active_permits(
             "id": ptw.id,
             "permit_ref": f"PTW-{ptw.id:04d}",
             "permit_type": pt.permit_type_name if pt else "Unknown",
-            "location": ws.station_name if ws else f"Station {ptw.location_station_id}",
+            "location": ws.station_name if ws else (f"Station {ptw.location_station_id}" if ptw.location_station_id else "Unknown"),
             "work_description": ptw.work_description,
             "number_of_workers": ptw.number_of_workers,
             "validity_start": ptw.validity_start.isoformat() if ptw.validity_start else None,

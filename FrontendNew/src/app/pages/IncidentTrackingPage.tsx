@@ -9,6 +9,7 @@ import {
   type IncidentTrailResponse, type StageKey, type TrackedIncident, type TrailAction,
   type TrailPerson,
 } from "../../services/incident-trail.service";
+import { IncidentsTabBar } from "../components/audits/IncidentsTabBar";
 
 /**
  * Admin incident lifecycle tracker.
@@ -281,6 +282,7 @@ export function IncidentTrackingPage() {
 
   return (
     <div className="space-y-4">
+      <IncidentsTabBar />
       <div>
         <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Incident Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>

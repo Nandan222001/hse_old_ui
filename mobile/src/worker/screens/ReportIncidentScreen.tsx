@@ -105,7 +105,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
     [stations, stationId],
   );
   const hazardName = useMemo(
-    () => hazards.find(h => h.id === hazardId)?.hazard_name ?? 'None',
+    () => hazards.find(h => h.id === hazardId)?.hazard_name ?? 'Select hazard',
     [hazards, hazardId],
   );
 
@@ -266,6 +266,10 @@ export default function ReportIncidentScreen({ navigation }: any) {
       Alert.alert('Required', 'Please select the location / working station.');
       return;
     }
+    if (!hazardId) {
+      Alert.alert('Required', 'Please select the hazard associated with this incident.');
+      return;
+    }
 
     const ok = await reportIncident({
       incident_date_time: incidentDateTime.toISOString(),
@@ -284,7 +288,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
       treatment_level: anyoneInjured === 'Yes' ? treatmentLevel || undefined : undefined,
       dangerous_occurrence: dangerousOccurrence === 'Yes',
       worst_case_fatal: worstCaseFatal === 'Yes',
-      hazard_id: hazardId ?? undefined,
+      hazard_id: hazardId,
       permit_active: 'No',
       control_failure: controlFailure,
       hazard_still_present: hazardStillPresent,
@@ -755,15 +759,6 @@ export default function ReportIncidentScreen({ navigation }: any) {
             </View>
 
             <ScrollView style={styles.pickerScroll}>
-              <TouchableOpacity
-                style={[styles.pickerItem, hazardId === null && styles.pickerItemActive]}
-                onPress={() => { setHazardId(null); setHazardPickerVisible(false); }}
-              >
-                <Text style={[styles.pickerItemText, hazardId === null && styles.pickerItemTextActive]}>
-                  None
-                </Text>
-                {hazardId === null && <Icon emoji="✓" style={styles.checkmarkIcon} />}
-              </TouchableOpacity>
               {hazards.map((hz) => (
                 <TouchableOpacity
                   key={hz.id}

@@ -10,6 +10,7 @@ import {
   type ControlHierarchy, type HazardTrailAction, type HazardTrailPerson,
   type HazardTrailResponse, type StageKey, type TrackedHazard,
 } from "../../services/hazard-register.service";
+import { HazardsTabBar } from "../components/audits/HazardsTabBar";
 
 /**
  * Hazard register lifecycle tracker.
@@ -226,6 +227,7 @@ export function HazardTrackingPage() {
 
   return (
     <div className="space-y-4">
+      <HazardsTabBar />
       <div>
         <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Hazard Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>

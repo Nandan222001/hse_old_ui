@@ -22,6 +22,7 @@ import {
   type AuditReference, type GenerationResult, type ProgrammeRow,
 } from "../../services/audits.service";
 import { Banner, EmptyState, RiskBandChip } from "../components/audit/AuditPrimitives";
+import { AuditsTabBar } from "../components/audits/AuditsTabBar";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 
@@ -97,6 +98,7 @@ export function AuditProgrammePage() {
 
   return (
     <div className="space-y-5 p-6">
+      <AuditsTabBar />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-bold text-slate-900">Audit programme</h1>

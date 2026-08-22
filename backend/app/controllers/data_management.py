@@ -378,7 +378,7 @@ async def full_import(
             try:
                 # SET inside the transaction so it stays on the same connection as INSERTs
                 db.execute(_text("SET FOREIGN_KEY_CHECKS=0"))
-                processed = fn(db, wb, id_maps)
+                processed = fn(db, wb, id_maps, org_id)
                 db.commit()
             except Exception as exc:
                 logger.error("full-import: error in %s: %s", sheet_label, exc, exc_info=True)

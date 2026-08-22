@@ -6,6 +6,7 @@ import { BarChart, Bar, Cell, CartesianGrid, Legend, Line, LineChart, Pie, PieCh
 import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMixItem } from "../../services/analytics.service";
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
+import { IncidentsTabBar } from "../components/audits/IncidentsTabBar";
 
 interface IncidentRecord {
   id: number;
@@ -25,7 +26,14 @@ interface IncidentsPageResponse {
   totalPages: number;
 }
 
+interface IncidentFilterOptions {
+  types: string[];
+  severities: string[];
+  statuses: string[];
+}
+
 const PAGE_SIZE = 25;
+const SOURCE_OPTIONS = ["Mobile App", "Web App"];
 
 // Windowed page list so very large datasets don't render hundreds of page buttons.
 function getPageNumbers(current: number, total: number): (number | "…")[] {
@@ -112,10 +120,44 @@ export function ViolationsPage() {
   const [incidentsPage, setIncidentsPage] = useState(1);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
 
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [severityFilter, setSeverityFilter] = useState("All Severities");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [sourceFilter, setSourceFilter] = useState("All Sources");
+  const [filterOptions, setFilterOptions] = useState<IncidentFilterOptions>({ types: [], severities: [], statuses: [] });
+
+  useEffect(() => {
+    axiosInstance.get<IncidentFilterOptions>('/incidents/filter-options')
+      .then((r) => setFilterOptions(r.data))
+      .catch(() => {});
+  }, []);
+
+  // Debounce free-text search before it hits the server.
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchInput.trim()), searchInput ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setIncidentsPage(1);
+  }, [searchTerm, typeFilter, severityFilter, statusFilter, sourceFilter]);
+
   useEffect(() => {
     setIncidentsLoading(true);
     axiosInstance
-      .get<IncidentsPageResponse>('/incidents/all', { params: { page: incidentsPage, pageSize: PAGE_SIZE } })
+      .get<IncidentsPageResponse>('/incidents/all', {
+        params: {
+          page: incidentsPage,
+          pageSize: PAGE_SIZE,
+          incident_type: typeFilter === "All Types" ? undefined : typeFilter,
+          severity: severityFilter === "All Severities" ? undefined : severityFilter,
+          status: statusFilter === "All Status" ? undefined : statusFilter,
+          source: sourceFilter === "All Sources" ? undefined : sourceFilter,
+          q: searchTerm || undefined,
+        },
+      })
       .then((r) => {
         setAllIncidents(r.data.data);
         setIncidentsTotal(r.data.total);
@@ -123,7 +165,22 @@ export function ViolationsPage() {
       })
       .catch(console.error)
       .finally(() => setIncidentsLoading(false));
-  }, [incidentsPage]);
+  }, [incidentsPage, typeFilter, severityFilter, statusFilter, sourceFilter, searchTerm]);
+
+  const hasActiveIncidentFilters =
+    Boolean(searchInput.trim()) ||
+    typeFilter !== "All Types" ||
+    severityFilter !== "All Severities" ||
+    statusFilter !== "All Status" ||
+    sourceFilter !== "All Sources";
+
+  function clearIncidentFilters() {
+    setSearchInput("");
+    setTypeFilter("All Types");
+    setSeverityFilter("All Severities");
+    setStatusFilter("All Status");
+    setSourceFilter("All Sources");
+  }
 
   useEffect(() => {
     getViolationsSummary(10).then((data) => {
@@ -145,6 +202,7 @@ export function ViolationsPage() {
 
   return (
     <div className="space-y-6">
+      <IncidentsTabBar />
       <div>
         <h1>Welcome, {currentUser?.name || currentUser?.email || "User"}</h1>
       </div>
@@ -354,12 +412,57 @@ export function ViolationsPage() {
             All Incidents — {incidentsTotal}
           </div>
         </div>
+
+        <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search incidents…"
+              className="h-9 w-full sm:w-56 rounded-lg border px-3 text-[13px] outline-none"
+              style={{ borderColor: '#DBE7FF', color: '#0F172A' }}
+            />
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-lg border bg-white px-2 text-[12px] outline-none" style={{ borderColor: '#DBE7FF', color: '#0F172A' }}>
+                <option>All Types</option>
+                {filterOptions.types.map((t) => <option key={t}>{t}</option>)}
+              </select>
+              <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="h-9 rounded-lg border bg-white px-2 text-[12px] outline-none" style={{ borderColor: '#DBE7FF', color: '#0F172A' }}>
+                <option>All Severities</option>
+                {filterOptions.severities.map((s) => <option key={s}>{s}</option>)}
+              </select>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 rounded-lg border bg-white px-2 text-[12px] outline-none" style={{ borderColor: '#DBE7FF', color: '#0F172A' }}>
+                <option>All Status</option>
+                {filterOptions.statuses.map((s) => <option key={s}>{s}</option>)}
+              </select>
+              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-9 rounded-lg border bg-white px-2 text-[12px] outline-none" style={{ borderColor: '#DBE7FF', color: '#0F172A' }}>
+                <option>All Sources</option>
+                {SOURCE_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          {hasActiveIncidentFilters && (
+            <button
+              type="button"
+              onClick={clearIncidentFilters}
+              className="h-9 shrink-0 rounded-lg border px-3 text-[12px] font-semibold"
+              style={{ borderColor: '#D8E1F5', color: '#4A57B9', background: '#F5F7FF' }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
         {(() => {
           if (incidentsLoading && allIncidents.length === 0) {
             return <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>Loading incidents…</p>;
           }
           if (allIncidents.length === 0) {
-            return <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>No incidents recorded yet</p>;
+            return (
+              <p className="text-[13px] py-2" style={{ color: '#9CA3AF' }}>
+                {hasActiveIncidentFilters ? 'No incidents found matching your filters.' : 'No incidents recorded yet'}
+              </p>
+            );
           }
           const rangeStart = (incidentsPage - 1) * PAGE_SIZE + 1;
           const rangeEnd = Math.min(incidentsPage * PAGE_SIZE, incidentsTotal);

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle, ArrowRight, Check, CircleAlert, Clock3, GitBranch, Loader2,
+  AlertTriangle, ArrowRight, Check, CircleAlert, Clock3, Loader2,
   Search, ShieldCheck, X,
 } from "lucide-react";
-import { useNavigate } from "react-router";
 import {
   assessHazard, captureHazardLesson, closeHazard, CONTROL_HIERARCHY,
   getHazardNextAction, getHazardRegister, getHazardRegisterStats,
@@ -13,6 +12,7 @@ import {
   type ControlHierarchy, type HazardNextAction, type HazardRegisterEntry,
   type HazardRegisterStats, type StageKey,
 } from "../../services/hazard-register.service";
+import { HazardsTabBar } from "../components/audits/HazardsTabBar";
 
 /**
  * The working hazard register — what is owed, and the one action that clears it.
@@ -41,7 +41,6 @@ function formatDate(value: string | null): string {
 }
 
 export function HazardRegisterPage() {
-  const navigate = useNavigate();
   const [items, setItems] = useState<HazardRegisterEntry[]>([]);
   const [stats, setStats] = useState<HazardRegisterStats | null>(null);
   const [selected, setSelected] = useState<HazardRegisterEntry | null>(null);
@@ -131,6 +130,7 @@ export function HazardRegisterPage() {
 
   return (
     <div className="space-y-4">
+      <HazardsTabBar />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Hazard Register</h1>
@@ -139,15 +139,6 @@ export function HazardRegisterPage() {
             stages an incident runs.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/hazards/tracking")}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px]"
-          style={{ borderColor: "#DDE5F4", color: "#4A57B9", fontWeight: 600 }}
-        >
-          <GitBranch className="h-3.5 w-3.5" />
-          Lifecycle tracking
-        </button>
       </div>
 
       {/* Headline counts */}

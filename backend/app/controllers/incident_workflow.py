@@ -329,6 +329,13 @@ def worker_report_incident(
     """Worker submits a new incident report. Auto-notifies supervisor."""
     now = datetime.utcnow()
 
+    hazard_in_org = db.execute(
+        text("SELECT id FROM hazards WHERE id = :id AND organisation_id = :org_id"),
+        {"id": payload.hazard_id, "org_id": current_user.org_id},
+    ).scalar()
+    if not hazard_in_org:
+        raise HTTPException(status_code=404, detail="No such hazard")
+
     # Find the employee record for the reporter (by user email → employee match)
     reporter_employee = (
         db.query(Employee)
@@ -347,6 +354,7 @@ def worker_report_incident(
         incident_type=payload.incident_type,
         severity=payload.severity,
         description=payload.description,
+        hazard_id=payload.hazard_id,
         number_persons_involved=payload.number_persons_involved,
         reported_by=reporter_employee.id if reporter_employee else None,
         anyone_injured=payload.anyone_injured,

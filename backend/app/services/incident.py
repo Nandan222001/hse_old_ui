@@ -18,6 +18,27 @@ class IncidentService:
             return self._repo.get_all_by_org(org_id, skip=skip, limit=limit)
         return self._repo.get_all(skip=skip, limit=limit)
 
+    def list_filtered(
+        self, org_id: int, skip: int = 0, limit: int = 100,
+        status: Optional[str] = None, incident_type: Optional[str] = None,
+        severity: Optional[str] = None, source: Optional[str] = None,
+        q: Optional[str] = None,
+    ):
+        return self._repo.get_filtered_by_org(
+            org_id, skip=skip, limit=limit,
+            status=status, incident_type=incident_type, severity=severity, source=source, q=q,
+        )
+
+    def count_filtered(
+        self, org_id: int,
+        status: Optional[str] = None, incident_type: Optional[str] = None,
+        severity: Optional[str] = None, source: Optional[str] = None,
+        q: Optional[str] = None,
+    ) -> int:
+        return self._repo.count_filtered_by_org(
+            org_id, status=status, incident_type=incident_type, severity=severity, source=source, q=q,
+        )
+
     def count(self, org_id: Optional[int] = None) -> int:
         if org_id is not None:
             return self._repo.count_by_org(org_id)

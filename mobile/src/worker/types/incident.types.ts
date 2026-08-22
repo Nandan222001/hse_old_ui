@@ -35,7 +35,7 @@ export interface ReportIncidentRequest {
   anyone_injured: YesNo;
   injured_person_name?: string;
   injured_body_part?: string;
-  hazard_id?: number;
+  hazard_id: number;
   permit_active?: YesNo;
   control_failure?: YesNo;
   hazard_still_present?: YesNo;
