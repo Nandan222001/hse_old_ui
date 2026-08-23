@@ -195,10 +195,21 @@ def list_permits(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     query_str = """
-        SELECT p.*, pt.permit_type_name as permit_type_name, ws.station_name as location_name 
+        SELECT p.*, pt.permit_type_name as permit_type_name, ws.station_name as location_name,
+               req.full_name AS requested_by_name
         FROM permits_to_work p
         LEFT JOIN permit_types pt ON p.permit_type_id = pt.id
         LEFT JOIN working_stations ws ON p.location_station_id = ws.id
+        -- Resolved through the requester's *login* org, not the employee row's.
+        -- The two disagree for most people in this database (employee 21 is
+        -- org 1, his account is org 4) and the login is what determines the
+        -- tenant somebody actually works in — the same reasoning
+        -- services/capa_owners.py documents. Scoping on the employee row
+        -- instead returned NULL for every permit here; dropping the scope
+        -- entirely would name another tenant's staff.
+        LEFT JOIN users req_u ON req_u.employee_id = p.requested_by
+                             AND req_u.organisation_id = p.organisation_id
+        LEFT JOIN employees req ON req.id = req_u.employee_id
         WHERE p.organisation_id = :org_id
     """
     params = {"org_id": current_user.org_id}
@@ -242,7 +253,11 @@ def list_permits(
                 k: v for k, v in workflow_stages.describe("permit", r["workflow_status"]).items()
                 if k in ("stage", "stage_number", "stage_label", "completed_stages", "total_stages")
             },
-            "requested_by": "Alex Safety",
+            # The actual requester. This was hardcoded to "Alex Safety" on every
+            # row — a stub left in place after the endpoint started returning
+            # real permits, so the worker's list attributed all of them to a
+            # person who does not exist in this database.
+            "requested_by": r["requested_by_name"] or "Unknown",
             "created_at": r["date_issued"].isoformat() if r["date_issued"] else date.today().isoformat(),
             "safety_gear": {
                 "hard_hat": True,
