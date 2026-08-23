@@ -1,35 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, Loader2, Search, Users } from "lucide-react";
 import {
-  getIncidentTrail, getTrackedIncidents, STAGE_ORDER,
-  type IncidentTrailResponse, type StageKey, type TrackedIncident,
-} from "../../services/incident-trail.service";
+  getNearMissTrail, getTrackedNearMisses,
+  type NearMissTrailResponse, type StageKey, type TrackedNearMiss,
+} from "../../services/near-miss-trail.service";
 import {
-  ActionRow, PRIORITY_COLOR, PersonCard, STAGE_ICON, StageBlock, formatDateTime,
+  ActionRow, PRIORITY_COLOR, PersonCard, STAGE_ICON, STAGE_ORDER, StageBlock, formatDateTime,
 } from "../components/tracking/lifecycle";
-import { IncidentsTabBar } from "../components/audits/IncidentsTabBar";
+import { NearMissTabBar } from "../components/audits/NearMissTabBar";
 
 /**
- * Admin incident lifecycle tracker.
+ * Admin near-miss lifecycle tracker.
  *
- * One screen answering "what has happened to this incident, by whom, when" for
- * all eight stages of the workflow engine (HSE_Workflow_Engine_Slide.pptx).
- * Left: every incident with its current stage. Right: the full action trail.
+ * The counterpart to `IncidentTrackingPage`, answering the same question for
+ * the near-miss family: what has happened to this record, by whom, when, across
+ * all eight stages of the workflow engine.
  *
- * The stage rail, action rows and people cards live in
- * `components/tracking/lifecycle` and are shared with the near-miss tracker —
- * the backend serves both families an identical response shape precisely so one
- * renderer draws them, and two copies would drift apart the first time a stage
- * was restyled or a caveat reworded.
+ * Everything here is the data the mobile app writes. A worker reporting a near
+ * miss on a phone creates the RECORD entry; the supervisor's acknowledgement,
+ * investigation and corrective action, and the manager's verification and
+ * closure, each land as further actions on the same trail. Nothing on this
+ * screen writes.
+ *
+ * The stage rail, action rows and people cards come from the shared
+ * `components/tracking/lifecycle` module, which the incident tracker uses too —
+ * the backend serves both families an identical shape precisely so one renderer
+ * can draw them.
  */
 
-const NOUN = "incident";
+const NOUN = "near miss";
 
-export function IncidentTrackingPage() {
-  const [items, setItems] = useState<TrackedIncident[]>([]);
+export function NearMissTrackingPage() {
+  const [items, setItems] = useState<TrackedNearMiss[]>([]);
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [trail, setTrail] = useState<IncidentTrailResponse | null>(null);
+  const [trail, setTrail] = useState<NearMissTrailResponse | null>(null);
   const [stageFilter, setStageFilter] = useState<StageKey | "">("");
   const [query, setQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
@@ -40,12 +45,12 @@ export function IncidentTrackingPage() {
     setLoadingList(true);
     setError(null);
     try {
-      const data = await getTrackedIncidents({ stage: stageFilter || undefined, q: query || undefined });
+      const data = await getTrackedNearMisses({ stage: stageFilter || undefined, q: query || undefined });
       setItems(data.items);
       setStageCounts(data.stage_counts ?? {});
       setSelectedId((prev) => (prev && data.items.some((i) => i.id === prev) ? prev : data.items[0]?.id ?? null));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load incidents");
+      setError(e instanceof Error ? e.message : "Could not load near misses");
       setItems([]);
     } finally {
       setLoadingList(false);
@@ -61,7 +66,7 @@ export function IncidentTrackingPage() {
     if (!selectedId) { setTrail(null); return; }
     let cancelled = false;
     setLoadingTrail(true);
-    getIncidentTrail(selectedId)
+    getNearMissTrail(selectedId)
       .then((data) => { if (!cancelled) setTrail(data); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load trail"); })
       .finally(() => { if (!cancelled) setLoadingTrail(false); });
@@ -75,11 +80,12 @@ export function IncidentTrackingPage() {
 
   return (
     <div className="space-y-4">
-      <IncidentsTabBar />
+      <NearMissTabBar />
       <div>
-        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Incident Lifecycle Tracking</h1>
+        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Near Miss Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>
-          Every action on every incident, stage 01 Record through stage 08 Close — who did it and when.
+          Every action on every near miss, stage 01 Record through stage 08 Close — who did it and when.
+          Reports raised on the mobile app appear here as they are submitted.
         </p>
       </div>
 
@@ -133,7 +139,7 @@ export function IncidentTrackingPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search incidents…"
+                placeholder="Search near misses…"
                 className="w-full rounded-md border py-1.5 pl-8 pr-2 text-[12.5px] outline-none"
                 style={{ borderColor: "#DDE5F4", color: "#111827" }}
               />
@@ -150,60 +156,69 @@ export function IncidentTrackingPage() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
             ) : items.length === 0 ? (
-              <p className="py-8 text-center text-[12px]" style={{ color: "#94A3B8" }}>No incidents match.</p>
+              <p className="py-8 text-center text-[12px]" style={{ color: "#94A3B8" }}>No near misses match.</p>
             ) : (
-              items.map((inc) => {
-                const active = inc.id === selectedId;
+              items.map((nm) => {
+                const active = nm.id === selectedId;
                 return (
                   <button
-                    key={inc.id}
+                    key={nm.id}
                     type="button"
-                    onClick={() => setSelectedId(inc.id)}
+                    onClick={() => setSelectedId(nm.id)}
                     className="flex w-full items-start gap-2 border-b px-3 py-2.5 text-left transition-colors"
                     style={{ borderColor: "#F1F5F9", background: active ? "#EEF2FB" : "transparent" }}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11.5px]" style={{ color: "#4A57B9", fontWeight: 700 }}>{inc.reference}</span>
-                        {inc.priority && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11.5px]" style={{ color: "#4A57B9", fontWeight: 700 }}>{nm.reference}</span>
+                        {nm.priority && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
-                            style={{ background: `${PRIORITY_COLOR[inc.priority] ?? "#64748B"}1A`,
-                              color: PRIORITY_COLOR[inc.priority] ?? "#64748B", fontWeight: 700 }}>
-                            {inc.priority}
+                            style={{ background: `${PRIORITY_COLOR[nm.priority] ?? "#64748B"}1A`,
+                              color: PRIORITY_COLOR[nm.priority] ?? "#64748B", fontWeight: 700 }}>
+                            {nm.priority}
                           </span>
                         )}
-                        {inc.is_hipo && (
+                        {nm.is_hipo && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                             style={{ background: "#FEE2E2", color: "#B91C1C", fontWeight: 700 }}>HiPo</span>
                         )}
-                        {inc.is_overdue && (
+                        {nm.is_recurring && (
+                          <span className="rounded px-1.5 py-0.5 text-[9.5px]"
+                            style={{ background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Recurring</span>
+                        )}
+                        {nm.is_overdue && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                             style={{ background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Overdue</span>
                         )}
                       </div>
                       <p className="mt-0.5 truncate text-[12px]" style={{ color: "#1F2937" }}>
-                        {inc.description || inc.incident_type || "—"}
+                        {nm.description || "—"}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10.5px]" style={{ color: "#64748B" }}>
                         <span style={{ fontWeight: 700, color: "#334155" }}>
-                          {inc.stage_number ? `${String(inc.stage_number).padStart(2, "0")} ${inc.stage}` : "unmapped"}
+                          {nm.stage_number ? `${String(nm.stage_number).padStart(2, "0")} ${nm.stage}` : "unmapped"}
                         </span>
-                        <span>· {inc.action_count} actions</span>
-                        {inc.capa_total > 0 && <span>· CAPA {inc.capa_closed}/{inc.capa_total}</span>}
+                        <span>· {nm.action_count} actions</span>
+                        {nm.capa_total > 0 && (
+                          <span>· CAPA {nm.capa_total - nm.capa_open}/{nm.capa_total}</span>
+                        )}
+                        {nm.station_name && <span>· {nm.station_name}</span>}
                       </div>
-                      {inc.participants.length > 0 && (
+                      {(nm.reported_by_name || nm.supervisor_name) && (
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           <Users className="h-3 w-3" style={{ color: "#A3AEC6" }} />
-                          {inc.participants.slice(0, 3).map((p) => (
-                            <span key={p.employee_id} className="rounded px-1.5 py-0.5 text-[9.5px]"
+                          {nm.reported_by_name && (
+                            <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                               style={{ background: "#F1F5F9", color: "#475569" }}
-                              title={`${p.name ?? "Unknown"} · ${p.employee_ref} · ${p.workflow_role}`}>
-                              {p.name ?? p.employee_ref} <span style={{ color: "#94A3B8" }}>{p.employee_ref}</span>
+                              title={`Reported by ${nm.reported_by_name}`}>
+                              {nm.reported_by_name}
                             </span>
-                          ))}
-                          {inc.participants.length > 3 && (
-                            <span className="text-[9.5px]" style={{ color: "#94A3B8" }}>
-                              +{inc.participants.length - 3}
+                          )}
+                          {nm.supervisor_name && (
+                            <span className="rounded px-1.5 py-0.5 text-[9.5px]"
+                              style={{ background: "#F1F5F9", color: "#475569" }}
+                              title={`Supervisor ${nm.supervisor_name}`}>
+                              {nm.supervisor_name}
                             </span>
                           )}
                         </div>
@@ -225,26 +240,35 @@ export function IncidentTrackingPage() {
             </div>
           ) : !trail ? (
             <p className="py-10 text-center text-[12px]" style={{ color: "#94A3B8" }}>
-              Select an incident to see every action recorded against it.
+              Select a near miss to see every action recorded against it.
             </p>
           ) : (
             <>
               <div className="border-b pb-3" style={{ borderColor: "#E9EEF8" }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px]" style={{ color: "#0F172A", fontWeight: 700 }}>{trail.incident.reference}</span>
+                  <span className="text-[15px]" style={{ color: "#0F172A", fontWeight: 700 }}>{trail.record.reference}</span>
                   <span className="rounded-full px-2 py-0.5 text-[10.5px]"
                     style={{ background: "#EEF2FB", color: "#4A57B9", fontWeight: 700 }}>
-                    {trail.incident.workflow_status}
+                    {trail.record.workflow_status}
                   </span>
-                  {trail.incident.statutory_reportable && (
+                  {trail.record.is_hipo && (
                     <span className="rounded-full px-2 py-0.5 text-[10.5px]"
-                      style={{ background: "#FEE2E2", color: "#B91C1C", fontWeight: 700 }}>Statutory</span>
+                      style={{ background: "#FEE2E2", color: "#B91C1C", fontWeight: 700 }}>High potential</span>
+                  )}
+                  {trail.record.verification_result && (
+                    <span className="rounded-full px-2 py-0.5 text-[10.5px]"
+                      style={{ background: "#DCFCE7", color: "#15803D", fontWeight: 700 }}>
+                      Auditor: {trail.record.verification_result}
+                    </span>
                   )}
                 </div>
-                <p className="mt-1 text-[12.5px]" style={{ color: "#374151" }}>{trail.incident.description || "—"}</p>
+                <p className="mt-1 text-[12.5px]" style={{ color: "#374151" }}>{trail.record.description || "—"}</p>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: "#64748B" }}>
-                  <span>Reported {formatDateTime(trail.incident.reported_at)}</span>
-                  <span>{trail.incident.closed_at ? `Closed ${formatDateTime(trail.incident.closed_at)}` : "Not closed"}</span>
+                  <span>Reported {formatDateTime(trail.record.reported_at)}</span>
+                  <span>{trail.record.closed_at ? `Closed ${formatDateTime(trail.record.closed_at)}` : "Not closed"}</span>
+                  {trail.record.potential_consequence && (
+                    <span>Could have been: <strong>{trail.record.potential_consequence.replace(/_/g, " ")}</strong></span>
+                  )}
                   <span style={{ fontWeight: 700, color: "#334155" }}>{trail.total_actions} actions tracked</span>
                 </div>
               </div>
@@ -286,7 +310,7 @@ export function IncidentTrackingPage() {
 
                 {trail.people.length === 0 ? (
                   <p className="mt-2 text-[11.5px]" style={{ color: "#B45309" }}>
-                    No employee is recorded against any action on this incident.
+                    No employee is recorded against any action on this near miss.
                   </p>
                 ) : (
                   <div className="mt-2.5 grid gap-2 md:grid-cols-2">
@@ -294,28 +318,38 @@ export function IncidentTrackingPage() {
                   </div>
                 )}
 
-                {(trail.named_in_report.injured_person || trail.named_in_report.witnesses.length > 0) && (
+                {trail.named_in_report.witnesses.length > 0 && (
                   <div className="mt-2.5 border-t pt-2.5" style={{ borderColor: "#E9EEF8" }}>
                     <div className="text-[10.5px] uppercase tracking-[0.5px]" style={{ color: "#94A3B8", fontWeight: 700 }}>
                       Also named in the report
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]" style={{ color: "#475569" }}>
-                      {trail.named_in_report.injured_person && (
-                        <span>
-                          Injured: <strong>{trail.named_in_report.injured_person}</strong>
-                          {trail.named_in_report.injured_body_part ? ` (${trail.named_in_report.injured_body_part})` : ""}
-                        </span>
-                      )}
-                      {trail.named_in_report.witnesses.length > 0 && (
-                        <span>Witnesses: <strong>{trail.named_in_report.witnesses.join(", ")}</strong></span>
-                      )}
+                    <div className="mt-1 text-[11.5px]" style={{ color: "#475569" }}>
+                      Witnesses: <strong>{trail.named_in_report.witnesses.join(", ")}</strong>
                     </div>
                     <p className="mt-1 text-[10.5px]" style={{ color: "#94A3B8" }}>
-                      Entered as free text — these are not linked to an employee record, so they carry no employee ID.
+                      Entered as free text on the phone — not linked to an employee record, so they carry no employee ID.
                     </p>
                   </div>
                 )}
               </div>
+
+              {/* What the investigation concluded, where it exists */}
+              {(trail.record.root_cause || trail.record.lessons_learned || trail.record.closure_notes) && (
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    { label: "Root cause", value: trail.record.root_cause },
+                    { label: "Lesson recorded", value: trail.record.lessons_learned },
+                    { label: "Closure notes", value: trail.record.closure_notes },
+                  ].filter((f) => f.value).map((f) => (
+                    <div key={f.label} className="rounded-lg border p-2.5" style={{ borderColor: "#E3E9F6" }}>
+                      <div className="text-[10px] uppercase tracking-[0.5px]" style={{ color: "#94A3B8", fontWeight: 700 }}>
+                        {f.label}
+                      </div>
+                      <p className="mt-1 text-[11.5px] leading-snug" style={{ color: "#374151" }}>{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-4">
                 {trail.stages.map((s) => <StageBlock key={s.key} stage={s} subjectNoun={NOUN} />)}

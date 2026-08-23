@@ -9,6 +9,7 @@ import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
 // Flow 5 · the hazard register, on the same eight stages as an incident
 import { HazardRegisterPage } from "./pages/HazardRegisterPage";
 import { HazardTrackingPage } from "./pages/HazardTrackingPage";
+import { NearMissTrackingPage } from "./pages/NearMissTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
@@ -220,6 +221,7 @@ export const router = createBrowserRouter([
       { path: "settings", Component: SettingsRoute },
       { path: "subscription", Component: SubscriptionRoute },
       { path: "near-miss", Component: NearMissRoute },
+      { path: "near-miss/tracking", Component: NearMissTrackingPage },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },

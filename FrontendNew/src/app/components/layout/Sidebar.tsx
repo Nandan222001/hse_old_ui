@@ -5,7 +5,7 @@ import {
   Lightbulb, ClipboardCheck, ChevronDown,
   FolderClosed, AlertTriangle,
   LogOut, Settings, X, Database, HardHat, MapPin,
-  ShieldCheck, Siren, type LucideIcon
+  ShieldCheck, Siren, Eye, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -55,6 +55,15 @@ const navGroups: NavGroup[] = [
         name: "Hazards",
         icon: Siren,
         path: "/hazards",
+      },
+      {
+        // Third of the eight-stage families, alongside Incidents and Hazards.
+        // It had no sidebar entry at all — the register was reachable only from
+        // a button on the dashboard, so an admin looking for what the mobile app
+        // had reported had nowhere obvious to go.
+        name: "Near Miss",
+        icon: Eye,
+        path: "/near-miss",
       },
       { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
       { name: "Checklists", icon: BookOpenText, path: "/checklists" },

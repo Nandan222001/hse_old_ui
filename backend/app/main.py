@@ -51,6 +51,7 @@ from app.controllers import (
     audit as audit_controller,
     audit_trail as audit_trail_controller,
     incident_trail as incident_trail_controller,
+    near_miss_trail as near_miss_trail_controller,
     # ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ───────────────────────────
     competence as competence_controller,
     fatigue as fatigue_controller,
@@ -161,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_trail_controller.router, prefix=prefix)
     # Admin view: every action on an incident, stage 01 through stage 08.
     app.include_router(incident_trail_controller.router, prefix=prefix)
+    app.include_router(near_miss_trail_controller.router, prefix=prefix)
     # Near miss / unsafe act / risk each get their own table and their own workflow.
     app.include_router(near_miss_workflow_controller.router, prefix=prefix)
     app.include_router(unsafe_act_workflow_controller.router, prefix=prefix)
