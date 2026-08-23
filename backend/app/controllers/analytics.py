@@ -625,7 +625,14 @@ def get_residual_risk_trend(
     org_id = current_user.org_id
 
     latest_dt = _org_filter(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
-    anchor = latest_dt.date() if latest_dt else date.today()
+    # The day *after* the newest incident, so that incident lands inside the
+    # final quarter. Anchoring on its own date excluded it: the last bucket is
+    # half-open (`< q_end`) and q_end was the anchor, so whichever incident was
+    # newest set the anchor and then filtered itself out. Every freshly reported
+    # incident was therefore invisible here until a newer one replaced it —
+    # which, for a trend the Risk page reads as current, is the one record that
+    # matters most.
+    anchor = (latest_dt.date() + timedelta(days=1)) if latest_dt else date.today()
 
     def _severity_weight(sev: str) -> int:
         s = (sev or "").lower()
@@ -1098,9 +1105,18 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         .order_by("yr", "mo")
         .all()
     ) if latest_walk_date else []
+    # A month whose walks all carry a NULL compliance_rating averages to NULL,
+    # and float(None) took the whole Compliance page down with a 500. The mobile
+    # app logs walks without a rating, so this fires as soon as one is submitted
+    # in the current month — it is a live condition, not a legacy-data edge case.
+    #
+    # Such a month is dropped rather than plotted as 0: nobody rated those walks,
+    # and 0 renders as total non-compliance, which is a different and much worse
+    # claim than "not measured".
     compliance_trend = [
         {"month": MONTH_NAMES[int(r.mo) - 1], "value": round(float(r.avg_rating) / 5 * 100)}
         for r in trend_rows[-10:]
+        if r.avg_rating is not None
     ]
     trend_mom = None
     if len(compliance_trend) >= 2:
