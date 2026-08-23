@@ -550,7 +550,13 @@ def build_trail_router(
                 # so the last stage must not read "in progress" once finished.
                 state = "complete" if s.key == CLOSE else "current"
             else:
-                state = "pending"
+                # A stage the record has not reached yet can still hold a recorded
+                # action, and calling that "Not reached" contradicts the entry shown
+                # underneath it. Permits hit this routinely: the auditor verifies on
+                # site while the permit is still `active` (stage 05), so VERIFY has
+                # an action before the permit moves there. An action is evidence the
+                # stage happened, so it reads complete.
+                state = "complete" if entries else "pending"
             stages.append({
                 "number": s.number,
                 "key": s.key,

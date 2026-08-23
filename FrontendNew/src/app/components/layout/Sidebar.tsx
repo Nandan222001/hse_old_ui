@@ -5,7 +5,7 @@ import {
   Lightbulb, ClipboardCheck, ChevronDown,
   FolderClosed, AlertTriangle,
   LogOut, Settings, X, Database, HardHat, MapPin,
-  ShieldCheck, Siren, Eye, type LucideIcon
+  ShieldCheck, Siren, Eye, FileCheck2, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -55,6 +55,13 @@ const navGroups: NavGroup[] = [
         name: "Hazards",
         icon: Siren,
         path: "/hazards",
+      },
+      {
+        // Permits run the same eight stages and had no console page at all —
+        // the lifecycle was mapped in the backend and visible nowhere.
+        name: "Permits",
+        icon: FileCheck2,
+        path: "/permits/tracking",
       },
       {
         // Third of the eight-stage families, alongside Incidents and Hazards.

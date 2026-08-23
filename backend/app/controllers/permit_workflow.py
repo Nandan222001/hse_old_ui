@@ -39,7 +39,7 @@ Writes to permits_to_work. Two status columns, deliberately:
 from datetime import date, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -56,7 +56,7 @@ from app.controllers.workflow_common import (
     station_id_for,
 )
 from app.models.permit_to_work import PermitToWork
-from app.services import workflow_stages
+from app.services import permit_next_action, workflow_stages
 from app.services.gate_engine import evaluate_permit_gates
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
@@ -80,6 +80,18 @@ MANAGER_QUEUE = ["requested", "acknowledged"]
 # in which a permit authorises work right now. Shared with gate_engine; see
 # workflow_stages.PERMIT_LIVE_STATUSES for why it lives there.
 LIVE_STATUSES = list(workflow_stages.PERMIT_LIVE_STATUSES)
+
+
+def _station_names(db: Session, rows) -> dict:
+    """Station id -> name for a page of permits, in one query."""
+    ids = {r.location_station_id for r in rows if r.location_station_id}
+    if not ids:
+        return {}
+    found = db.execute(
+        text("SELECT id, station_name FROM working_stations WHERE id IN :ids"),
+        {"ids": tuple(ids)},
+    ).mappings().all()
+    return {r["id"]: r["station_name"] for r in found}
 
 
 def _permit_ref(row) -> str:
@@ -628,6 +640,105 @@ def supervisor_close(
 # ══════════════════════════════════════════════════════════════════════════════
 # SHARED
 # ══════════════════════════════════════════════════════════════════════════════
+@router.get("/next-actions")
+def my_next_actions(
+    mine_only: bool = Query(True, description="Only steps this role actually owns"),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Every open permit waiting on this user, and the exact step it needs.
+
+    The permit half of the same question `/incident-workflow/next-actions` and
+    `/near-miss-workflow/next-actions` answer. Permits already carried all eight
+    stages in their responses, but nothing said *who* owed the next step, so a
+    permit could sit issued-but-never-activated, or active with its controls
+    unverified, and no screen would surface it.
+    """
+    rows = (
+        db.query(PermitToWork)
+        .filter(PermitToWork.organisation_id == current_user.org_id)
+        .filter(PermitToWork.workflow_status.notin_(["closed", "cancelled", "rejected"]))
+        .order_by(PermitToWork.id.desc())
+        .limit(300)
+        .all()
+    )
+    if not rows:
+        return {"count": 0, "items": [], "mine_count": 0}
+
+    stations = _station_names(db, rows)
+    now = datetime.now()
+    items: List[dict] = []
+    mine_count = 0
+
+    for r in rows:
+        info = permit_next_action.describe(r.workflow_status, current_user.role)
+        nxt = info["next_action"]
+        if not nxt:
+            continue
+        if info["is_mine"]:
+            mine_count += 1
+        elif mine_only:
+            continue
+
+        # A permit whose validity has run out while still open is the one an
+        # admin most needs to see — work may be continuing under a dead permit.
+        expired = bool(r.validity_end and r.validity_end < now
+                       and r.workflow_status in LIVE_STATUSES)
+        items.append({
+            "family": "permit",
+            "id": r.id,
+            "reference": _permit_ref(r),
+            "description": (r.work_description or "")[:140],
+            "permit_type_id": r.permit_type_id,
+            "workflow_status": r.workflow_status,
+            "stage": info["stage"],
+            "stage_number": info["stage_number"],
+            "stage_label": info["stage_label"],
+            "action": nxt["action"],
+            "detail": nxt["detail"],
+            "cta": nxt["cta"],
+            "route": nxt["route"],
+            "unblocks": nxt["unblocks"],
+            "owner_role": nxt["owner_role"],
+            "is_mine": info["is_mine"],
+            "can_act": info["can_act"],
+            "station_name": stations.get(r.location_station_id or 0),
+            "validity_start": r.validity_start.isoformat() if r.validity_start else None,
+            "validity_end": r.validity_end.isoformat() if r.validity_end else None,
+            "is_overdue": expired,
+            "auditor_verified": bool(getattr(r, "auditor_verified_at", None)),
+            "waiting_since": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    # Permits past their validity first — those are the live safety problem —
+    # then by stage, then oldest waiting.
+    items.sort(key=lambda i: (
+        not i["is_overdue"],
+        i["stage_number"] or 99,
+        i["waiting_since"] or "9999",
+    ))
+    return {"count": len(items[:limit]), "items": items[:limit], "mine_count": mine_count}
+
+
+@router.get("/{permit_id}/next-action")
+def permit_next_step(
+    permit_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Stage tracker + the one outstanding step, for the permit's own screen."""
+    row = _get(db, permit_id, current_user.org_id)
+    info = permit_next_action.describe(row.workflow_status, current_user.role)
+    return {
+        "family": "permit",
+        "record_id": row.id,
+        "reference": _permit_ref(row),
+        **info,
+        "track": permit_next_action.stage_track(row.workflow_status),
+    }
+
+
 @router.get("/stats/summary")
 def permit_stats(
     db: Session = Depends(get_db),

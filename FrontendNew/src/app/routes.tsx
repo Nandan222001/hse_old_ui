@@ -10,6 +10,7 @@ import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
 import { HazardRegisterPage } from "./pages/HazardRegisterPage";
 import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { NearMissTrackingPage } from "./pages/NearMissTrackingPage";
+import { PermitTrackingPage } from "./pages/PermitTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
@@ -222,6 +223,7 @@ export const router = createBrowserRouter([
       { path: "subscription", Component: SubscriptionRoute },
       { path: "near-miss", Component: NearMissRoute },
       { path: "near-miss/tracking", Component: NearMissTrackingPage },
+      { path: "permits/tracking", Component: PermitTrackingPage },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
