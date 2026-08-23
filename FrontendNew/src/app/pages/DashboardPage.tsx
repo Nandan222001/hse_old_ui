@@ -9,11 +9,13 @@ import {
   getCapaActions,
   getOverdueCapa,
   getLeadingIndicators,
+  getNearMissesRecent,
   type DashboardStats,
   type IncidentByCategory,
   type CapaAction,
   type OverdueCapa as OverdueCapaItem,
   type LeadingIndicators,
+  type RecentNearMiss,
 } from "../../services/dashboard.service";
 
 // â”€â”€ date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -79,6 +81,7 @@ export function DashboardPage() {
   const [capaActions, setCapaActions] = useState<CapaAction[]>([]);
   const [overdueCapa, setOverdueCapa] = useState<OverdueCapaItem[]>([]);
   const [leading, setLeading] = useState<LeadingIndicators | null>(null);
+  const [nearMisses, setNearMisses] = useState<RecentNearMiss[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // â”€â”€ date filter state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -104,13 +107,15 @@ export function DashboardPage() {
         getCapaActions(5, start, end),
         getOverdueCapa(4),
         getLeadingIndicators(start, end),
+        getNearMissesRecent(4),
       ])
-      .then(([s, cats, capas, overdue, lead]) => {
+      .then(([s, cats, capas, overdue, lead, nm]) => {
         setStats(s as DashboardStats);
         setRiskBars(cats as IncidentByCategory[]);
         setCapaActions(capas as CapaAction[]);
         setOverdueCapa(overdue as OverdueCapaItem[]);
         setLeading(lead as LeadingIndicators);
+        setNearMisses(nm as RecentNearMiss[]);
         setLastUpdated(new Date());
       })
       .catch(console.error);
@@ -410,9 +415,57 @@ export function DashboardPage() {
           </div>
 
           <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <div><h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Reporting</h2><p className="mt-1 text-[13px] leading-5" style={{ color: '#6B7280' }}>Capture near misses quickly so the next review cycle has cleaner data.</p></div>
-            <div className="mt-4 flex-1 rounded-2xl border bg-[#F8FBFF] p-4" style={{ borderColor: '#E3EAF8' }}><div className="text-[11px] font-bold uppercase tracking-widest text-[#4A57B9]">Quick actions</div><div className="mt-3 space-y-3 text-[13px] text-[#374151]"><div>• Log a new near miss</div><div>• Attach a photo or note</div><div>• Escalate before close-out</div></div></div>
-            <div className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: '#E5E7EB' }}><div className="text-[11px] font-bold uppercase tracking-widest text-[#6B7280]">Why it matters</div><p className="mt-2 text-[13px] leading-5" style={{ color: '#4B5563' }}>Early reporting helps surface patterns before they become incidents and keeps the dashboard action-focused.</p></div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Reporting</h2>
+                <p className="mt-1 text-[13px] leading-5" style={{ color: '#6B7280' }}>Reports from the field, newest first — including those raised on the mobile app.</p>
+              </div>
+              {/* The count the API has always returned and nothing rendered. */}
+              <div className="shrink-0 text-right">
+                <div className="text-[26px] leading-none tabular-nums" style={{ color: '#4A57B9', fontWeight: 800 }}>
+                  {stats?.near_misses_count ?? 0}
+                </div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]">Total</div>
+              </div>
+            </div>
+
+            {/* Latest reports, straight off /dashboard/near-misses-recent. That
+                endpoint and its service function both already existed; no
+                component had ever called them, so the panel showed three lines
+                of static copy while real reports piled up behind it. */}
+            <div className="mt-4 flex-1 rounded-2xl border bg-[#F8FBFF] p-4" style={{ borderColor: '#E3EAF8' }}>
+              <div className="text-[11px] font-bold uppercase tracking-widest text-[#4A57B9]">Latest reports</div>
+              {nearMisses.length === 0 ? (
+                <p className="mt-3 text-[13px]" style={{ color: '#9CA3AF' }}>No near misses reported yet.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {nearMisses.map((nm) => (
+                    <button
+                      key={nm.id}
+                      type="button"
+                      onClick={() => navigate('/near-miss/tracking')}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[11px] tabular-nums" style={{ color: '#4A57B9', fontWeight: 700 }}>
+                          NEA-{nm.id}
+                        </span>
+                        <span className="truncate text-[13px]" style={{ color: '#374151' }}>
+                          {nm.description || 'No description'}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px]" style={{ color: '#6B7280' }}>
+                        <span>{nm.location}</span>
+                        <span>· {nm.reporter}</span>
+                        {nm.event_date_time && (
+                          <span>· {new Date(nm.event_date_time).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button onClick={() => navigate('/near-miss')} className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-6 py-3 text-[14px] text-white transition-transform duration-150 hover:scale-[1.01]" style={{ background: 'linear-gradient(135deg, #5565C1 0%, #6E7BDB 100%)', boxShadow: '0 8px 18px rgba(81, 96, 186, 0.28)', fontWeight: 600 }}>Open Near Miss Reporting</button>
           </div>
         </div>

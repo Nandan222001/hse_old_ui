@@ -166,13 +166,33 @@ def get_leading_indicators(
     latest_audit_dt = _org_filter(
         db.query(func.max(Audit.submitted_at)), Audit, org_id
     ).filter(Audit.submitted_at.isnot(None)).scalar()
+    # Near misses anchor the window too — see why below.
+    latest_near_miss_dt = _org_filter(
+        db.query(func.max(NearMiss.event_date_time)), NearMiss, org_id
+    ).scalar()
 
     # If user passed explicit date window, respect it; otherwise anchor on data
     if start_date or end_date:
         data_window_end = end_date or date.today()
         data_window_start = start_date or None
     else:
-        data_window_end = latest_incident_dt.date() if latest_incident_dt else date.today()
+        # Anchored on the latest *event of any counted kind*, not on the latest
+        # incident alone.
+        #
+        # near_miss_ratio divides near misses by recordable incidents over this
+        # window. Ending it at the last incident capped the numerator there
+        # while near misses kept arriving — every one reported from the mobile
+        # app since the last incident fell outside the window, so the tile sat
+        # frozen no matter how many were logged. That is the opposite of what a
+        # *leading* indicator is for: near-miss reporting is supposed to move
+        # before the next incident does, not wait for one.
+        #
+        # Extending the end date keeps both sides of the ratio on the same
+        # window, so the methodology is unchanged — the denominator simply has
+        # no incidents in the extension, which is precisely the good news the
+        # ratio is meant to show.
+        anchors = [d for d in (latest_incident_dt, latest_near_miss_dt) if d]
+        data_window_end = max(anchors).date() if anchors else date.today()
         data_window_start = None
 
     latest_date = data_window_end
