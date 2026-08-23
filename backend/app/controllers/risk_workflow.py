@@ -81,4 +81,5 @@ router = build_workflow_router(
         "risk_title", "risk_category", "likelihood", "consequence",
         "risk_score", "existing_controls", "suggested_controls", "hazard_id",
     ],
+    noun="risk report",
 )

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity,
 } from 'react-native';
-import { MapPin, AlertTriangle, Zap, Wrench, ShieldAlert, FileText, ChevronRight } from 'lucide-react-native';
+import { MapPin, AlertTriangle, Zap, Wrench, ShieldAlert, FileText, ChevronRight, TriangleAlert } from 'lucide-react-native';
 import type { ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
 
@@ -49,6 +49,13 @@ export function MgrRisk({ setCurrentScreen }: ScreenProps) {
         <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('hazard_register')}>
           <ShieldAlert size={18} color="#0B3D91" />
           <Text style={styles.navText}>Hazard Register</Text>
+          <ChevronRight size={16} color="#94A3B8" />
+        </TouchableOpacity>
+        {/* Near misses, unsafe acts and risk reports run the same eight stages
+            as the register next to it, and are read together. */}
+        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('report_approvals')}>
+          <TriangleAlert size={18} color="#0B3D91" />
+          <Text style={styles.navText}>Near Misses & Observations</Text>
           <ChevronRight size={16} color="#94A3B8" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('policy_management')}>

@@ -1,5 +1,6 @@
 import { apiClient } from '../api/client';
 import { reportWorkflowEndpoints, type ReportType } from '../api/endpoints';
+import type { WorkflowStageKey } from './workflowStages';
 
 /**
  * Drives the Worker→Supervisor→Manager workflow for any report type.
@@ -22,6 +23,22 @@ export interface ReportListItem {
   reported_at: string | null;
   acknowledged_at: string | null;
   created_at: string | null;
+
+  // Stage 02 ASSESS. Queues rank on the assessed priority, not on the
+  // reporter's severity guess.
+  assessed_priority: string | null;
+  is_hipo: boolean | null;
+  response_due_at: string | null;
+
+  // Enough to draw the eight-stage rail on a card without opening the record.
+  // The API has sent these since the factory learned the stages; they were
+  // simply missing from this type, so every screen reading a queue row had to
+  // cast to `any` to render a rail.
+  stage: WorkflowStageKey | null;
+  stage_number: number | null;
+  stage_label: string | null;
+  completed_stages: WorkflowStageKey[];
+  total_stages: number | null;
 }
 
 export interface ReportDetail extends ReportListItem {
@@ -29,6 +46,15 @@ export interface ReportDetail extends ReportListItem {
   immediate_actions_taken: string | null;
   escalation_reason: string | null;
   closure_notes: string | null;
+  investigation_completed_at: string | null;
+  escalated_at: string | null;
+  approved_at: string | null;
+  closed_at: string | null;
+  assessed_label: string | null;
+  assessment_trace: string | null;
+  requires_systemic_rca: boolean | null;
+  min_investigator: string | null;
+  /** Type-specific columns — near misses carry potential_consequence etc. */
   details: Record<string, any>;
 }
 
@@ -39,6 +65,108 @@ export interface InvestigatePayload {
   supervisor_signature?: string;
   /** Raising this to high/critical routes straight to the manager. */
   severity?: string;
+
+  // ── Stage 05 IMPROVE ────────────────────────────────────────────────────────
+  // The corrective action raised off the investigation. Without one there is
+  // nothing to improve and nothing whose effectiveness could be confirmed, and
+  // the record skips 05 and 06 entirely — which is why the form asks for it
+  // here rather than leaving it to a separate CAPA screen.
+  capa_description?: string;
+  capa_responsible_person_id?: number;
+  capa_due_date?: string;
+  capa_severity_potential?: string;
+  capa_systemic_risk?: string;
+  capa_type?: string;
+}
+
+/**
+ * The eight-stage tracker plus the one outstanding step, for a single record.
+ *
+ * Identical in shape to the incident and hazard-register equivalents, so
+ * `StageTracker` and `WorkflowStageBar` render any of the three unchanged.
+ */
+export interface TrackStage {
+  number: number;
+  key: WorkflowStageKey;
+  label: string;
+  short: string;
+  state: 'done' | 'current' | 'pending';
+}
+
+export interface ReportNextAction {
+  family: ReportType;
+  record_id: number;
+  reference: string;
+  workflow_status: string | null;
+  stage: WorkflowStageKey | null;
+  stage_number: number | null;
+  stage_label: string | null;
+  is_closed: boolean;
+  /** May this user perform the step at all? */
+  can_act: boolean;
+  /** Is it *their* step, rather than one they merely outrank? */
+  is_mine: boolean;
+  next_action: {
+    action: string;
+    detail: string;
+    owner_role: string;
+    route: string;
+    cta: string;
+    unblocks: string | null;
+  } | null;
+  track: TrackStage[];
+}
+
+/** One row of "what is waiting on me". */
+export interface ReportNextActionItem {
+  family: ReportType;
+  id: number;
+  reference: string;
+  description: string;
+  priority: string | null;
+  severity_label: string | null;
+  /** The reporter's severity, for pre-selecting the investigation form. */
+  severity: string | null;
+  workflow_status: string | null;
+  stage: WorkflowStageKey | null;
+  stage_number: number | null;
+  stage_label: string | null;
+  action: string;
+  detail: string;
+  cta: string;
+  route: string;
+  unblocks: string | null;
+  owner_role: string;
+  is_mine: boolean;
+  can_act: boolean;
+  /** The corrective action holding an IMPROVE row, when there is one. */
+  subject: {
+    id: number;
+    reference: string;
+    description: string;
+    due_date: string | null;
+    open_count: number;
+  } | null;
+  is_hipo: boolean;
+  is_recurring: boolean;
+  is_overdue: boolean;
+  due_at: string | null;
+  station_name: string | null;
+  waiting_since: string | null;
+}
+
+/** Somebody a corrective action can be made accountable to. */
+export interface CapaOwner {
+  employee_id: number;
+  name: string;
+  department: string;
+  role: string;
+}
+
+export interface ReportNextActionQueue {
+  count: number;
+  items: ReportNextActionItem[];
+  mine_count: number;
 }
 
 export interface ClosePayload {
@@ -126,7 +254,66 @@ export function reportWorkflowService(type: ReportType) {
       return data;
     },
 
+    /**
+     * Who the corrective action can be assigned to. Fetched by the
+     * investigation form: an action raised with no owner reaches nobody's task
+     * list, so IMPROVE has nobody accountable for it.
+     */
+    async getCapaOwners(): Promise<CapaOwner[]> {
+      const { data } = await apiClient.get(E.CAPA_ASSIGNABLE_OWNERS);
+      return data ?? [];
+    },
+
+    /**
+     * Stage 05 IMPROVE — mark one corrective action done.
+     *
+     * The record only leaves IMPROVE when its *last* action closes, which the
+     * backend checks; this returns what the record advanced to, if anything.
+     */
+    async completeCapa(capaId: number, effectivenessRating?: number) {
+      const { data } = await apiClient.post(E.CAPA_COMPLETE(capaId), {
+        effectiveness_rating: effectivenessRating,
+      });
+      return data as { subject_advanced_to?: string | null };
+    },
+
     // ── Shared ────────────────────────────────────────────────────────────────
+    /**
+     * The whole lifecycle, closed records included, optionally one stage at a
+     * time. The two queues only ever show what is still waiting on somebody, so
+     * this is the only way to look back at what was closed.
+     */
+    async getAll(opts: { stage?: string; includeClosed?: boolean; limit?: number } = {}) {
+      const { data } = await apiClient.get(E.ALL, {
+        params: {
+          stage: opts.stage,
+          include_closed: opts.includeClosed ?? true,
+          limit: opts.limit ?? 100,
+        },
+      });
+      return (data ?? []) as ReportListItem[];
+    },
+
+    /**
+     * Every open record of this type waiting on this user, with the exact step.
+     *
+     * `mineOnly` false returns steps this role merely outranks as well, each
+     * flagged `is_mine: false` — which is what lets a screen say "waiting on the
+     * manager" rather than showing an empty list.
+     */
+    async getNextActions(mineOnly = true, limit = 50): Promise<ReportNextActionQueue> {
+      const { data } = await apiClient.get(E.NEXT_ACTIONS, {
+        params: { mine_only: mineOnly, limit },
+      });
+      return data ?? { count: 0, items: [], mine_count: 0 };
+    },
+
+    /** Stage tracker + the one outstanding step, for one record's screen. */
+    async getNextAction(id: number): Promise<ReportNextAction> {
+      const { data } = await apiClient.get(E.NEXT_ACTION(id));
+      return data;
+    },
+
     async getStats(): Promise<WorkflowStats> {
       const { data } = await apiClient.get(E.STATS);
       return data;

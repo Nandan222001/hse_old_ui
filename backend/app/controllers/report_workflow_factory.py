@@ -12,8 +12,12 @@ The flow, identical to incidents:
     supr    POST /{id}/investigate          → escalated (high/critical) | pending_approval
     supr    POST /{id}/escalate             → escalated
     mgr     GET  /manager-queue             (escalated | pending_approval)
-    mgr     POST /{id}/approve-investigation→ pending_approval | under_investigation (redo)
+    mgr     POST /{id}/approve-investigation→ capa_open | pending_verification | approved
+    mgr     POST /{id}/verify-effectiveness → approved | capa_open (fix did not hold)
     mgr     POST /{id}/close                → closed
+    any     GET  /next-actions              what is waiting on me, and the step it needs
+    any     GET  /{id}/next-action          the eight-stage tracker for one record
+    any     GET  /all                       the whole lifecycle, filterable by stage
 
 This module does NOT touch incidents — /incident-workflow keeps its own controller so
 the website's behaviour is unchanged.
@@ -21,11 +25,18 @@ the website's behaviour is unchanged.
 from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Type
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import text, func
 
 from app.config.database import SessionLocal
-from app.services import capa_notify, event_assessment, events, workflow_stages
+from app.services import (
+    capa_notify,
+    capa_owners,
+    event_assessment,
+    events,
+    report_next_action,
+    workflow_stages,
+)
 from app.services.events import catalogue
 from sqlalchemy.orm import Session
 
@@ -139,6 +150,7 @@ def build_workflow_router(
     build_row: Callable[[Any, Dict[str, Any]], Dict[str, Any]],
     detail_fields: List[str],
     observed_at_field: str = "observed_date_time",
+    noun: Optional[str] = None,
 ) -> APIRouter:
     """Return a fully wired router for one report type.
 
@@ -147,15 +159,20 @@ def build_workflow_router(
     `detail_fields` are the type-specific columns surfaced in the response `details`.
     `observed_at_field` names the column holding when the event was seen — near misses
     call it `event_date_time`, so it cannot be hardcoded.
+    `noun` is what the record is called in a message shown to a person. It is
+    separate from `tag`, which names the group in the OpenAPI docs: the mobile
+    screens now surface these details verbatim, and "This Near Miss Workflow is
+    at stage 5" is not a sentence to put in front of a supervisor.
     """
+    noun = noun or report_type.replace("_", " ")
     router = APIRouter(prefix=prefix, tags=[tag])
 
     def _get(db: Session, record_id: int, org_id: Optional[int]):
         row = db.query(model).filter(model.id == record_id).first()
         if not row:
-            raise HTTPException(status_code=404, detail=f"{tag} {record_id} not found")
+            raise HTTPException(status_code=404, detail=f"{noun.capitalize()} {record_id} not found")
         if org_id is not None and row.organisation_id not in (None, org_id):
-            raise HTTPException(status_code=404, detail=f"{tag} {record_id} not found")
+            raise HTTPException(status_code=404, detail=f"{noun.capitalize()} {record_id} not found")
         return row
 
     def _respond(row) -> ReportWorkflowResponse:
@@ -202,6 +219,33 @@ def build_workflow_router(
             total_stages=_stage.get("total_stages"),
             details={f: getattr(row, f, None) for f in detail_fields},
         )
+
+    def _statuses_in_stage(stage_key: str) -> List[str]:
+        """Every workflow_status this family maps onto one stage.
+
+        Derived from the same status->stage table the responses use, so a filter
+        chip and the rail it filters on can never disagree.
+        """
+        want = (stage_key or "").strip().upper()
+        mapping = workflow_stages.FAMILY_MAPPINGS.get(report_type, {})
+        return [status_name for status_name, key in mapping.items() if key == want]
+
+    def _reference(record_id: int) -> str:
+        """NEA-12 / UNS-12 / RIS-12 — the same three-letter form the closure
+        event publishes, so a queue row and an audit trail entry name the record
+        identically."""
+        return f"{report_type.upper().replace('_', '')[:3]}-{record_id}"
+
+    def _station_names(db: Session, rows) -> Dict[int, str]:
+        """Station id -> name for a page of rows, in one query."""
+        ids = {r.location_station_id for r in rows if r.location_station_id}
+        if not ids:
+            return {}
+        found = db.execute(
+            text("SELECT id, station_name FROM working_stations WHERE id IN :ids"),
+            {"ids": tuple(ids)},
+        ).mappings().all()
+        return {r["id"]: r["station_name"] for r in found}
 
     def _list(rows) -> List[ReportListItem]:
         out = []
@@ -320,7 +364,7 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"view pending {tag}")
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"view pending {noun} reports")
         rows = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
@@ -339,7 +383,7 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"acknowledge {tag}")
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"acknowledge a {noun}")
         row = _get(db, record_id, current_user.org_id)
         row.workflow_status = "acknowledged"
         row.acknowledged_at = datetime.now()
@@ -360,13 +404,13 @@ def build_workflow_router(
         rejection could produce, so a record jumped from RESPOND straight to the
         end of INVESTIGATE and stage 04 was never observably occupied.
         """
-        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"investigate {tag}")
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"investigate a {noun}")
         row = _get(db, record_id, current_user.org_id)
 
         if row.workflow_status not in ("acknowledged", "reported"):
             raise HTTPException(
                 status_code=400,
-                detail=f"Only an acknowledged {tag} can move into investigation",
+                detail=f"Only an acknowledged {noun} can move into investigation",
             )
 
         now = datetime.now()
@@ -393,7 +437,7 @@ def build_workflow_router(
     ):
         """Record the RCA. High/critical goes straight to the manager; the rest waits
         for manager approval."""
-        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"investigate {tag}")
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"investigate a {noun}")
         row = _get(db, record_id, current_user.org_id)
         now = datetime.now()
 
@@ -502,7 +546,7 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"escalate {tag}")
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"escalate a {noun}")
         row = _get(db, record_id, current_user.org_id)
         row.workflow_status = "escalated"
         row.escalated_at = datetime.now()
@@ -523,7 +567,7 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        _require_role(current_user.role, MANAGER_ROLES, f"view the {tag} manager queue")
+        _require_role(current_user.role, MANAGER_ROLES, f"view the {noun} manager queue")
         rows = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
@@ -549,7 +593,7 @@ def build_workflow_router(
         already complete mean VERIFY, and an investigation that raised none has
         nothing to verify and goes straight to LEARN.
         """
-        _require_role(current_user.role, MANAGER_ROLES, f"approve {tag} investigations")
+        _require_role(current_user.role, MANAGER_ROLES, f"approve {noun} investigations")
         row = _get(db, record_id, current_user.org_id)
         if payload.approved:
             row.approved_at = datetime.now()
@@ -580,13 +624,13 @@ def build_workflow_router(
         reopened, because closing something whose fix did not hold is exactly
         what this stage exists to prevent.
         """
-        _require_role(current_user.role, MANAGER_ROLES, f"verify {tag} corrective actions")
+        _require_role(current_user.role, MANAGER_ROLES, f"verify {noun} corrective actions")
         row = _get(db, record_id, current_user.org_id)
 
         if row.workflow_status not in ("pending_verification", "capa_open"):
             raise HTTPException(
                 status_code=400,
-                detail=f"This {tag} has no corrective action awaiting verification",
+                detail=f"This {noun} has no corrective action awaiting verification",
             )
         if row.workflow_status == "capa_open" and _has_open_capa(db, report_type, row.id):
             raise HTTPException(
@@ -620,6 +664,23 @@ def build_workflow_router(
         db.commit()
         db.refresh(row)
         return _respond(row)
+
+    @router.get("/capa/assignable-owners")
+    def capa_assignable_owners(
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Who the corrective action raised at stage 04 can be assigned to.
+
+        Without this the supervisor's investigation form had no owner picker, so
+        every corrective action raised off a near miss, unsafe act or risk was
+        created with `responsible_person_id` null. An unowned action reaches
+        nobody's task list and nobody is accountable for it — which is the whole
+        point of IMPROVE — and the record then sits in stage 05 until a manager
+        happens to sign it off from their own queue.
+        """
+        _require_role(current_user.role, ALL_ELEVATED_ROLES, f"assign {noun} corrective actions")
+        return capa_owners.assignable_owners(db, current_user.org_id)
 
     @router.get("/capa/my-actions")
     def my_capa_actions(
@@ -706,11 +767,11 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        _require_role(current_user.role, MANAGER_ROLES, f"close {tag}")
+        _require_role(current_user.role, MANAGER_ROLES, f"close a {noun}")
         row = _get(db, record_id, current_user.org_id)
 
         if row.workflow_status == "closed":
-            raise HTTPException(status_code=400, detail=f"This {tag} is already closed")
+            raise HTTPException(status_code=400, detail=f"This {noun} is already closed")
 
         # Stage 08 is the end of the ring, not a shortcut across it. Closure
         # requires the record to have reached LEARN, meaning its RCA was
@@ -722,7 +783,7 @@ def build_workflow_router(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"This {tag} is at stage {st.get('stage_number')} "
+                    f"This {noun} is at stage {st.get('stage_number')} "
                     f"{st.get('stage_label') or row.workflow_status} and cannot be closed yet. "
                     "It must clear investigation approval, corrective action and effectiveness "
                     "verification first."
@@ -783,7 +844,7 @@ def build_workflow_router(
         Closed records are the ones worth verifying — the auditor is confirming
         that a control someone signed off is actually real.
         """
-        _require_role(current_user.role, ALL_READ_ROLES, f"view the {tag} audit list")
+        _require_role(current_user.role, ALL_READ_ROLES, f"view the {noun} audit list")
         rows = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
@@ -807,7 +868,7 @@ def build_workflow_router(
         Only an auditor may do this, and it never changes workflow_status — the
         assurance layer observes the chain, it does not drive it.
         """
-        _require_role(current_user.role, AUDITOR_ROLES, f"verify {tag}")
+        _require_role(current_user.role, AUDITOR_ROLES, f"verify a {noun}")
         row = _get(db, record_id, current_user.org_id)
 
         row.auditor_verified_by = _employee_id_for(db, current_user.user_id)
@@ -821,6 +882,186 @@ def build_workflow_router(
     # ══════════════════════════════════════════════════════════════════════════
     # SHARED
     # ══════════════════════════════════════════════════════════════════════════
+    @router.get("/all", response_model=List[ReportListItem])
+    def list_all(
+        stage: Optional[str] = Query(None, description="One of the eight stage keys"),
+        include_closed: bool = Query(True),
+        skip: int = 0,
+        limit: int = Query(100, le=300),
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Every record of this type, for a screen that browses the lifecycle.
+
+        The two queues answer "what is waiting on me"; neither can show a record
+        that has moved on, so a manager could not look back at what was closed
+        last week without leaving the app. `stage` filters on the derived stage
+        rather than the raw status, because the stage is what the screen's
+        filter chips are labelled with.
+        """
+        _require_role(current_user.role, ALL_READ_ROLES, f"list {noun} reports")
+        q = db.query(model).filter(model.organisation_id == current_user.org_id)
+        if not include_closed:
+            # NULL-safe: `!= 'closed'` is NULL for a row with no status, which
+            # would drop it from the open list *and* the closed one, so a legacy
+            # record with an unset status would exist in no view at all.
+            q = q.filter(
+                (model.workflow_status.is_(None)) | (model.workflow_status != "closed")
+            )
+        if stage:
+            # Filtered in SQL, not after the fact: post-filtering a page would
+            # silently return fewer rows than `limit` whenever the stage's
+            # records sat further down the table than the page reached.
+            wanted = _statuses_in_stage(stage)
+            if not wanted:
+                return []
+            q = q.filter(model.workflow_status.in_(wanted))
+        rows = q.order_by(model.id.desc()).offset(skip).limit(limit).all()
+        return _list(rows)
+
+    @router.get("/next-actions")
+    def my_next_actions(
+        mine_only: bool = Query(True, description="Only steps this role actually owns"),
+        limit: int = Query(50, le=200),
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Every open record of this type waiting on this user, and the step it needs.
+
+        The report families had queues that listed records but never said what
+        was owed on one, so a near miss could sit in IMPROVE indefinitely with a
+        single unsigned corrective action holding it and nothing on screen
+        saying so. This is the same answer `/incident-workflow/next-actions`
+        gives, from the same resolver, for the other three families.
+        """
+        rows = (
+            db.query(model)
+            .filter(model.organisation_id == current_user.org_id)
+            .filter(model.workflow_status != "closed")
+            .order_by(model.id.desc())
+            .limit(300)
+            .all()
+        )
+        if not rows:
+            return {"count": 0, "items": [], "mine_count": 0}
+
+        # Open corrective actions in one query, so the IMPROVE rows can name
+        # what is actually outstanding instead of saying "a corrective action".
+        from app.models.capa_action import CapaAction
+
+        capa_rows = (
+            db.query(
+                CapaAction.subject_id,
+                func.count(CapaAction.id).label("open_count"),
+                func.min(CapaAction.id).label("first_id"),
+                func.min(CapaAction.description).label("first_description"),
+                func.min(CapaAction.due_date).label("first_due"),
+            )
+            .filter(CapaAction.subject_family == report_type)
+            .filter(CapaAction.subject_id.in_([r.id for r in rows]))
+            .filter(
+                (CapaAction.status.is_(None))
+                | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])
+            )
+            .group_by(CapaAction.subject_id)
+            .all()
+        )
+        capa_by_record = {c.subject_id: c for c in capa_rows}
+
+        station_names = _station_names(db, rows)
+        now = datetime.now()
+        items = []
+        mine_count = 0
+
+        for r in rows:
+            info = report_next_action.describe(report_type, r.workflow_status, current_user.role)
+            nxt = info["next_action"]
+            if not nxt:
+                continue
+            if info["is_mine"]:
+                mine_count += 1
+            elif mine_only:
+                continue
+
+            detail = nxt["detail"]
+            subject = None
+            capa = capa_by_record.get(r.id)
+            if info["stage"] == workflow_stages.IMPROVE and capa:
+                subject = {
+                    # The id, not just the reference: a screen offering to sign
+                    # the action off has to be able to address it.
+                    "id": int(capa.first_id),
+                    "reference": f"CAPA-{capa.first_id:06d}",
+                    "description": (capa.first_description or "")[:120],
+                    "due_date": capa.first_due.isoformat() if capa.first_due else None,
+                    "open_count": int(capa.open_count),
+                }
+                detail = (
+                    f"{capa.open_count} corrective action"
+                    f"{'s' if capa.open_count != 1 else ''} still open."
+                )
+
+            due = getattr(r, "response_due_at", None)
+            waiting_since = r.reported_at or r.created_at
+            items.append({
+                "family": report_type,
+                "id": r.id,
+                "reference": _reference(r.id),
+                "description": (r.description or "")[:140],
+                "priority": getattr(r, "assessed_priority", None),
+                "severity_label": getattr(r, "assessed_label", None),
+                # The reporter's own severity, which the investigation form
+                # pre-selects so the supervisor corrects it rather than
+                # retyping it. Distinct from `priority`, which is what the
+                # assessor concluded.
+                "severity": r.severity,
+                "workflow_status": r.workflow_status,
+                "stage": info["stage"],
+                "stage_number": info["stage_number"],
+                "stage_label": info["stage_label"],
+                "action": nxt["action"],
+                "detail": detail,
+                "cta": nxt["cta"],
+                "route": nxt["route"],
+                "unblocks": nxt["unblocks"],
+                "owner_role": nxt["owner_role"],
+                "is_mine": info["is_mine"],
+                "can_act": info["can_act"],
+                "subject": subject,
+                "is_hipo": bool(getattr(r, "is_hipo", 0)),
+                "is_recurring": bool(getattr(r, "is_recurring_pattern", 0)),
+                "is_overdue": bool(due and due < now),
+                "due_at": due.isoformat() if due else None,
+                "station_name": station_names.get(r.location_station_id or 0),
+                "waiting_since": waiting_since.isoformat() if waiting_since else None,
+            })
+
+        # Overdue first, then P1..P5, then longest waiting. An unassessed record
+        # sorts last on priority but not out of the list — it still needs somebody.
+        items.sort(key=lambda i: (
+            not i["is_overdue"],
+            i["priority"] or "P9",
+            i["waiting_since"] or "9999",
+        ))
+        return {"count": len(items[:limit]), "items": items[:limit], "mine_count": mine_count}
+
+    @router.get("/{record_id}/next-action")
+    def next_action_detail(
+        record_id: int,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Stage tracker + the one outstanding step, for the record's own screen."""
+        row = _get(db, record_id, current_user.org_id)
+        info = report_next_action.describe(report_type, row.workflow_status, current_user.role)
+        return {
+            "family": report_type,
+            "record_id": row.id,
+            "reference": _reference(row.id),
+            **info,
+            "track": report_next_action.stage_track(report_type, row.workflow_status),
+        }
+
     @router.get("/stats/summary")
     def workflow_stats(
         db: Session = Depends(get_db),

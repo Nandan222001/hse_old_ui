@@ -30,6 +30,7 @@ import { MgrAssignActions } from "./components/MgrAssignActions";
 import { ComplianceApprovalsView } from "./components/ComplianceApprovals";
 import type { ManagerScreen } from "./components/types";
 import { HazardRegisterScreen } from "./components/HazardRegisterScreen";
+import { ReportApprovalsScreen } from "./components/ReportApprovalsScreen";
 import { PolicyManagementScreen } from "./components/PolicyManagementScreen";
 import { PermitApprovalsView } from "./components/PermitApprovals";
 import { AppContainerView } from "./components/AppContainer";
@@ -347,6 +348,8 @@ export function ManagerAppRoot() {
         return <ComplianceApprovalsView {...sharedProps} />;
       case "hazard_register":
         return <HazardRegisterScreen {...sharedProps} />;
+      case "report_approvals":
+        return <ReportApprovalsScreen {...sharedProps} />;
       case "policy_management":
         return <PolicyManagementScreen {...sharedProps} />;
       case "sps_dashboard":

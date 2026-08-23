@@ -108,6 +108,23 @@ export default function ReportsScreen({ navigation }: any) {
           <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
         </TouchableOpacity>
 
+        {/* Near misses run the same eight stages and, like hazards, are not in
+            Recent Submissions below — that list is incidents. A reporter who
+            never sees an outcome stops reporting, which is the one thing a near
+            miss programme cannot afford. */}
+        <TouchableOpacity
+          style={styles.registerLink}
+          onPress={() => navigation.navigate('MyNearMisses')}
+          activeOpacity={0.8}
+        >
+          <Icon name="alert-triangle" style={styles.registerIcon} color={Colors.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.registerTitle}>My Near Misses</Text>
+            <Text style={styles.registerDesc}>Follow what you reported from triage to closure</Text>
+          </View>
+          <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* New Report grid */}
         <Text style={styles.sectionTitle}>New Report</Text>
         <View style={styles.reportGrid}>

@@ -23,6 +23,7 @@ import ReportIncidentScreen from '../screens/ReportIncidentScreen';
 import ReportRiskScreen from '../screens/ReportRiskScreen';
 import LogHazardScreen from '../screens/LogHazardScreen';
 import MyHazardsScreen from '../screens/MyHazardsScreen';
+import MyNearMissesScreen from '../screens/MyNearMissesScreen';
 import SafetyChecklistScreen from '../screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
@@ -152,6 +153,9 @@ export default function AppNavigator() {
             above, which writes a one-off observation to risk_reports. */}
         <Stack.Screen name="LogHazard" component={LogHazardScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="MyHazards" component={MyHazardsScreen} options={{ presentation: 'card' }} />
+        {/* The other half of ReportNearMiss above: reporting is stage 01, this
+            is stages 02-08 as the reporter sees them. */}
+        <Stack.Screen name="MyNearMisses" component={MyNearMissesScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="Permits" component={PermitsScreen} options={{ presentation: 'card' }} />

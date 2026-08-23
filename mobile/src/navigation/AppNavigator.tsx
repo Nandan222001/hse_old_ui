@@ -75,6 +75,7 @@ import ReportIncidentScreen from '../worker/screens/ReportIncidentScreen';
 import ReportRiskScreen from '../worker/screens/ReportRiskScreen';
 import LogHazardScreen from '../worker/screens/LogHazardScreen';
 import MyHazardsScreen from '../worker/screens/MyHazardsScreen';
+import MyNearMissesScreen from '../worker/screens/MyNearMissesScreen';
 import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
@@ -347,6 +348,7 @@ export function AppNavigator() {
                   above, which writes a one-off observation to risk_reports. */}
               <Stack.Screen name="LogHazard" component={LogHazardScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="MyHazards" component={MyHazardsScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="MyNearMisses" component={MyNearMissesScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />

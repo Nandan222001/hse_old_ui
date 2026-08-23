@@ -37,10 +37,10 @@ export const ENDPOINTS = {
     STATS:  '/supervisor/dashboard',
     ALERTS: '/supervisor/alerts',
   },
-  // The eight-stage lifecycle. START_INVESTIGATION (03->04) and
-  // VERIFY_EFFECTIVENESS (06->07) exist on /incident-workflow only — the other
-  // three report families still run the shorter factory workflow, so they are
-  // deliberately absent from reportWorkflowEndpoints below.
+  // The eight-stage lifecycle. Every verb here now has a twin on the other
+  // three report families — see `reportWorkflowEndpoints` below, which the
+  // factory router builds from one definition, so a near miss runs exactly the
+  // stages an incident does.
   INCIDENT_WORKFLOW: {
     ACKNOWLEDGE: (id: string) => `/incident-workflow/${id}/acknowledge`,
     START_INVESTIGATION: (id: string) => `/incident-workflow/${id}/start-investigation`,
@@ -102,7 +102,18 @@ export const reportWorkflowEndpoints = (type: ReportType) => {
     // Stage 05 IMPROVE — corrective actions raised off this report type
     CAPA_MY_ACTIONS: `${base}/capa/my-actions`,
     CAPA_COMPLETE: (id: string | number) => `${base}/capa/${id}/complete`,
+    // Supervisors, not workers — a corrective action is a control change and
+    // the accountable owner is the supervisor for that area.
+    CAPA_ASSIGNABLE_OWNERS: `${base}/capa/assignable-owners`,
+    // "What do I do next" — the queue for a dashboard, and the stage tracker
+    // plus outstanding step for one record. Both read the same backend
+    // resolver, so a list and a detail screen cannot disagree.
+    NEXT_ACTIONS: `${base}/next-actions`,
+    NEXT_ACTION: (id: string | number) => `${base}/${id}/next-action`,
     // Shared
+    // ALL is the whole lifecycle including closed records — the two queues only
+    // ever show what is still waiting on somebody.
+    ALL: `${base}/all`,
     STATS: `${base}/stats/summary`,
     DETAIL: (id: string | number) => `${base}/${id}`,
   };

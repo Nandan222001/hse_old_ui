@@ -17,7 +17,7 @@ from app.core.dependencies import get_current_user, CurrentUser
 from app.models.incident import Incident
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
-from app.services import events, statutory_reporting
+from app.services import capa_owners, events, statutory_reporting
 from app.services.events import catalogue
 from app.services.capa_priority import prioritise
 from app.services.incident_severity import classify_severity
@@ -1369,42 +1369,10 @@ def capa_assignable_owners(
 ):
     """Who a corrective action can be assigned to.
 
-    Supervisors, not workers. A CAPA is a control change — refit a guard, rewrite
-    a procedure, retrain a crew — and the accountable person is the supervisor
-    who owns that area. `/assigned-tasks/assignable-workers` deliberately lists
-    only `operator` logins and is the wrong list for this: it is for handing a
-    worker a task, not for owning a corrective action.
-
-    Scoped by the *user's* organisation, not the employee's. In this database
-    the two disagree — supervisor01's login is org 4 while employee 103 is org 1
-    — and the login is what determines the tenant a person actually works in.
-    Filtering on the employee row would return an empty list here.
+    The query lives in `app.services.capa_owners` so the report families offer
+    the identical list — see that module for why supervisors and not workers.
     """
-    rows = db.execute(
-        text(
-            "SELECT e.id, e.full_name, d.department_name AS department, ar.name AS role_name "
-            "FROM users u "
-            "JOIN employees e ON e.id = u.employee_id "
-            "JOIN app_roles ar ON ar.id = u.app_role_id "
-            "LEFT JOIN departments d ON e.department_id = d.id "
-            "WHERE u.organisation_id = :org "
-            "AND u.is_active = 1 "
-            "AND (e.active_status IS NULL OR e.active_status = 'Active') "
-            "AND LOWER(ar.name) IN ('supervisor', 'safety_manager') "
-            "ORDER BY e.full_name"
-        ),
-        {"org": current_user.org_id},
-    ).mappings().all()
-
-    return [
-        {
-            "employee_id": r["id"],
-            "name": r["full_name"],
-            "department": r["department"] or "",
-            "role": r["role_name"],
-        }
-        for r in rows
-    ]
+    return capa_owners.assignable_owners(db, current_user.org_id)
 
 
 @router.get("/capa/my-actions")

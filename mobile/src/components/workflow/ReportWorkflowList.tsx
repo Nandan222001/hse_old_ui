@@ -1,22 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text,
+  TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
 import { EmptyState } from '../feedback/EmptyState';
+import { WorkflowStageBar } from './WorkflowStageBar';
 import { InvestigationFormModal } from './InvestigationFormModal';
 import { useReportWorkflow } from '../../hooks/useReportWorkflow';
 import type { ReportType } from '../../api/endpoints';
-import type { InvestigatePayload, ReportListItem } from '../../services/reportWorkflowService';
+import type { InvestigatePayload, ReportNextActionItem } from '../../services/reportWorkflowService';
 
 /**
- * The supervisor's review queue for one report type.
+ * The supervisor's half of one report family, run on the eight-stage engine.
  *
- * Near miss, unsafe act and risk share this because the backend gives all three the
- * identical verbs — only the title and the worker's wording differ. Incidents keep
- * their own screen: they carry CAPA and days-away fields these three do not have.
+ * This used to be a flat /pending-review list: three statuses, three buttons,
+ * no stage anywhere. A supervisor could see that a near miss existed and could
+ * not see how far along it was, whether it was overdue, or — once they had
+ * submitted their investigation — whether anything was still owed and by whom.
+ * Records that moved past their step simply vanished.
+ *
+ * Which action is offered is decided by `/{type}-workflow/next-actions`, never
+ * here. The backend already refuses a verb a record is not at and words the
+ * refusal by stage; a second opinion in the client is how the two drift. Steps
+ * the supervisor does not own still render — read-only, naming whose step it
+ * is — because a supervisor chasing a report needs to know it is sitting with
+ * the manager rather than lost.
+ *
+ * Near miss, unsafe act and risk share this screen because the backend builds
+ * their routers from one factory and gives all three the identical verbs; only
+ * the title and the reporter's wording differ. Incidents keep their own screen:
+ * they carry days-away and statutory fields these three do not have.
  */
 
 interface Props {
@@ -28,29 +44,13 @@ interface Props {
   emptyIcon?: string;
 }
 
-const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
-  low: { bg: Colors.successBg, fg: Colors.success },
-  medium: { bg: Colors.warningBg, fg: Colors.warning },
-  high: { bg: Colors.criticalBg, fg: Colors.critical },
-  critical: { bg: Colors.criticalBg, fg: Colors.critical },
-};
+type Tab = 'mine' | 'open' | 'closed';
 
-/** What the supervisor can do next, given where the report currently sits.
- *
- * `under_investigation` used to read "sent back by manager — redo" because a
- * manager rejection was the only thing that could produce it. Starting an
- * investigation now sets it too, so the label describes the state rather than
- * guessing how the record got there. */
-const STATUS_LABEL: Record<string, string> = {
-  reported: 'New — needs acknowledgement',
-  acknowledged: 'Acknowledged — investigate next',
-  under_investigation: 'Under investigation',
-  pending_approval: 'Investigation submitted — with the manager',
-  escalated: 'Escalated to the manager',
-  capa_open: 'Corrective action outstanding',
-  pending_verification: 'Awaiting effectiveness verification',
-  approved: 'Verified — awaiting closure',
-  closed: 'Closed',
+/** The stages a supervisor can still hand upward from. */
+const SUPERVISOR_STATUSES = new Set(['reported', 'acknowledged', 'under_investigation']);
+
+const PRIORITY_COLOR: Record<string, string> = {
+  P1: '#DC2626', P2: '#EA580C', P3: '#CA8A04', P4: '#2563EB', P5: '#64748B',
 };
 
 function timeAgo(iso: string | null): string {
@@ -70,10 +70,15 @@ export function ReportWorkflowList({
   emptyTitle,
   emptyIcon = 'shield-checkmark-outline',
 }: Props) {
-  const { queue, isLoading, busyId, error, refresh, acknowledge, startInvestigation, investigate, escalate } =
-    useReportWorkflow(reportType, 'supervisor');
+  const {
+    queue, closed, isLoading, busyId, error, refresh,
+    acknowledge, startInvestigation, investigate, escalate,
+  } = useReportWorkflow(reportType);
+
+  const [tab, setTab] = useState<Tab>('mine');
   const [expandedId, setExpanded] = useState<number | null>(null);
-  const [investigating, setInvestigating] = useState<ReportListItem | null>(null);
+  const [investigating, setInvestigating] = useState<ReportNextActionItem | null>(null);
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     refresh();
@@ -81,98 +86,209 @@ export function ReportWorkflowList({
     return unsubscribe;
   }, [navigation, refresh]);
 
-  const submitInvestigation = async (payload: InvestigatePayload) => {
+  const mine = useMemo(() => queue.filter(i => i.is_mine), [queue]);
+
+  const submitInvestigation = useCallback(async (payload: InvestigatePayload) => {
     if (!investigating) return;
     const item = investigating;
     setInvestigating(null);
     await investigate(item.id, payload);
-  };
+  }, [investigating, investigate]);
 
-  const confirmEscalate = (item: ReportListItem) => {
-    Alert.alert('Escalate to manager?', 'The manager will take this over.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Escalate',
-        style: 'destructive',
-        onPress: () => escalate(item.id, 'Escalated by supervisor for manager review'),
-      },
-    ]);
-  };
-
-  const renderCard = (item: ReportListItem) => {
-    const sev = (item.severity ?? 'medium').toLowerCase();
-    const sevStyle = SEVERITY_STYLE[sev] ?? SEVERITY_STYLE.medium;
-    const status = item.workflow_status ?? 'reported';
-    const isBusy = busyId === item.id;
-    const isOpen = expandedId === item.id;
-
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={styles.card}
-        activeOpacity={0.85}
-        onPress={() => setExpanded(isOpen ? null : item.id)}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={styles.title} numberOfLines={isOpen ? undefined : 2}>
-            {item.description || 'No description provided'}
-          </Text>
-          <View style={[styles.badge, { backgroundColor: sevStyle.bg }]}>
-            <Text style={[styles.badgeText, { color: sevStyle.fg }]}>{sev}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sub}>
-          #{item.id} · {STATUS_LABEL[status] ?? status} · {timeAgo(item.reported_at ?? item.created_at)}
-        </Text>
-
-
-        {isBusy ? (
-          <ActivityIndicator style={styles.busy} color={Colors.primary} />
-        ) : (
-          <View style={styles.actions}>
-            {status === 'reported' && (
-              <TouchableOpacity
-                style={[styles.btn, styles.btnPrimary]}
-                onPress={() => acknowledge(item.id)}
-              >
-                <Ionicons name="checkmark-circle-outline" size={16} color={Colors.white} />
-                <Text style={styles.btnPrimaryText}>Acknowledge</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Stage 03 -> 04. Distinct from completing the investigation:
-                opening it is what puts the record visibly in INVESTIGATE while
-                the work is happening. */}
-            {status === 'acknowledged' && (
-              <TouchableOpacity
-                style={[styles.btn, styles.btnPrimary]}
-                onPress={() => startInvestigation(item.id)}
-              >
-                <Ionicons name="play-circle-outline" size={16} color={Colors.white} />
-                <Text style={styles.btnPrimaryText}>Start investigation</Text>
-              </TouchableOpacity>
-            )}
-
-            {status === 'under_investigation' && (
-              <TouchableOpacity
-                style={[styles.btn, styles.btnPrimary]}
-                onPress={() => setInvestigating(item)}
-              >
-                <Ionicons name="search-outline" size={16} color={Colors.white} />
-                <Text style={styles.btnPrimaryText}>Complete investigation</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={() => confirmEscalate(item)}>
-              <Ionicons name="arrow-up-circle-outline" size={16} color={Colors.critical} />
-              <Text style={styles.btnGhostText}>Escalate</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </TouchableOpacity>
+  const confirmEscalate = (item: ReportNextActionItem) => {
+    Alert.alert(
+      'Escalate to manager?',
+      'The manager takes this over from here. Use it when the fix is outside what you can authorise.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Escalate',
+          style: 'destructive',
+          onPress: () => escalate(item.id, 'Escalated by supervisor for manager review'),
+        },
+      ],
     );
   };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // The one form belonging to whichever stage the record is at
+  // ══════════════════════════════════════════════════════════════════════════
+  const renderStageForm = (item: ReportNextActionItem) => {
+    if (!item.can_act) {
+      return (
+        <View style={styles.blockedBox}>
+          <Ionicons name="lock-closed-outline" size={14} color={Colors.textMuted} />
+          <Text style={styles.blockedText}>
+            {item.action} — this step belongs to the {item.owner_role.replace(/_/g, ' ')}.
+          </Text>
+        </View>
+      );
+    }
+
+    switch (item.workflow_status) {
+      // ── 02 ASSESS ───────────────────────────────────────────────────────────
+      case 'reported':
+        return (
+          <>
+            <Text style={styles.fieldLabel}>ACKNOWLEDGEMENT NOTES</Text>
+            <TextInput
+              style={[styles.input, styles.multiline]}
+              multiline
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Is the area safe? Is anyone still exposed?"
+              placeholderTextColor={Colors.textMuted}
+            />
+            <PrimaryButton
+              label={item.cta}
+              onPress={() => {
+                acknowledge(item.id, notes.trim() || undefined);
+                setNotes('');
+              }}
+            />
+          </>
+        );
+
+      // ── 03 RESPOND ──────────────────────────────────────────────────────────
+      case 'acknowledged':
+        return (
+          <>
+            <Text style={styles.hint}>
+              Opening the investigation is what puts this visibly in INVESTIGATE while
+              the work is happening, rather than jumping straight to a finished write-up.
+            </Text>
+            <PrimaryButton label={item.cta} onPress={() => startInvestigation(item.id)} />
+          </>
+        );
+
+      // ── 04 INVESTIGATE ──────────────────────────────────────────────────────
+      case 'under_investigation':
+        return (
+          <>
+            <Text style={styles.hint}>
+              Record the root cause and the corrective action. Raising the severity to
+              high or critical sends it straight to the manager.
+            </Text>
+            <PrimaryButton label={item.cta} onPress={() => setInvestigating(item)} />
+          </>
+        );
+
+      default:
+        // 05 IMPROVE onwards is the CAPA owner's and the manager's. `can_act`
+        // above catches that for a plain supervisor; this catches a role that
+        // outranks the step but should still do it from the manager's screen.
+        return (
+          <View style={styles.blockedBox}>
+            <Ionicons name="arrow-forward-circle-outline" size={14} color={Colors.textMuted} />
+            <Text style={styles.blockedText}>
+              {item.action} — handled on the manager's screen.
+            </Text>
+          </View>
+        );
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  const renderCard = (item: ReportNextActionItem) => {
+    const isOpen = expandedId === item.id;
+    const isBusy = busyId === item.id;
+
+    return (
+      <View key={item.id} style={styles.card}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => {
+            setExpanded(isOpen ? null : item.id);
+            setNotes('');
+          }}
+        >
+          <View style={styles.cardHeader}>
+            <Text style={styles.title} numberOfLines={isOpen ? undefined : 2}>
+              {item.description || 'No description provided'}
+            </Text>
+            {!!item.priority && (
+              <View
+                style={[
+                  styles.badge,
+                  { backgroundColor: (PRIORITY_COLOR[item.priority] ?? Colors.textMuted) + '1A' },
+                ]}
+              >
+                <Text style={[styles.badgeText, { color: PRIORITY_COLOR[item.priority] ?? Colors.textMuted }]}>
+                  {item.priority}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.sub}>
+            {item.reference}
+            {item.severity_label ? ` · ${item.severity_label}` : ''}
+            {item.waiting_since ? ` · ${timeAgo(item.waiting_since)}` : ''}
+          </Text>
+
+          <View style={styles.metaRow}>
+            {!!item.station_name && (
+              <Text style={styles.meta}>
+                <Ionicons name="location-outline" size={11} color={Colors.textMuted} /> {item.station_name}
+              </Text>
+            )}
+            {item.is_hipo && <Text style={[styles.meta, styles.metaStop]}>HIGH POTENTIAL</Text>}
+            {item.is_recurring && <Text style={[styles.meta, styles.metaStop]}>RECURRING</Text>}
+            {item.is_overdue && <Text style={[styles.meta, styles.metaStop]}>OVERDUE</Text>}
+            {item.is_mine && <Text style={[styles.meta, styles.metaMine]}>NEEDS YOU</Text>}
+          </View>
+
+          <WorkflowStageBar stage={item} showCaption={false} />
+
+          {/* The line that answers "what now" without opening the card. */}
+          <Text style={styles.owed}>
+            <Text style={styles.owedStage}>
+              {String(item.stage_number ?? '').padStart(2, '0')} {item.stage}
+            </Text>
+            {'  '}{item.action}
+          </Text>
+          <Text style={styles.waiting}>
+            {item.is_mine ? 'Waiting on you' : `Waiting on the ${item.owner_role.replace(/_/g, ' ')}`}
+            {item.unblocks ? ` → ${item.unblocks}` : ''}
+          </Text>
+        </TouchableOpacity>
+
+        {isOpen && (
+          <View style={styles.formBox}>
+            <Text style={styles.actionHeading}>{item.detail}</Text>
+
+            {/* An IMPROVE row names the action actually holding it, so a
+                supervisor can chase the right person rather than the record. */}
+            {!!item.subject && (
+              <View style={styles.subjectBox}>
+                <Text style={styles.subjectRef}>{item.subject.reference}</Text>
+                <Text style={styles.subjectDesc}>{item.subject.description}</Text>
+                {!!item.subject.due_date && (
+                  <Text style={styles.subjectDue}>Due {item.subject.due_date}</Text>
+                )}
+              </View>
+            )}
+
+            {isBusy ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 12 }} />
+            ) : (
+              <>
+                {renderStageForm(item)}
+                {/* Only from the stages the supervisor holds. Offering it on a
+                    record already with the manager would escalate it to the
+                    person who is holding it. */}
+                {item.can_act && SUPERVISOR_STATUSES.has(item.workflow_status ?? '') && (
+                  <SecondaryButton label="Escalate to manager" onPress={() => confirmEscalate(item)} />
+                )}
+              </>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const visible = tab === 'mine' ? mine : queue;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -183,27 +299,72 @@ export function ReportWorkflowList({
         <Text style={styles.headerTitle}>{title}</Text>
       </View>
 
+      <View style={styles.tabs}>
+        {([
+          ['mine', `Needs you (${mine.length})`],
+          ['open', `All open (${queue.length})`],
+          ['closed', 'Closed'],
+        ] as Array<[Tab, string]>).map(([key, label]) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.tab, tab === key && styles.tabActive]}
+            onPress={() => setTab(key)}
+          >
+            <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <ScrollView
-        contentContainerStyle={[styles.scroll, queue.length === 0 && styles.scrollEmpty]}
+        contentContainerStyle={[styles.scroll, visible.length === 0 && styles.scrollEmpty]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
       >
         {error && <Text style={styles.error}>{error}</Text>}
 
-        {queue.length === 0 && !isLoading && !error ? (
+        {tab === 'closed' ? (
+          closed.length === 0 ? (
+            <EmptyState
+              icon="checkmark-done-outline"
+              title="Nothing closed yet"
+              subtitle="Records signed off by the manager appear here."
+            />
+          ) : (
+            closed.map(r => (
+              <View key={r.id} style={[styles.card, styles.cardClosed]}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {r.description || 'No description provided'}
+                </Text>
+                <Text style={styles.sub}>
+                  #{r.id}
+                  {r.assessed_priority ? ` · ${r.assessed_priority}` : ''}
+                  {r.reported_at ? ` · reported ${timeAgo(r.reported_at)}` : ''}
+                </Text>
+                <WorkflowStageBar stage={r} showCaption={false} />
+                <Text style={styles.closedLine}>Closed — all eight stages complete.</Text>
+              </View>
+            ))
+          )
+        ) : visible.length === 0 && !isLoading && !error ? (
           <EmptyState
             icon={emptyIcon}
-            title={emptyTitle}
-            subtitle="New worker submissions will appear here for your review."
+            title={tab === 'mine' ? 'Nothing waiting on you' : emptyTitle}
+            subtitle={
+              tab === 'mine'
+                ? 'Reports needing your acknowledgement, response or investigation appear here.'
+                : 'New worker submissions will appear here for your review.'
+            }
           />
         ) : (
-          queue.map(renderCard)
+          visible.map(renderCard)
         )}
+        <View style={{ height: 24 }} />
       </ScrollView>
 
       <InvestigationFormModal
         visible={investigating !== null}
+        reportType={reportType}
         initialSeverity={investigating?.severity}
-        reportLabel={`#${investigating?.id ?? ''} · ${investigating?.description ?? ''}`}
+        reportLabel={`${investigating?.reference ?? ''} · ${investigating?.description ?? ''}`}
         isSubmitting={busyId !== null && busyId === investigating?.id}
         onCancel={() => setInvestigating(null)}
         onSubmit={submitInvestigation}
@@ -212,46 +373,104 @@ export function ReportWorkflowList({
   );
 }
 
+// ── Small local controls ─────────────────────────────────────────────────────
+function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onPress}>
+      <Text style={styles.btnPrimaryText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={[styles.btn, styles.btnGhost]} onPress={onPress}>
+      <Text style={styles.btnGhostText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 12,
+    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
   backBtn: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.textDark, marginLeft: 12 },
-  scroll: { paddingHorizontal: 20, paddingBottom: 40 },
-  scrollEmpty: { flexGrow: 1 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.textDark },
+
+  tabs: {
+    flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: Colors.card, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  tab: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+  },
+  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabText: { fontSize: 12, fontWeight: '600', color: Colors.textMuted },
+  tabTextActive: { color: Colors.white },
+
+  scroll: { padding: 16 },
+  scrollEmpty: { flexGrow: 1, justifyContent: 'center' },
   error: { color: Colors.critical, fontSize: 13, marginBottom: 12, textAlign: 'center' },
+
   card: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    backgroundColor: Colors.card, borderRadius: 14, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    gap: 12,
+  cardClosed: { opacity: 0.85 },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  title: { flex: 1, fontSize: 14.5, fontWeight: '700', color: Colors.textDark, lineHeight: 20 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgeText: { fontSize: 11, fontWeight: '800' },
+  sub: { fontSize: 11.5, color: Colors.textMuted, marginTop: 4 },
+
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 },
+  meta: { fontSize: 10.5, color: Colors.textMuted, fontWeight: '700' },
+  metaStop: { color: Colors.critical },
+  metaMine: { color: Colors.primary },
+
+  owed: { fontSize: 13, color: Colors.textDark, lineHeight: 18, marginTop: 2 },
+  owedStage: { fontSize: 10.5, fontWeight: '800', color: Colors.primary, letterSpacing: 0.5 },
+  waiting: { fontSize: 11, color: Colors.textMuted, marginTop: 3, fontWeight: '600' },
+  closedLine: { fontSize: 12, color: Colors.success, fontWeight: '700', marginTop: 2 },
+
+  formBox: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
+  actionHeading: { fontSize: 12.5, color: Colors.textMid, lineHeight: 18, marginBottom: 10 },
+
+  subjectBox: {
+    backgroundColor: Colors.background, borderRadius: 10, padding: 11, marginBottom: 10,
   },
-  title: { fontSize: 14, fontWeight: '700', color: Colors.textDark, flex: 1 },
-  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
-  sub: { fontSize: 11, color: Colors.textMuted },
-  busy: { marginTop: 12, alignSelf: 'flex-start' },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+  subjectRef: { fontSize: 11, fontWeight: '800', color: Colors.primary, letterSpacing: 0.4 },
+  subjectDesc: { fontSize: 12.5, color: Colors.textDark, lineHeight: 17, marginTop: 3 },
+  subjectDue: { fontSize: 11, color: Colors.textMuted, marginTop: 3, fontWeight: '600' },
+
+  fieldLabel: {
+    fontSize: 11, fontWeight: '800', color: Colors.textMuted,
+    letterSpacing: 0.5, marginBottom: 6,
+  },
+  hint: { fontSize: 11.5, color: Colors.textMuted, lineHeight: 16 },
+  input: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
+    color: Colors.textDark, backgroundColor: Colors.background,
+  },
+  multiline: { minHeight: 68, textAlignVertical: 'top' },
+
   btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 12, borderRadius: 10, marginTop: 12,
   },
   btnPrimary: { backgroundColor: Colors.primary },
-  btnPrimaryText: { color: Colors.white, fontSize: 12, fontWeight: '700' },
-  btnGhost: { backgroundColor: Colors.criticalBg },
-  btnGhostText: { color: Colors.critical, fontSize: 12, fontWeight: '700' },
+  btnPrimaryText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  btnGhost: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
+  btnGhostText: { color: Colors.textDark, fontSize: 13.5, fontWeight: '600' },
+
+  blockedBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: Colors.background, borderRadius: 10, padding: 12,
+  },
+  blockedText: { flex: 1, fontSize: 12, color: Colors.textMuted, lineHeight: 17 },
 });

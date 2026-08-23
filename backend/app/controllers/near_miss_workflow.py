@@ -38,4 +38,5 @@ router = build_workflow_router(
     ],
     # near_misses names its timestamp column event_date_time
     observed_at_field="event_date_time",
+    noun="near miss",
 )

@@ -26,4 +26,5 @@ router = build_workflow_router(
     create_schema=UnsafeActReport,
     build_row=_build_row,
     detail_fields=["act_type", "person_observed", "rule_violated", "corrective_advice_given"],
+    noun="unsafe act",
 )

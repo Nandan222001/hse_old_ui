@@ -10,6 +10,7 @@ export type ManagerScreen =
   | "permit_approvals"
   | "assigned_tasks"
   | "hazard_register"
+  | "report_approvals"
   | "policy_management"
   | "ai_assistant"
   // ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ──────────────────────────
