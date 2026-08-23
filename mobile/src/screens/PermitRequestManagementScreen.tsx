@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { permitWorkflowService } from '../services/permitWorkflowService';
+import { WorkflowStageBar } from '../components/workflow/WorkflowStageBar';
+import {
+  permitWorkflowService,
+  type PermitNextAction,
+} from '../services/permitWorkflowService';
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   requested:    { label: 'Awaiting your acknowledgement', color: '#F97316', bg: '#FFF7ED' },
@@ -42,6 +46,21 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
   // The eight stages ride on workflow_status, so every decision below reads it.
   const [ws, setWs] = useState(String(permit.workflow_status || 'requested').toLowerCase());
   const meta = STATUS_META[ws] || STATUS_META.requested;
+
+  // Where the permit sits and what is owed, from the backend rather than from
+  // this screen. The buttons below already matched the server's gates, but
+  // nothing told the supervisor whose step it was — so a permit waiting on the
+  // auditor's on-site check looked identical to one waiting on them.
+  const [next, setNext] = useState<PermitNextAction | null>(null);
+
+  const loadNext = useCallback(() => {
+    permitWorkflowService
+      .getNextAction(Number(permit.id))
+      .then(setNext)
+      .catch(() => setNext(null));
+  }, [permit.id]);
+
+  useEffect(() => { loadNext(); }, [loadNext, ws]);
 
   /**
    * Run one transition and take the server's word for the resulting status.
@@ -150,6 +169,27 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
         </View>
 
         <View style={styles.card}>
+          <WorkflowStageBar stage={next ?? permit} />
+          {next?.next_action ? (
+            <View style={styles.nextBox}>
+              <Text style={styles.hereLabel}>
+                YOU ARE HERE · {String(next.stage_number ?? '').padStart(2, '0')} {next.stage}
+              </Text>
+              <Text style={styles.nextAction}>{next.next_action.action}</Text>
+              <Text style={styles.nextDetail}>{next.next_action.detail}</Text>
+              <Text style={styles.waiting}>
+                {next.is_mine
+                  ? 'Waiting on you'
+                  : `Waiting on the ${next.next_action.owner_role.replace(/_/g, ' ')}`}
+                {next.next_action.unblocks ? ` → ${next.next_action.unblocks}` : ''}
+              </Text>
+            </View>
+          ) : next ? (
+            <Text style={styles.doneNote}>This permit is finished. Nothing is outstanding.</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.title}>{permit.title || 'Permit to Work'}</Text>
           <Text style={styles.ref}>{permit.permit_ref}</Text>
 
@@ -233,6 +273,14 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+  nextBox: { backgroundColor: '#F7F9FE', borderRadius: 10, padding: 12, marginTop: 10 },
+  hereLabel: {
+    fontSize: 10, fontWeight: '800', color: '#0B3D91',
+    letterSpacing: 0.6, marginBottom: 4,
+  },
+  nextAction: { fontSize: 15, fontWeight: '800', color: '#0B1C30', marginBottom: 3 },
+  nextDetail: { fontSize: 12, color: '#64748B', lineHeight: 17 },
+  waiting: { fontSize: 11, fontWeight: '800', color: '#334155', marginTop: 8 },
   root: { flex: 1, backgroundColor: '#F8F9FF' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20 },
   backBtn: { padding: 4 },

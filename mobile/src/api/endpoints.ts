@@ -142,9 +142,15 @@ export const PERMIT_WORKFLOW = {
   RESUME: (id: string | number) => `/permit-workflow/${id}/resume`,
   COMPLETE_WORK: (id: string | number) => `/permit-workflow/${id}/complete-work`,
   CLOSE: (id: string | number) => `/permit-workflow/${id}/close`,
-  // Auditor
+  // Auditor — an actor in this chain, unlike the report families: the on-site
+  // check happens while the permit is live and moves it to `verified`.
   AUDIT_LIST: '/permit-workflow/audit-list',
   VERIFY: (id: string | number) => `/permit-workflow/${id}/verify`,
+  // "What do I do next" — the queue, and the stage tracker plus outstanding
+  // step for one permit. Both read the same backend resolver, so a list and a
+  // detail screen cannot disagree.
+  NEXT_ACTIONS: '/permit-workflow/next-actions',
+  NEXT_ACTION: (id: string | number) => `/permit-workflow/${id}/next-action`,
   // Shared
   STATS: '/permit-workflow/stats/summary',
   DETAIL: (id: string | number) => `/permit-workflow/${id}`,

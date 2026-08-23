@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
+from app.services import workflow_stages
 from app.services import media_storage
 
 router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
@@ -231,6 +232,16 @@ def list_permits(
             "end_datetime": r["validity_end"].isoformat() if r["validity_end"] else date.today().isoformat() + "T16:00:00",
             "work_description": r["work_description"] or "",
             "status": r["status"].lower() if r["status"] else "pending_approval",
+            # The permit's real workflow state and its position on the eight
+            # stages. `status` above is the website's business field (Pending /
+            # Active / Closed) and says nothing about the lifecycle, so the
+            # worker's list could show a permit without showing how far along
+            # it was. Derived, never stored — see services/workflow_stages.
+            "workflow_status": r["workflow_status"],
+            **{
+                k: v for k, v in workflow_stages.describe("permit", r["workflow_status"]).items()
+                if k in ("stage", "stage_number", "stage_label", "completed_stages", "total_stages")
+            },
             "requested_by": "Alex Safety",
             "created_at": r["date_issued"].isoformat() if r["date_issued"] else date.today().isoformat(),
             "safety_gear": {

@@ -35,6 +35,19 @@ export interface Permit {
   approved_by?: string;
   created_at: string;
   safety_gear: SafetyGear;
+
+  /**
+   * The permit's real lifecycle state, and where that puts it on the eight
+   * stages. `status` above is the website's business field (Pending / Active /
+   * Closed) and says nothing about the workflow, so it cannot answer "how far
+   * along is my permit". Derived by the backend, never stored.
+   */
+  workflow_status?: string | null;
+  stage?: string | null;
+  stage_number?: number | null;
+  stage_label?: string | null;
+  completed_stages?: string[];
+  total_stages?: number | null;
 }
 
 export interface PermitListResponse {
