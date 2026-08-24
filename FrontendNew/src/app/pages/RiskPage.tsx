@@ -1,8 +1,14 @@
 import { useState, useEffect } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { OctagonAlert, ArrowRight } from "lucide-react";
+import { Link } from "react-router";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getRiskSummary, getResidualRiskTrend, getRiskMatrix, type TaskRow, type AgingBar } from "../../services/analytics.service";
+import {
+  getRiskSummary, getResidualRiskTrend, getRiskMatrix,
+  getRiskReportMatrix, getRiskReportSummary,
+  type TaskRow, type AgingBar, type RiskReportMatrix, type RiskReportSummary,
+} from "../../services/analytics.service";
 import { useAuth } from "../context/AuthContext";
+import { RiskTabBar } from "../components/audits/RiskTabBar";
 
 const matrixCols = ["Frequent 5", "Probable 4", "Occasional 3", "Remote 2", "Improbable 1"];
 const matrixRows = ["Catastrophic 5", "Significant 4", "Moderate 3", "Low 2", "Negligible 1"];
@@ -50,6 +56,50 @@ const matrixCells = [
   ],
 ];
 
+/**
+ * Band a cell of the risk-report matrix from its own arithmetic.
+ *
+ * The hazard grid above (`matrixCells`) hardcodes a tone and a score per cell,
+ * and those scores do not multiply out — the Catastrophic row reads
+ * 25/20/15/12/5 where 5x5..5x1 is 25/20/15/10/5. That grid is a hand-drawn
+ * qualitative picture, which is all `hazards` can support since it carries no
+ * score. `risk_reports` carries L x S outright, so its grid is generated from
+ * the real product and banded by the WF-01 thresholds in `risk_scoring`
+ * (21+ Critical, 15+ High, 7+ Medium, else Low) — the same thresholds that
+ * decided each plotted risk's band, so a cell's colour and the band of the
+ * risks sitting in it cannot disagree.
+ */
+/** Band -> colour. Matches risk-trail.service's BAND_COLOR and the mobile screen. */
+const BAND_TONE: Record<string, string> = {
+  Low: '#16A34A',
+  Medium: '#CA8A04',
+  High: '#EA580C',
+  Critical: '#DC2626',
+};
+
+function RiskStat({ label, value, hint, color }: Readonly<{
+  label: string; value: number | undefined; hint?: string; color?: string;
+}>) {
+  return (
+    <div className="rounded-xl border p-3" style={{ borderColor: '#E3E9F6', background: '#F9FBFF' }}>
+      <div className="text-[10.5px] uppercase tracking-[0.5px]" style={{ color: '#94A3B8', fontWeight: 700 }}>
+        {label}
+      </div>
+      <div className="mt-1 text-[22px] tabular-nums leading-none" style={{ color: color ?? '#0F172A', fontWeight: 700 }}>
+        {value ?? '—'}
+      </div>
+      {hint && <div className="mt-1 text-[10.5px]" style={{ color: '#94A3B8' }}>{hint}</div>}
+    </div>
+  );
+}
+
+function scoreTone(score: number): { tone: string; text: string } {
+  if (score >= 21) return { tone: "stop", text: "Critical" };
+  if (score >= 15) return { tone: "urgent", text: "High" };
+  if (score >= 7) return { tone: "action", text: "Medium" };
+  return { tone: "monitor", text: "Low" };
+}
+
 function toneStyle(tone: string) {
   if (tone === "stop")   return { bg: "#DC2626", text: "#FFFFFF" }; // Red = Catastrophic
   if (tone === "urgent") return { bg: "#EA580C", text: "#FFFFFF" }; // Orange = Urgent
@@ -78,6 +128,13 @@ export function RiskPage() {
   const [matrixCounts, setMatrixCounts] = useState<number[][]>(Array.from({ length: 5 }, () => Array(5).fill(0)));
   const [matrixMeta, setMatrixMeta] = useState<{ active: number; resolved: number; total: number } | null>(null);
   const [recentlyClosed, setRecentlyClosed] = useState<number>(0);
+  // The Risk section's own data. Everything above this line reads the hazard
+  // register, incidents and CAPA — which is why this page carried no risk
+  // report at all before these two calls.
+  const [riskMatrix, setRiskMatrix] = useState<RiskReportMatrix | null>(null);
+  const [riskSummary, setRiskSummary] = useState<RiskReportSummary | null>(null);
+  const [matrixSource, setMatrixSource] = useState<"risk" | "hazard">("risk");
+  const [includeClosed, setIncludeClosed] = useState(false);
 
   useEffect(() => {
     getRiskSummary().then((data) => {
@@ -96,16 +153,141 @@ export function RiskPage() {
         total: (d as any).total_hazard_count ?? 0,
       });
     }).catch(console.error);
+    getRiskReportSummary().then(setRiskSummary).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    getRiskReportMatrix(includeClosed).then(setRiskMatrix).catch(console.error);
+  }, [includeClosed]);
+
+  // ── Which grid the matrix panel is drawing ───────────────────────────────
+  //
+  // The hazard source keeps its hand-drawn cells; the risk-report source builds
+  // its own from the axis scores the API returns, so every cell's label is the
+  // real product of its row and column rather than a value typed in by hand.
+  const showRiskGrid = matrixSource === 'risk' && riskMatrix !== null;
+  const activeRows = showRiskGrid
+    ? riskMatrix!.severity_axis.map((a) => `${a.label} ${a.score}`)
+    : matrixRows;
+  const activeCols = showRiskGrid
+    ? riskMatrix!.likelihood_axis.map((a) => `${a.label} ${a.score}`)
+    : matrixCols;
+  const activeCells = showRiskGrid
+    ? riskMatrix!.severity_axis.map((sev) =>
+        riskMatrix!.likelihood_axis.map((lik) => {
+          const score = sev.score * lik.score;
+          const t = scoreTone(score);
+          return { score, text: t.text, tone: t.tone };
+        }),
+      )
+    : matrixCells;
+  const activeCounts = showRiskGrid ? riskMatrix!.counts : matrixCounts;
 
   return (
     <div className="space-y-5">
+      {/* Sub-navigation to the lifecycle tracker. This page is the analytics
+          view — the matrix, the heatmap, the trend — and carried no route to
+          the individual risk observations the mobile app raises. */}
+      <RiskTabBar />
+
       {/* Page header */}
       <div>
         <h1 className="text-[22px]" style={{ color: '#0A0A0A', fontWeight: 700 }}>
           Welcome, {user?.name ?? "User"}
         </h1>
         <p className="mt-0.5 text-[13px]" style={{ color: '#6B7280' }}>Root Cause Analysis &amp; Risk Overview</p>
+      </div>
+
+      {/* Risk reports — the records this section is named for. Everything below
+          this strip reads the hazard register, incidents and CAPA; until these
+          counts landed, a page titled Risk showed no risk report anywhere. */}
+      <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Risk Reports</div>
+            <div className="text-[11px]" style={{ color: '#9CA3AF' }}>
+              Unsafe conditions raised from the field, scored on WF-01 Likelihood × Consequence.
+            </div>
+          </div>
+          <Link
+            to="/risk/tracking"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] transition-colors"
+            style={{ background: '#EEF2FB', color: '#4A57B9', fontWeight: 700 }}
+          >
+            Lifecycle tracking <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          <RiskStat label="Open" value={riskSummary?.open} hint={`${riskSummary?.closed ?? 0} closed`} />
+          <RiskStat label="High or Critical" value={riskSummary?.high_or_critical} color="#EA580C" hint="Banded on the adjusted score" />
+          <RiskStat label="Blocking work" value={riskSummary?.blocks_work} color="#DC2626" hint="Adjusted score ≥ 15" />
+          <RiskStat label="Overdue" value={riskSummary?.overdue} color="#B45309" hint="Past the response deadline" />
+          {/* Not a failure state on its own — a risk raised minutes ago has not
+              been triaged yet. It is worth showing because an unassessed risk is
+              absent from the matrix and from every band count on this page. */}
+          <RiskStat label="Not yet assessed" value={riskSummary?.unassessed} hint="No score, so not on the matrix" />
+        </div>
+
+        {/* The worst open risks, ranked on the adjusted score rather than the
+            raw L × S: the uplifts are what turn a Medium into a work stoppage,
+            so ranking on the raw score would bury exactly the wrong records. */}
+        {riskSummary && riskSummary.top_risks.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr style={{ color: '#6B7280' }}>
+                  <th className="px-2 py-1.5 text-[11px]" style={{ fontWeight: 700 }}>Ref</th>
+                  <th className="px-2 py-1.5 text-[11px]" style={{ fontWeight: 700 }}>Risk</th>
+                  <th className="px-2 py-1.5 text-[11px]" style={{ fontWeight: 700 }}>Band</th>
+                  <th className="px-2 py-1.5 text-right text-[11px]" style={{ fontWeight: 700 }}>Score</th>
+                  <th className="px-2 py-1.5 text-[11px]" style={{ fontWeight: 700 }}>Stage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {riskSummary.top_risks.map((r) => {
+                  const band = r.band ?? '';
+                  const bandColor = BAND_TONE[band] ?? '#64748B';
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid #F1F5F9' }}>
+                      <td className="px-2 py-2 whitespace-nowrap" style={{ color: '#4A57B9', fontWeight: 700 }}>{r.reference}</td>
+                      <td className="px-2 py-2">
+                        <span style={{ color: '#1F2937' }}>{r.title ?? '—'}</span>
+                        {r.blocks_work && (
+                          <span className="ml-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+                            style={{ background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>
+                            <OctagonAlert className="h-3 w-3" /> Blocks work
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        {band ? (
+                          <span className="rounded px-1.5 py-0.5 text-[10px]"
+                            style={{ background: `${bandColor}1A`, color: bandColor, fontWeight: 700 }}>{band}</span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap" style={{ color: '#111827', fontWeight: 700 }}>
+                        {r.adjusted_risk_score ?? '—'}
+                        {r.uplift_total > 0 && (
+                          <span className="ml-1 text-[10px]" style={{ color: '#B45309', fontWeight: 600 }}>
+                            ({r.raw_risk_score ?? '?'}+{r.uplift_total})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap text-[11px]" style={{ color: '#64748B' }}>{r.stage ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {riskSummary && riskSummary.total === 0 && (
+          <div className="py-6 text-center text-[12.5px]" style={{ color: '#9CA3AF' }}>
+            No risk reports have been raised yet. They arrive here from the mobile app.
+          </div>
+        )}
       </div>
 
       {/* KPI row */}
@@ -123,7 +305,8 @@ export function RiskPage() {
         <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
           <div className="mb-1 text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Residual Risk Trend</div>
           <div className="mb-3 text-[11px]" style={{ color: '#9CA3AF' }}>
-            Estimated from incident severity mix — not a numeric Likelihood × Consequence score (that data isn't captured yet).
+            Estimated from the incident severity mix. Numeric Likelihood × Consequence scores are captured on risk reports —
+            see the Risk Matrix and the Risk Reports panel above; there are too few scored risks over time to trend them here yet.
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={residualTrend} margin={{ top: 10, right: 16, bottom: 10, left: 0 }}>
@@ -141,12 +324,47 @@ export function RiskPage() {
 
         {/* Risk Matrix */}
         <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#6BD0D7' }}>
-          <div className="mb-1 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <div className="text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Risk Matrix</div>
-            <MoreHorizontal className="h-4 w-4" style={{ color: '#64748B' }} />
+            {/* Two sources, two different tables. The grid used to draw only the
+                hazard register while sitting on the Risk page, which is the
+                whole defect this toggle fixes — the register view is kept
+                because it is genuinely useful, just no longer the only one. */}
+            <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: '#F1F5F9' }}>
+              {([['risk', 'Risk reports'], ['hazard', 'Hazard register']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setMatrixSource(key)}
+                  className="rounded-md px-2.5 py-1 text-[11px] transition-colors"
+                  style={{
+                    background: matrixSource === key ? '#FFFFFF' : 'transparent',
+                    color: matrixSource === key ? '#4A57B9' : '#64748B',
+                    fontWeight: 700,
+                    boxShadow: matrixSource === key ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mb-3 text-[11px]" style={{ color: '#9CA3AF' }}>
-            Qualitative estimate from hazard severity/probability text — not a numeric risk-assessment score.
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[11px]" style={{ color: '#9CA3AF' }}>
+            <span>
+              {matrixSource === 'risk'
+                ? 'Numeric Likelihood × Consequence from risk_reports, banded on the WF-01 thresholds.'
+                : 'Qualitative estimate from hazard severity/probability text — the register carries no numeric score.'}
+            </span>
+            {matrixSource === 'risk' && (
+              <label className="flex cursor-pointer items-center gap-1.5" style={{ color: '#64748B' }}>
+                <input
+                  type="checkbox"
+                  checked={includeClosed}
+                  onChange={(e) => setIncludeClosed(e.target.checked)}
+                />
+                Include closed
+              </label>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-center">
@@ -155,18 +373,18 @@ export function RiskPage() {
                   <th className="px-2 py-2 text-left text-[11px]" style={{ color: '#475569', fontWeight: 700 }}>
                     Impact ↓ / Likelihood →
                   </th>
-                  {matrixCols.map((col) => (
+                  {activeCols.map((col) => (
                     <th key={col} className="px-2 py-2 text-[11px]" style={{ color: '#475569', fontWeight: 700 }}>{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {matrixRows.map((row, rowIdx) => (
+                {activeRows.map((row, rowIdx) => (
                   <tr key={row}>
                     <td className="px-2 py-1.5 text-left text-[11px]" style={{ color: '#334155', fontWeight: 700 }}>{row}</td>
-                    {matrixCells[rowIdx].map((cell, colIdx) => {
+                    {activeCells[rowIdx].map((cell, colIdx) => {
                       const tone = toneStyle(cell.tone);
-                      const count = matrixCounts[rowIdx]?.[colIdx] ?? 0;
+                      const count = activeCounts[rowIdx]?.[colIdx] ?? 0;
                       return (
                         <td key={`${row}-${colIdx}`} className="px-1 py-1">
                           <div className="rounded-md px-1.5 py-1 text-center" style={{ background: tone.bg, color: tone.text }}>
@@ -190,11 +408,43 @@ export function RiskPage() {
             <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#EAB308' }} />Borderline</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded" style={{ background: '#16A34A' }} />Acceptable</span>
             <span className="ml-auto text-[11px]" style={{ color: '#94A3B8' }}>
-              Total risks: {matrixCounts.flat().reduce((a, b) => a + b, 0)}
+              {showRiskGrid
+                ? `Plotted: ${riskMatrix!.plotted} of ${riskMatrix!.total}`
+                : `Total risks: ${matrixCounts.flat().reduce((a, b) => a + b, 0)}`}
             </span>
           </div>
-          {/* Resolved / closed summary */}
-          {matrixMeta && (
+          {/* Risk-report source: what the grid could not place, and the average.
+              An unplotted risk is invisible on a matrix by definition, so the
+              count has to appear next to it or the grid silently under-reports. */}
+          {showRiskGrid && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+              {riskMatrix!.blocks_work > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-1"
+                  style={{ background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>
+                  {riskMatrix!.blocks_work} blocking work
+                </span>
+              )}
+              {riskMatrix!.average_adjusted_score !== null && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-1"
+                  style={{ background: '#EFF6FF', color: '#1D4ED8', fontWeight: 700 }}>
+                  Average adjusted score {riskMatrix!.average_adjusted_score}
+                </span>
+              )}
+              {riskMatrix!.unplotted > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-1"
+                  style={{ background: '#FEF3C7', color: '#B45309', fontWeight: 700 }}
+                  title="Their likelihood or consequence is not one of the five scale values, so they cannot be placed on the grid. They may still carry a score."
+                >
+                  {riskMatrix!.unplotted} not plottable
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Resolved / closed summary — hazard source only, since these counts
+              are the register's own resolution rule. */}
+          {!showRiskGrid && matrixMeta && (
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>
                 ✅ {matrixMeta.resolved} resolved — auto-removed
@@ -216,6 +466,11 @@ export function RiskPage() {
           <div className="mb-1 text-[16px]" style={{ color: '#111827', fontWeight: 700 }}>Risk by Zone / Site / Team</div>
           <div className="mb-3 text-[12px]" style={{ color: '#6B7280' }}>
             {zoneRisk.length} zone{zoneRisk.length !== 1 ? 's' : ''} tracked
+          </div>
+          {/* Named so it cannot be misread as risk reports by site, which is
+              what the surrounding page now otherwise shows. */}
+          <div className="-mt-2 mb-3 text-[11px]" style={{ color: '#9CA3AF' }}>
+            Ranked by recorded incidents per site.
           </div>
 
           {/* Inline legend */}

@@ -185,6 +185,74 @@ export const getResidualRiskTrend = () =>
 export const getRiskMatrix = () =>
   axiosInstance.get<{ counts: number[][] }>('/analytics/risk-matrix').then((r) => r.data);
 
+// ── Risk reports (`risk_reports`) ─────────────────────────────────────────────
+//
+// Distinct from getRiskMatrix / getRiskSummary above, which read the hazard
+// register and incidents. The Risk page was built entirely on those two and so
+// showed no risk report at all — these are what put its own data on it.
+
+export interface RiskAxisPoint {
+  /** How the console labels this row/column. */
+  label: string;
+  /** The 1-5 value it represents on the scoring scale. */
+  score: number;
+}
+
+export interface RiskReportMatrix {
+  /** counts[severityRow][likelihoodCol], worst first in both directions. */
+  counts: number[][];
+  severity_axis: RiskAxisPoint[];
+  likelihood_axis: RiskAxisPoint[];
+  bands: Record<'Low' | 'Medium' | 'High' | 'Critical', number>;
+  uplift_prevalence: Record<string, number>;
+  total: number;
+  plotted: number;
+  /**
+   * Carrying a consequence or likelihood word outside the 5x5 vocabulary, so it
+   * cannot be placed on the grid. Not the same as unscored — a risk can have a
+   * score and a band and still be unplottable.
+   */
+  unplotted: number;
+  blocks_work: number;
+  average_adjusted_score: number | null;
+  includes_closed: boolean;
+}
+
+export interface TopRisk {
+  id: number;
+  reference: string;
+  title: string | null;
+  band: string | null;
+  raw_risk_score: number | null;
+  adjusted_risk_score: number | null;
+  uplift_total: number;
+  blocks_work: boolean;
+  workflow_status: string | null;
+  stage: string | null;
+  reported_at: string | null;
+}
+
+export interface RiskReportSummary {
+  total: number;
+  open: number;
+  closed: number;
+  blocks_work: number;
+  high_or_critical: number;
+  /** Open risks with no adjusted score at all. */
+  unassessed: number;
+  overdue: number;
+  by_stage: Record<string, number>;
+  top_risks: TopRisk[];
+}
+
+export const getRiskReportMatrix = (includeClosed = false) =>
+  axiosInstance
+    .get<RiskReportMatrix>('/analytics/risk-report-matrix', { params: { include_closed: includeClosed } })
+    .then((r) => r.data);
+
+export const getRiskReportSummary = () =>
+  axiosInstance.get<RiskReportSummary>('/analytics/risk-report-summary').then((r) => r.data);
+
 // ── Violation Detail ──────────────────────────────────────────────────────────
 
 export interface ViolationDetail {

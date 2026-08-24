@@ -1703,3 +1703,208 @@ def get_violation_detail(
         "assignee": assignee,
         "due_date": first_due,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Risk reports (`risk_reports`) — the Risk section's own data
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Separate from /risk-matrix and /risk-summary above, which read `hazards` and
+# `incidents`. Those two are the whole reason this endpoint exists: the console's
+# Risk page was built on them and so contained no risk report at all — the
+# register's matrix and the incident zone heatmap under a heading that promised
+# risk. Both are left exactly as they are; the mobile manager's Risk tab and
+# controllers/ai.py read them, and neither is wrong about what it plots, only
+# about what the page around it claimed.
+#
+# The axes come from `risk_scoring.LIKELIHOOD` / `.SEVERITY` rather than a
+# mapping of this module's own. That module already exists to make "the API, the
+# mobile form and the gate engine all resolve the same words to the same
+# integers", and a fourth private vocabulary here would be the thing it was
+# written to prevent. It also makes this matrix genuinely numeric — the hazard
+# matrix has to hedge that it is a "qualitative estimate from severity text",
+# because `hazards` carries no score; `risk_reports` carries L x S outright.
+
+
+# The grid's axes, worst first, as the client labels them. Written out rather
+# than derived by sorting `risk_scoring.SEVERITY` / `.LIKELIHOOD`: both dicts
+# hold synonyms on the same integer (critical/catastrophic at 5, and two
+# spellings of almost_certain), so a sort would pick a label by dict order.
+# The `value` of each entry is the 1-5 score, which is what ties these labels
+# back to the scale and lets a reader check the order at a glance.
+_SEVERITY_AXIS = [
+    {"label": "Critical", "score": 5},
+    {"label": "Major", "score": 4},
+    {"label": "Moderate", "score": 3},
+    {"label": "Minor", "score": 2},
+    {"label": "Negligible", "score": 1},
+]
+_LIKELIHOOD_AXIS = [
+    {"label": "Almost certain", "score": 5},
+    {"label": "Likely", "score": 4},
+    {"label": "Possible", "score": 3},
+    {"label": "Unlikely", "score": 2},
+    {"label": "Rare", "score": 1},
+]
+
+
+def _risk_axis_index(value: Optional[str], scale: Dict[str, int]) -> Optional[int]:
+    """Word -> 0-based grid index, worst first.
+
+    The grid is drawn worst-to-best in both directions (row 0 is the most severe
+    consequence, column 0 the most likely), while the scoring scale runs 1-5
+    best-to-worst — hence `5 - n`. Returns None for a word the scale does not
+    know, so it is counted as unscored rather than silently landing in a cell.
+    """
+    n = scale.get((value or "").strip().lower())
+    return (5 - n) if n else None
+
+
+@router.get("/risk-report-matrix")
+def get_risk_report_matrix(
+    include_closed: bool = Query(False, description="Count closed risks too"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """The 5x5 matrix, band split and headline counts for `risk_reports`.
+
+    `counts[row][col]` is indexed exactly like the hazard matrix the console
+    already renders — row 0 the most severe consequence, column 0 the most
+    likely — so one grid component draws either source.
+
+    Open by default. A closed risk has been dealt with and leaving it on the
+    matrix would make the site look permanently worse than it is; the same
+    reasoning excludes resolved hazards from /risk-matrix.
+    """
+    from app.models.risk_report import RiskReport
+    from app.services import risk_scoring
+
+    org_id = current_user.org_id
+    q = _org_filter(db.query(RiskReport), RiskReport, org_id)
+    if not include_closed:
+        q = q.filter(func.lower(func.coalesce(RiskReport.workflow_status, "")) != "closed")
+    rows = q.all()
+
+    counts = [[0] * 5 for _ in range(5)]
+    bands = {b: 0 for b in ("Low", "Medium", "High", "Critical")}
+    uplift_prevalence = {key: 0 for key, _pts, _label in risk_scoring.UPLIFTS}
+    unplotted = 0
+    blocks_work = 0
+    scores: List[int] = []
+
+    for r in rows:
+        if r.blocks_work:
+            blocks_work += 1
+        band = (r.risk_band or "").strip().title()
+        if band in bands:
+            bands[band] += 1
+        for key, _pts, _label in risk_scoring.UPLIFTS:
+            if getattr(r, f"uplift_{key}", 0):
+                uplift_prevalence[key] += 1
+
+        row_idx = _risk_axis_index(r.consequence, risk_scoring.SEVERITY)
+        col_idx = _risk_axis_index(r.likelihood, risk_scoring.LIKELIHOOD)
+        if row_idx is None or col_idx is None:
+            # Deliberately "unplotted", not "unscored" — the two are different
+            # and the record that proves it exists in this database. A risk can
+            # carry a score and a band while still having a consequence word the
+            # 5x5 vocabulary does not know ("Serious"), because `_build_row`
+            # accepts an explicit `risk_score` and skips the L x S lookup when
+            # one is supplied. Calling that unscored would be wrong; dropping it
+            # silently would be worse, since a risk missing from the matrix is
+            # invisible on it by definition.
+            unplotted += 1
+            continue
+        counts[row_idx][col_idx] += 1
+        if r.adjusted_risk_score is not None:
+            scores.append(r.adjusted_risk_score)
+
+    plotted = sum(sum(row) for row in counts)
+    return {
+        "counts": counts,
+        # The axis this grid was actually built from, so the client labels the
+        # rows and columns with the same vocabulary rather than guessing.
+        "severity_axis": _SEVERITY_AXIS,
+        "likelihood_axis": _LIKELIHOOD_AXIS,
+        "bands": bands,
+        "uplift_prevalence": uplift_prevalence,
+        "total": len(rows),
+        "plotted": plotted,
+        "unplotted": unplotted,
+        "blocks_work": blocks_work,
+        "average_adjusted_score": round(sum(scores) / len(scores), 1) if scores else None,
+        "includes_closed": include_closed,
+    }
+
+
+@router.get("/risk-report-summary")
+def get_risk_report_summary(
+    limit: int = Query(8, le=50),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Headline counts and the worst open risks, for the Risk page's KPI strip.
+
+    "Worst" is the adjusted score, not the raw one: the adjusted score is what
+    banded the risk and decided whether work is blocked, so ranking on the raw
+    L x S would put a 16 that nobody uplifted above a 12 that three uplifts
+    turned into a work stoppage.
+    """
+    from app.models.risk_report import RiskReport
+    from app.services import workflow_stages
+
+    org_id = current_user.org_id
+    rows = _org_filter(db.query(RiskReport), RiskReport, org_id).all()
+
+    open_rows = [
+        r for r in rows
+        if (r.workflow_status or "").strip().lower() != "closed"
+    ]
+
+    by_stage = {s.key: 0 for s in workflow_stages.STAGES}
+    for r in open_rows:
+        key = workflow_stages.stage_for("risk", r.workflow_status)
+        if key:
+            by_stage[key] += 1
+
+    now = datetime.now()
+    overdue = sum(
+        1 for r in open_rows
+        if r.response_due_at and r.response_due_at < now
+    )
+
+    top = sorted(
+        (r for r in open_rows if r.adjusted_risk_score is not None),
+        key=lambda r: r.adjusted_risk_score,
+        reverse=True,
+    )[:limit]
+
+    return {
+        "total": len(rows),
+        "open": len(open_rows),
+        "closed": len(rows) - len(open_rows),
+        "blocks_work": sum(1 for r in open_rows if r.blocks_work),
+        "high_or_critical": sum(
+            1 for r in open_rows
+            if (r.risk_band or "").strip().title() in ("High", "Critical")
+        ),
+        "unassessed": sum(1 for r in open_rows if r.adjusted_risk_score is None),
+        "overdue": overdue,
+        "by_stage": by_stage,
+        "top_risks": [
+            {
+                "id": r.id,
+                "reference": f"RIS-{r.id}",
+                "title": r.risk_title or (r.description or "")[:80] or None,
+                "band": r.risk_band,
+                "raw_risk_score": r.raw_risk_score if r.raw_risk_score is not None else r.risk_score,
+                "adjusted_risk_score": r.adjusted_risk_score,
+                "uplift_total": r.uplift_total or 0,
+                "blocks_work": bool(r.blocks_work),
+                "workflow_status": r.workflow_status,
+                "stage": workflow_stages.stage_for("risk", r.workflow_status),
+                "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+            }
+            for r in top
+        ],
+    }
