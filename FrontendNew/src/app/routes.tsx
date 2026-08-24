@@ -11,6 +11,7 @@ import { HazardRegisterPage } from "./pages/HazardRegisterPage";
 import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { NearMissTrackingPage } from "./pages/NearMissTrackingPage";
 import { PermitTrackingPage } from "./pages/PermitTrackingPage";
+import { RiskTrackingPage } from "./pages/RiskTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
@@ -225,6 +226,10 @@ export const router = createBrowserRouter([
       { path: "near-miss/tracking", Component: NearMissTrackingPage },
       { path: "permits/tracking", Component: PermitTrackingPage },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
+      // The Risk section's second tab. Its own top-level path rather than
+      // `root-cause-analysis/tracking`, matching how incidents keep their
+      // tracker off `violations/:id`.
+      { path: "risk/tracking", Component: RiskTrackingPage },
       { path: "equipment-certification", Component: EquipmentCertificationRoute },
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
       { path: "data-management", Component: DataManagementPage },

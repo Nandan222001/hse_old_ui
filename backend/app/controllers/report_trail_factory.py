@@ -30,7 +30,7 @@ question; do not "fix" one to match the other.
 """
 import json
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
@@ -175,12 +175,23 @@ def build_trail_router(
     tag: str,
     noun: str,
     ref_prefix: str,
+    extra_list_fields: Optional[Callable[[dict], dict]] = None,
+    extra_record_fields: Optional[Callable[[dict], dict]] = None,
 ) -> APIRouter:
     """Return an admin trail router for one report family.
 
     `ref_prefix` is the human reference stem (NEA / UNS / RIS) and matches what
     the mobile queue and the closure event already print, so one record is named
     identically wherever the admin meets it.
+
+    `extra_list_fields` / `extra_record_fields` take the raw row and return the
+    columns that only one family has. What the factory emits itself is exactly
+    what `ReportWorkflowMixin` guarantees, so it cannot drift into a union of
+    every table it serves — before the hooks existed the near miss trio
+    (potential_consequence / underlying_cause / event_date_time) sat in the
+    shared block and rode along on every other family as three permanent nulls.
+    They now come from `near_miss_trail`, which is the only router that has
+    those columns, and the response it returns is unchanged.
     """
     router = APIRouter(prefix=prefix, tags=[tag])
 
@@ -495,7 +506,6 @@ def build_trail_router(
                 "stage_number": workflow_stages.stage_number(stage_key),
                 "is_hipo": bool(row.get("is_hipo")),
                 "is_recurring": bool(row.get("is_recurring_pattern")),
-                "potential_consequence": row.get("potential_consequence"),
                 "reported_at": _iso(row.get("reported_at") or row.get("created_at")),
                 "closed_at": _iso(row.get("closed_at")),
                 "response_due_at": _iso(due),
@@ -511,6 +521,7 @@ def build_trail_router(
                 "supervisor_id": row.get("assigned_supervisor_id"),
                 "supervisor_name": supervisor["name"] if supervisor else None,
                 "auditor_verified": bool(row.get("auditor_verified_at")),
+                **(extra_list_fields(row) if extra_list_fields else {}),
             })
 
         # The stage filter is applied in SQL above; `items` is already narrowed.
@@ -583,15 +594,13 @@ def build_trail_router(
                 "stage_number": current_number or None,
                 "is_hipo": bool(row.get("is_hipo")),
                 "is_recurring": bool(row.get("is_recurring_pattern")),
-                "potential_consequence": row.get("potential_consequence"),
-                "underlying_cause": row.get("underlying_cause"),
-                "event_date_time": _iso(row.get("event_date_time")),
                 "reported_at": _iso(row.get("reported_at") or row.get("created_at")),
                 "closed_at": _iso(row.get("closed_at")),
                 "root_cause": row.get("root_cause"),
                 "closure_notes": row.get("closure_notes"),
                 "lessons_learned": row.get("lessons_learned"),
                 "verification_result": row.get("verification_result"),
+                **(extra_record_fields(row) if extra_record_fields else {}),
             },
             "stages": stages,
             "actions": actions,

@@ -188,9 +188,14 @@ FAMILY_MAPPINGS: Dict[str, Dict[str, str]] = {
     "incident": REPORT_STATUS_STAGE,
     "near_miss": REPORT_STATUS_STAGE,
     "unsafe_act": REPORT_STATUS_STAGE,
+    # `risk` is the canonical name for a worker's field observation on
+    # `risk_reports`, and the one every reference stem, CAPA `subject_family`
+    # and trail route uses. `hazard` is kept as an alias only because older
+    # callers pass it — see event_assessment.ASSESSORS and
+    # events.catalogue.CLOSURE_EVENT_FOR, which alias it the same way. Do not
+    # introduce new callers on it: the standing register is `hazard_register`,
+    # and a bare "hazard" reads as that to everyone looking at the console.
     "risk": REPORT_STATUS_STAGE,
-    # `hazard` is the worker-reported hazard on risk_reports — see
-    # workflow_engine._SOURCES. The standing register is `hazard_register`.
     "hazard": REPORT_STATUS_STAGE,
     "hazard_register": HAZARD_REGISTER_STATUS_STAGE,
     "permit": PERMIT_STATUS_STAGE,
@@ -199,8 +204,11 @@ FAMILY_MAPPINGS: Dict[str, Dict[str, str]] = {
 }
 
 # The five families the slide names. Kept explicit so a dashboard can render
-# them in a fixed order rather than whatever the dict yields.
-EVENT_FAMILIES = ("hazard", "near_miss", "incident", "permit", "audit")
+# them in a fixed order rather than whatever the dict yields. The slide's
+# "hazards" is the standing register, which is why `hazard_register` sits here
+# rather than the observation family — the two are separate tables and the
+# console shows them on separate screens.
+EVENT_FAMILIES = ("hazard_register", "near_miss", "incident", "permit", "audit")
 
 
 def stage_for(event_family: str, workflow_status: Optional[str]) -> Optional[str]:

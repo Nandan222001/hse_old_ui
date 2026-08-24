@@ -80,6 +80,14 @@ router = build_workflow_router(
     detail_fields=[
         "risk_title", "risk_category", "likelihood", "consequence",
         "risk_score", "existing_controls", "suggested_controls", "hazard_id",
+        # The scored outcome, not just the inputs. `risk_score` above is the raw
+        # L x S; what actually decides how the risk is treated is the adjusted
+        # score, the band it falls in and whether work is blocked — and that is
+        # the part the reporter needs read back to them. Without these the
+        # worker's own screen could show the numbers they entered but not the
+        # verdict those numbers produced.
+        "adjusted_risk_score", "uplift_total", "risk_band", "risk_colour",
+        "blocks_work", "approval_route", "review_frequency", "risk_explanation",
     ],
     noun="risk report",
 )

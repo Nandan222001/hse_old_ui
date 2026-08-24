@@ -36,8 +36,15 @@ _SOURCES: Dict[str, tuple] = {
     "incident": ("incidents", "severity_priority", "workflow_status"),
     "near_miss": ("near_misses", "assessed_priority", "workflow_status"),
     "unsafe_act": ("unsafe_acts", "assessed_priority", "workflow_status"),
-    "hazard": ("risk_reports", "assessed_priority", "workflow_status"),
-    # The standing register is a different thing from the worker-reported hazard
+    # `risk`, not `hazard`. Both names map to the same stage table so the stages
+    # were right either way, but the family name is also the reference stem and
+    # the CAPA `subject_family`: as "hazard" this table's rows came out of
+    # /workflow/queue as HAZ-12 while /risk-trail, the mobile queue and the
+    # closure event all called the same record RIS-12 — and HAZ is the standing
+    # register's own stem, one line below. Two families answering to one
+    # reference is how an admin ends up chasing the wrong record.
+    "risk": ("risk_reports", "assessed_priority", "workflow_status"),
+    # The standing register is a different thing from the worker-reported risk
     # above: its own table, its own status column, its own mapping.
     "hazard_register": ("hazards", None, "register_status"),
     # workflow_status, not status: `status` is the website's business state and
