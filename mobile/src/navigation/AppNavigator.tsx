@@ -76,6 +76,7 @@ import ReportRiskScreen from '../worker/screens/ReportRiskScreen';
 import LogHazardScreen from '../worker/screens/LogHazardScreen';
 import MyHazardsScreen from '../worker/screens/MyHazardsScreen';
 import MyNearMissesScreen from '../worker/screens/MyNearMissesScreen';
+import MyRiskReportsScreen from '../worker/screens/MyRiskReportsScreen';
 import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
@@ -349,6 +350,10 @@ export function AppNavigator() {
               <Stack.Screen name="LogHazard" component={LogHazardScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="MyHazards" component={MyHazardsScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="MyNearMisses" component={MyNearMissesScreen} options={{ presentation: 'card' }} />
+              {/* The other half of ReportRisk above: reporting is stage 01, this
+                  is stages 02-08 as the reporter sees them. Distinct from
+                  MyHazards, which is the register. */}
+              <Stack.Screen name="MyRiskReports" component={MyRiskReportsScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />

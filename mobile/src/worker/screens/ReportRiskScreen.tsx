@@ -9,7 +9,7 @@ import { TextArea } from '../components/form/TextArea';
 import { ChipSelector } from '../components/form/ChipSelector';
 import { ToggleRow } from '../components/form/ToggleRow';
 import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
-import { hazardService } from '../services/hazardService';
+import { riskService } from '../services/riskService';
 import { usePhotoCapture } from '../hooks/usePhotoCapture';
 import { Colors } from '../theme/colors';
 
@@ -79,7 +79,7 @@ export default function ReportRiskScreen({ navigation }: any) {
     if (!validate()) return;
     setIsLoading(true);
     try {
-      const res = await hazardService.reportRisk({
+      const res = await riskService.reportRisk({
         category_id: Number(category),
         hazard_name: description.trim(),
         severity,

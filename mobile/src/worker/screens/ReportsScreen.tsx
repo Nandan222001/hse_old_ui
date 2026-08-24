@@ -125,6 +125,23 @@ export default function ReportsScreen({ navigation }: any) {
           <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
         </TouchableOpacity>
 
+        {/* The last family with a form and no way back to it. A risk observation
+            is usually about something still standing on site, so whether anyone
+            acted on it is a question the reporter has a live interest in.
+            Separate from My Hazards above: that is the standing register. */}
+        <TouchableOpacity
+          style={styles.registerLink}
+          onPress={() => navigation.navigate('MyRiskReports')}
+          activeOpacity={0.8}
+        >
+          <Icon name="shield" style={styles.registerIcon} color="#7C3AED" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.registerTitle}>My Risk Reports</Text>
+            <Text style={styles.registerDesc}>See how each risk you raised was rated and controlled</Text>
+          </View>
+          <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* New Report grid */}
         <Text style={styles.sectionTitle}>New Report</Text>
         <View style={styles.reportGrid}>
