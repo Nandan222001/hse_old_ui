@@ -11,7 +11,9 @@ function buildFormData(payload: Record<string, any>, photos?: PhotoAttachment[])
   const form = new FormData();
   form.append('data', JSON.stringify(payload));
   photos?.forEach((photo, i) => {
-    form.append(`photo_${i}`, { uri: photo.uri, name: photo.name, type: photo.type } as any);
+    // `media_`, not `photo_` — these are photos and videos. The backend
+    // accepts both prefixes; see app/utils/report_media.py.
+    form.append(`media_${i}`, { uri: photo.uri, name: photo.name, type: photo.type } as any);
   });
   return form;
 }

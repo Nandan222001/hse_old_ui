@@ -6,4 +6,4 @@ export { Checkbox, CheckboxGroup } from './Checkbox';
 export { ChipSelector } from './ChipSelector';
 export type { ChipOption } from './ChipSelector';
 export { ToggleRow } from './ToggleRow';
-export { PhotoUploadBox, AttachBox } from './PhotoUploadBox';
+export { MediaUploadBox, PhotoUploadBox, AttachBox } from './PhotoUploadBox';

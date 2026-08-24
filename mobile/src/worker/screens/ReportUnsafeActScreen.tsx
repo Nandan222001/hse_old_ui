@@ -6,10 +6,10 @@ import { FormSection } from '../components/layout/FormSection';
 import { TextArea } from '../components/form/TextArea';
 import { Dropdown } from '../components/form/Dropdown';
 import { ToggleRow } from '../components/form/ToggleRow';
-import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
+import { MediaUploadBox } from '../components/form/PhotoUploadBox';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
-import { usePhotoCapture } from '../hooks/usePhotoCapture';
+import { useMediaCapture } from '../hooks/useMediaCapture';
 
 const CATEGORIES  = ['Unsafe Behaviour', 'PPE Violation', 'Housekeeping', 'Equipment Misuse', 'Procedural Breach'];
 const ZONES       = ['Zone A', 'Zone B', 'Zone C', 'Zone D'];
@@ -17,7 +17,10 @@ const DEPARTMENTS = ['Operations', 'Maintenance', 'Logistics', 'Safety', 'Admin'
 
 export default function ReportUnsafeActScreen({ navigation }: any) {
   const { reportUnsafeAct, isLoading } = useIncidents();
-  const { photoUris, attachments: photoAttachments, launch: launchPhoto, removePhoto } = usePhotoCapture();
+  const {
+    items: mediaItems, attachments: mediaAttachments,
+    launch: launchMedia, remove: removeMedia,
+  } = useMediaCapture();
 
   const [category,     setCategory]     = useState('');
   const [details,      setDetails]      = useState('');
@@ -43,7 +46,7 @@ export default function ReportUnsafeActScreen({ navigation }: any) {
       intervention_performed: intervention,
       location:               zone,
       department,
-      photos: photoAttachments.length > 0 ? photoAttachments : undefined,
+      photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
     });
 
     if (ok.ok) {
@@ -109,11 +112,11 @@ export default function ReportUnsafeActScreen({ navigation }: any) {
         </View>
 
         <FormSection label="Documentation (Optional)">
-          <PhotoUploadBox
-            photos={photoUris}
-            onTakePhoto={launchPhoto}
-            onRemove={removePhoto}
-            subtitle="Tap to add photos — camera or gallery (JPG, PNG)"
+          <MediaUploadBox
+            items={mediaItems}
+            onAdd={launchMedia}
+            onRemove={removeMedia}
+            subtitle="Tap to take a photo, record a video, or attach one you already have"
           />
         </FormSection>
 

@@ -110,7 +110,10 @@ function buildFormData(body: Record<string, any>, photos?: QueuedPhoto[]): FormD
   const form = new FormData();
   form.append('data', JSON.stringify(body));
   photos?.forEach((photo, i) => {
-    form.append(`photo_${i}`, { uri: photo.uri, name: photo.name, type: photo.type } as any);
+    // `media_`, not `photo_`: these are photos and videos now. The backend
+    // reader accepts both prefixes, so a queued item written by an older
+    // build still replays — see app/utils/report_media.py.
+    form.append(`media_${i}`, { uri: photo.uri, name: photo.name, type: photo.type } as any);
   });
   return form;
 }

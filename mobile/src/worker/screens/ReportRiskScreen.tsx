@@ -8,9 +8,9 @@ import { Input } from '../components/form/Input';
 import { TextArea } from '../components/form/TextArea';
 import { ChipSelector } from '../components/form/ChipSelector';
 import { ToggleRow } from '../components/form/ToggleRow';
-import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
+import { MediaUploadBox } from '../components/form/PhotoUploadBox';
 import { riskService } from '../services/riskService';
-import { usePhotoCapture } from '../hooks/usePhotoCapture';
+import { useMediaCapture } from '../hooks/useMediaCapture';
 import { Colors } from '../theme/colors';
 
 // ── Hazard categories (ids match backend hazard_categories seed order 1-10) ──
@@ -48,7 +48,10 @@ const RATING_COLOR: Record<Rating, string> = {
 };
 
 export default function ReportRiskScreen({ navigation }: any) {
-  const { photoUris, attachments: photoAttachments, launch: launchPhoto, removePhoto } = usePhotoCapture();
+  const {
+    items: mediaItems, attachments: mediaAttachments,
+    launch: launchMedia, remove: removeMedia,
+  } = useMediaCapture();
 
   const [category,    setCategory]    = useState('');
   const [description, setDescription] = useState('');
@@ -84,6 +87,7 @@ export default function ReportRiskScreen({ navigation }: any) {
         hazard_name: description.trim(),
         severity,
         probability,
+        photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
       });
       Alert.alert(
         res.queued ? 'Saved — waiting to send' : 'Hazard Reported',
@@ -161,11 +165,11 @@ export default function ReportRiskScreen({ navigation }: any) {
         )}
 
         <FormSection label="Photo Evidence">
-          <PhotoUploadBox
-            photos={photoUris}
-            onTakePhoto={launchPhoto}
-            onRemove={removePhoto}
-            subtitle="Tap to add photos — camera or gallery (JPG, PNG)"
+          <MediaUploadBox
+            items={mediaItems}
+            onAdd={launchMedia}
+            onRemove={removeMedia}
+            subtitle="Tap to take a photo, record a video, or attach one you already have"
           />
         </FormSection>
 

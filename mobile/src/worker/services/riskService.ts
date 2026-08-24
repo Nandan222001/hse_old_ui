@@ -1,6 +1,7 @@
 import apiClient from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import { submitOrQueue, type SubmitResult } from '../../services/offlineQueue';
+import type { PhotoAttachment } from '../types';
 
 /**
  * A worker's one-off risk observations on `risk_reports` — raising them, and
@@ -28,6 +29,8 @@ export interface ReportRiskRequest {
   severity?: string;
   /** Likelihood: Rare | Unlikely | Possible | Likely */
   probability?: string;
+  /** Photos and videos of the condition. */
+  photos?: PhotoAttachment[];
 }
 
 /**
@@ -115,18 +118,33 @@ export const riskService = {
    */
   async reportRisk(payload: ReportRiskRequest): Promise<SubmitResult<unknown>> {
     const key = (payload.severity ?? '').trim().toLowerCase();
+    const media = payload.photos ?? [];
+    const hasMedia = media.length > 0;
 
+    const body = {
+      description: payload.hazard_name,
+      risk_title: payload.hazard_name,
+      risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
+      likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
+      consequence: CONSEQUENCE[key],
+      severity: WORKFLOW_SEVERITY[key] ?? 'medium',
+    };
+
+    // Multipart only when there is something to attach, matching how near
+    // misses and unsafe acts post. Until this existed the risk screen captured
+    // evidence and then dropped it on the floor: the attachments were collected
+    // and never referenced by the submit, so a worker photographed an unguarded
+    // belt and the supervisor received a description and nothing else.
+    // Offline: the files stay on the device and the body is rebuilt on replay.
     return submitOrQueue(
       ENDPOINTS.RISK.REPORT,
+      body,
       {
-        description: payload.hazard_name,
-        risk_title: payload.hazard_name,
-        risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
-        likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
-        consequence: CONSEQUENCE[key],
-        severity: WORKFLOW_SEVERITY[key] ?? 'medium',
+        kind: hasMedia ? 'multipart' : 'json',
+        photos: hasMedia ? media.map(m => ({ uri: m.uri, name: m.name, type: m.type })) : undefined,
+        client: hasMedia ? 'workerUpload' : 'worker',
+        label: 'Risk observation',
       },
-      { client: 'worker', label: 'Risk observation' },
     );
   },
 

@@ -22,10 +22,12 @@ The flow, identical to incidents:
 This module does NOT touch incidents — /incident-workflow keeps its own controller so
 the website's behaviour is unchanged.
 """
+import json
 from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Type
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy import text, func
 
 from app.config.database import SessionLocal
@@ -38,6 +40,7 @@ from app.services import (
     workflow_stages,
 )
 from app.services.events import catalogue
+from app.utils import report_media
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -282,12 +285,41 @@ def build_workflow_router(
     # WORKER
     # ══════════════════════════════════════════════════════════════════════════
     @router.post("/report", response_model=ReportWorkflowResponse, status_code=201)
+    async def worker_report_http(
+        request: Request,
+        db: Session = Depends(get_db),
+        current_user: CurrentUser = Depends(get_current_user),
+    ):
+        """Worker submits, with or without evidence files attached.
+
+        Takes the raw request rather than a declared `create_schema` body so the
+        multipart shape is accepted. The app switches to multipart the moment a
+        photo or video is attached, and against a declared model FastAPI answered
+        422 — so attaching evidence did not lose the file, it failed the whole
+        report. See `app.utils.report_media`.
+
+        Validation is not lost, only moved: the same schema is applied below, and
+        a bad body still comes back as a 422 with Pydantic's own errors.
+        """
+        data, media_urls = await report_media.read_report_body(request, subdir=report_type)
+        data = report_media.merge_media(data, media_urls)
+        try:
+            payload = create_schema(**data)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=json.loads(exc.json()))
+        return worker_report(payload, db, current_user)
+
     def worker_report(
         payload: create_schema,  # type: ignore[valid-type]
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        """Worker submits. Lands in the supervisor queue as `reported`."""
+        """Create the record. Lands in the supervisor queue as `reported`.
+
+        Kept as a plain function taking an already-validated payload because
+        `event_drafts` submits a stored draft through it directly — see the note
+        where it is attached to the router below.
+        """
         now = datetime.now()
         data = payload.model_dump()
 

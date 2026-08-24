@@ -6,10 +6,10 @@ import { FormSection } from '../components/layout/FormSection';
 import { TextArea } from '../components/form/TextArea';
 import { ChipSelector } from '../components/form/ChipSelector';
 import { CheckboxGroup } from '../components/form/Checkbox';
-import { PhotoUploadBox } from '../components/form/PhotoUploadBox';
+import { MediaUploadBox } from '../components/form/PhotoUploadBox';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
-import { usePhotoCapture } from '../hooks/usePhotoCapture';
+import { useMediaCapture } from '../hooks/useMediaCapture';
 import { PotentialConsequence, NearMissCause, YesNo } from '../types';
 import { useGeoTag } from '../hooks/useGeoTag';
 import { lookupService, WorkingStation, HazardOption } from '../services/lookupService';
@@ -35,7 +35,10 @@ const CAUSE_LABEL_TO_TYPE: Record<string, NearMissCause> = {
 
 export default function ReportNearMissScreen({ navigation }: any) {
   const { reportNearMiss, isLoading } = useIncidents();
-  const { photoUris, attachments: photoAttachments, launch: launchPhoto, removePhoto } = usePhotoCapture();
+  const {
+    items: mediaItems, attachments: mediaAttachments,
+    launch: launchMedia, remove: removeMedia,
+  } = useMediaCapture();
 
   const { geo } = useGeoTag();
 
@@ -112,7 +115,7 @@ export default function ReportNearMissScreen({ navigation }: any) {
       gps_latitude:             geo.gps_latitude != null ? String(geo.gps_latitude) : undefined,
       gps_longitude:            geo.gps_longitude != null ? String(geo.gps_longitude) : undefined,
       preventative_suggestion:  suggestion.trim() || undefined,
-      photos: photoAttachments.length > 0 ? photoAttachments : undefined,
+      photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
     } as any);
 
     if (ok.ok) {
@@ -145,11 +148,11 @@ export default function ReportNearMissScreen({ navigation }: any) {
         </FormSection>
 
         <FormSection label="Capture Photo">
-          <PhotoUploadBox
-            photos={photoUris}
-            onTakePhoto={launchPhoto}
-            onRemove={removePhoto}
-            subtitle="Tap to add photos — camera or gallery (JPG, PNG)"
+          <MediaUploadBox
+            items={mediaItems}
+            onAdd={launchMedia}
+            onRemove={removeMedia}
+            subtitle="Tap to take a photo, record a video, or attach one you already have"
           />
         </FormSection>
 

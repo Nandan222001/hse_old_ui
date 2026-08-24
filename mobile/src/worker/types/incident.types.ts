@@ -24,6 +24,21 @@ export interface PhotoAttachment {
   type: string;
 }
 
+/**
+ * One piece of evidence attached to a report, as the capture UI holds it.
+ *
+ * A superset of PhotoAttachment — `uri`/`name`/`type` are what the upload puts
+ * on the wire, and the rest is for drawing the tile before submit. `kind` is
+ * derived once at capture rather than re-sniffed from the mime type at every
+ * render, because the picker does not always return one.
+ */
+export interface MediaAttachment extends PhotoAttachment {
+  kind: 'photo' | 'video';
+  /** Seconds, videos only, when the picker reports it. */
+  durationSec?: number;
+  sizeBytes?: number;
+}
+
 export interface ReportIncidentRequest {
   incident_date_time: string;
   location_station_id: number;

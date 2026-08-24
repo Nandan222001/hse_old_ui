@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.services import workflow_stages
-from app.services import media_storage
+from app.utils import report_media
 
 router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
 
@@ -615,47 +615,12 @@ def shift_check_in(
 async def _body_and_photos(request: Request) -> tuple[dict, list[str]]:
     """Read the report body, whether it arrived as JSON or as multipart.
 
-    The mobile app already builds a multipart body when the worker attached
-    photos — `data` holds the JSON report and `photo_0..n` hold the files — but
-    this endpoint only ever accepted a JSON dict, so any request carrying real
-    photos was rejected outright. Both shapes are handled here so a report with
-    no photos keeps taking the cheaper JSON path.
-
-    Returns the report dict and the URLs of any images written to disk.
+    Thin alias over the shared reader in `app.utils.report_media`, which the
+    factory-built families use too. It used to be implemented here, which is how
+    this endpoint came to accept attached files while near miss, unsafe act and
+    risk did not.
     """
-    content_type = (request.headers.get("content-type") or "").lower()
-
-    if not content_type.startswith("multipart/form-data"):
-        payload = await request.json()
-        return payload.get("data", payload), []
-
-    form = await request.form()
-
-    raw = form.get("data")
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else (raw or {})
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=400, detail=f"`data` is not valid JSON: {exc}")
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail="`data` must be a JSON object")
-
-    urls: list[str] = []
-    for key in sorted(k for k in form.keys() if k.startswith("photo_")):
-        upload = form[key]
-        if not hasattr(upload, "read"):
-            continue
-        try:
-            urls.append(
-                media_storage.save_image(
-                    await upload.read(),
-                    getattr(upload, "filename", None),
-                    getattr(upload, "content_type", None),
-                )
-            )
-        except media_storage.MediaRejected as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-
-    return data, urls
+    return await report_media.read_report_body(request)
 
 
 @router.post("/incidents")
