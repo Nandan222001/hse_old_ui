@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, StatusBar, KeyboardAvoidingView,
-  Platform, ScrollView, Alert,
+  ScrollView, Alert,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { Colors } from '../theme/colors';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
@@ -44,7 +45,7 @@ export default function ChangePasswordScreen({ navigation, route }: any) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={KEYBOARD_BEHAVIOR}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>

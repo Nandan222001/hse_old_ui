@@ -19,7 +19,6 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator,
   RefreshControl, TextInput, Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   auditService, Audit, CLASSIFICATION_META, Classification, Finding,
@@ -29,6 +28,7 @@ import {
   Banner, C, Card, ClassificationChip, Empty, PrimaryButton, GhostButton,
   ScreenHeader, SectionLabel,
 } from '../components';
+import { KeyboardAvoider, SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 
 function fmt(d?: string | null) {
   if (!d) return '—';
@@ -139,7 +139,7 @@ export function AuditFindingsScreen({ route, navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaScreen style={styles.root} edges={['top']}>
       <ScreenHeader
         title={single ? 'Track findings out' : 'Effectiveness queue'}
         subtitle={single ? `Step 10 · ${audit?.audit_ref ?? ''}` : '30 / 60 / 90-day checks'}
@@ -285,7 +285,7 @@ export function AuditFindingsScreen({ route, navigation }: any) {
 
       {/* Effectiveness check */}
       <Modal visible={!!verifying} transparent animationType="slide" onRequestClose={() => setVerifying(null)}>
-        <View style={styles.sheetBg}>
+        <KeyboardAvoider style={styles.sheetBg}>
           <View style={styles.sheet}>
             <View style={styles.sheetGrip} />
             <Text style={styles.sheetTitle}>Is the fix holding?</Text>
@@ -355,9 +355,9 @@ export function AuditFindingsScreen({ route, navigation }: any) {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

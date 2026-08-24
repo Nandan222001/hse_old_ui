@@ -3,9 +3,9 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl,
   Modal, TextInput, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
+import { KeyboardAvoider, SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 
 interface Inspection {
   id: string;
@@ -108,7 +108,7 @@ export function InspectionManagementScreen({ navigation }: any) {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0B1C30" />
@@ -146,7 +146,7 @@ export function InspectionManagementScreen({ navigation }: any) {
       </ScrollView>
 
       <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>New Safety Walk</Text>
@@ -226,9 +226,9 @@ export function InspectionManagementScreen({ navigation }: any) {
               <View style={{ height: 24 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

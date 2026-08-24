@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, StatusBar, ActivityIndicator, RefreshControl, TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { auditService, Audit } from '../services/auditService';
 
@@ -62,7 +62,7 @@ export function FindingsScreen({ navigation }: any) {
   const failCount = findings.filter((f) => f.severity === 'fail').length;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Findings</Text>
@@ -106,7 +106,7 @@ export function FindingsScreen({ navigation }: any) {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

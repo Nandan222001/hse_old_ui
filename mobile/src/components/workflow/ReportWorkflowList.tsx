@@ -3,7 +3,7 @@ import {
   ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
 import { EmptyState } from '../feedback/EmptyState';
@@ -291,7 +291,7 @@ export function ReportWorkflowList({
   const visible = tab === 'mine' ? mine : queue;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
@@ -369,7 +369,7 @@ export function ReportWorkflowList({
         onCancel={() => setInvestigating(null)}
         onSubmit={submitInvestigation}
       />
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

@@ -12,7 +12,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { auditService, Audit } from '../services/auditService';
 import {
@@ -80,7 +80,7 @@ export function AssignedAuditsScreen({ navigation }: any) {
   }), [audits]);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaScreen style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Assigned audits</Text>
         <TouchableOpacity onPress={() => navigation.navigate('AuditCalendar')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -215,7 +215,7 @@ export function AssignedAuditsScreen({ navigation }: any) {
           <View style={{ height: 30 }} />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

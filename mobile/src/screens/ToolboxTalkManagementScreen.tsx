@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
   RefreshControl, TextInput, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { changeLogService } from '../services/hseiqService';
@@ -70,7 +70,7 @@ export function ToolboxTalkManagementScreen({ navigation }: any) {
   }, [attendees, notes]);
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0B1C30" />
@@ -145,7 +145,7 @@ export function ToolboxTalkManagementScreen({ navigation }: any) {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

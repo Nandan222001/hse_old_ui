@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Search, CheckCircle2, MessageSquare } from "lucide-react-native";
 import type { ScreenProps } from "../types";
+import { KeyboardAvoider } from '../../../components/layout/KeyboardAvoider';
 
 export function TabA_Complaints({
   complaints,
@@ -20,7 +21,7 @@ export function TabA_Complaints({
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoider style={styles.container}>
       {/* Search Box */}
       <View style={styles.searchContainer}>
         <Search size={18} color="#718096" style={{ marginRight: 8 }} />
@@ -61,7 +62,7 @@ export function TabA_Complaints({
           </View>
         ))}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

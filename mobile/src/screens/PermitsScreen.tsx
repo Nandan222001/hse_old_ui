@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { permitWorkflowService, type PermitListItem } from '../services/permitWorkflowService';
 import type { Permit } from '../types/permit.types';
+import { KeyboardAvoider, SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 
 interface Props {
   navigation: any;
@@ -90,7 +90,7 @@ export function PermitsScreen({ navigation }: Props) {
   const pendingCount = permits.filter(p => p.status === 'pending' || p.status === 'ready_for_review').length;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FF" />
 
       {/* Header */}
@@ -216,7 +216,7 @@ export function PermitsScreen({ navigation }: Props) {
       </ScrollView>
 
       <Modal visible={closing != null} transparent animationType="slide" onRequestClose={() => setClosing(null)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Close Out Permit</Text>
@@ -271,9 +271,9 @@ export function PermitsScreen({ navigation }: Props) {
                 : <Text style={styles.confirmCloseText}>Close Permit</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

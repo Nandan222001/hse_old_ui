@@ -3,7 +3,7 @@ import {
   ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { EmptyState } from '../components/feedback/EmptyState';
@@ -439,7 +439,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
@@ -482,7 +482,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
         )}
         <View style={{ height: 24 }} />
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

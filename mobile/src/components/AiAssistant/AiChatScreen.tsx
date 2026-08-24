@@ -11,6 +11,7 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../layout/KeyboardAvoider';
 // Must come from safe-area-context, not react-native: RN's own SafeAreaView is a
 // no-op passthrough on Android, so the header rendered underneath the status bar.
 // Every other screen in this app uses the context version (see ScreenLayout).
@@ -138,7 +139,7 @@ export function AiChatScreen({ navigation, route }: AiChatScreenProps) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView

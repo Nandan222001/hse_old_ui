@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert, Image, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { incidentWorkflowService, type CapaAction } from '../services/incidentWorkflowService';
 import { IncidentRecordCard } from '../components/workflow/IncidentRecordCard';
@@ -242,7 +242,7 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   // The website's CAPA Closure Rate can only move through this "Mark Complete" action.
   if (!incidentId) {
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaScreen style={styles.root}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#0B1C30" />
@@ -284,13 +284,13 @@ export function CAPAManagementScreen({ route, navigation }: any) {
             ))
           )}
         </ScrollView>
-      </SafeAreaView>
+      </SafeAreaScreen>
     );
   }
 
   // Real-time API detail view
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -533,7 +533,7 @@ export function CAPAManagementScreen({ route, navigation }: any) {
           setDueDatePickerVisible(false);
         }}
       />
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

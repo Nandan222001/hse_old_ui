@@ -11,6 +11,7 @@ import {
   View,
   Alert,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
 import { TextArea } from '../form/TextArea';
@@ -180,7 +181,7 @@ export function InvestigationFormModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <View style={styles.sheet}>
           <View style={styles.header}>

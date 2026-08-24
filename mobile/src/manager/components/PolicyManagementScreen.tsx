@@ -3,10 +3,10 @@ import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator,
   RefreshControl, Alert, Modal, TextInput,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, Plus, FileText } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { apiClient } from "../../api/client";
+import { KeyboardAvoider, SafeAreaScreen } from "../../components/layout/KeyboardAvoider";
 
 interface Policy {
   id: number;
@@ -106,7 +106,7 @@ export function PolicyManagementScreen({ setCurrentScreen, showToast }: ScreenPr
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+    <SafeAreaScreen style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.headerBar}>
         <TouchableOpacity style={styles.iconBtn} onPress={() => setCurrentScreen("app")}>
           <ArrowLeft size={22} color="#0B3D91" />
@@ -156,7 +156,7 @@ export function PolicyManagementScreen({ setCurrentScreen, showToast }: ScreenPr
       </ScrollView>
 
       <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>{editingId != null ? "Edit Policy" : "New Policy"}</Text>
             <ScrollView style={styles.sheetScroll}>
@@ -226,9 +226,9 @@ export function PolicyManagementScreen({ setCurrentScreen, showToast }: ScreenPr
               <View style={{ height: 24 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

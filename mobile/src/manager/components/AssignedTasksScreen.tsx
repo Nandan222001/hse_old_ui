@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 import {
   ArrowLeft, Users, User, MapPin, CheckCircle2, Clock,
   Edit3, Plus, X, Save,
@@ -75,7 +75,7 @@ export function AssignedTasksScreenView({ setCurrentScreen }: ScreenProps) {
   // ── LIST VIEW ───────────────────────────────────────────────────────────────
   if (selectedId === null) {
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaScreen style={styles.root}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentScreen('app')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <ArrowLeft size={22} color="#0F172A" />
@@ -120,13 +120,13 @@ export function AssignedTasksScreenView({ setCurrentScreen }: ScreenProps) {
             <View style={{ height: 30 }} />
           </ScrollView>
         )}
-      </SafeAreaView>
+      </SafeAreaScreen>
     );
   }
 
   // ── DETAIL VIEW ─────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={backToList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <ArrowLeft size={22} color="#0F172A" />
@@ -230,7 +230,7 @@ export function AssignedTasksScreenView({ setCurrentScreen }: ScreenProps) {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

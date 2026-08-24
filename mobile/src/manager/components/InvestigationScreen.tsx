@@ -14,6 +14,7 @@ import {
 import { ArrowLeft, Sparkles, CheckCircle, CheckSquare } from "lucide-react-native";
 import { incidentWorkflowService } from "../../services/incidentWorkflowService";
 import type { ScreenProps } from "./types";
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 
 export function InvestigationScreenView({
   setCurrentScreen,
@@ -86,7 +87,7 @@ export function InvestigationScreenView({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
       style={styles.container}
     >
       {/* Header Bar */}

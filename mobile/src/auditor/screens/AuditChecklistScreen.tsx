@@ -20,8 +20,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity, Alert,
-  ActivityIndicator, Dimensions, Image, Modal, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Dimensions, Image, Modal, KeyboardAvoidingView,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { launchCamera, launchImageLibrary, Asset } from 'react-native-image-picker';
@@ -316,7 +317,7 @@ export function AuditChecklistScreen({ route, navigation }: any) {
             <KeyboardAvoidingView
               key={item.id}
               style={{ width: SCREEN_W }}
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              behavior={KEYBOARD_BEHAVIOR}
             >
               <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.itemHead}>

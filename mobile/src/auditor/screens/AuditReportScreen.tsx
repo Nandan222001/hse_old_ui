@@ -17,8 +17,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Alert, ActivityIndicator, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -124,7 +125,7 @@ export function AuditReportScreen({ route, navigation }: any) {
         subtitle={`Step 09 · ${audit?.site_name ?? ''}`}
         onBack={() => navigation.goBack()}
       />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           {!locked && !issued && (

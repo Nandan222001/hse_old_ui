@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Card, PrimaryButton, EmptyState, Loading, HSE_COLORS } from '../../components/hseiq';
 import { contractorService, RamsScore, ContractorCompany } from '../../services/hseiqService';
+import { KeyboardAvoider } from '../../components/layout/KeyboardAvoider';
 
 const CRITERIA = [
   { key: 'hazard_identification', label: 'Hazard identification' },
@@ -75,7 +76,7 @@ export default function ContractorAuditScreen({ navigation }: any) {
     companies.find(c => c.id === id)?.company_name ?? 'Unassigned contractor';
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -172,7 +173,7 @@ export default function ContractorAuditScreen({ navigation }: any) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

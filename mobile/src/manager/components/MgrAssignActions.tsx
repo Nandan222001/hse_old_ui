@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, AlertTriangle, Info, Plus, Send, Search, MoreVertical } from 'lucide-react-native';
 import { DateTimePickerModal } from '../../worker/components/inputs/DateTimePickerModal';
@@ -91,7 +92,7 @@ export function MgrAssignActions({ setCurrentScreen, selectedIncident, showToast
         <View style={{ width: 22 }} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Source */}
           <View style={styles.sourceCard}>

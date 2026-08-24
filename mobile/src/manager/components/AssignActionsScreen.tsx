@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { ArrowLeft, Plus, CheckSquare, Trash2, Calendar, User } from "lucide-react-native";
 import type { ScreenProps } from "./types";
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 
 export function AssignActionsScreenView({
   setCurrentScreen,
@@ -38,7 +39,7 @@ export function AssignActionsScreenView({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
       style={styles.container}
     >
       {/* Header Bar */}

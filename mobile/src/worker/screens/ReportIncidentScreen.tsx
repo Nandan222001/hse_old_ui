@@ -3,7 +3,7 @@ import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, TextInput, ActivityIndicator, Modal, Image,
-  PermissionsAndroid, Platform, KeyboardAvoidingView,
+  PermissionsAndroid, Platform,
 } from 'react-native';
 import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
@@ -316,7 +316,8 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
   return (
     <ScreenLayout bg="#F8FAFC">
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Keyboard avoidance is ScreenLayout's job now — see KeyboardAvoider. */}
+      <View style={{ flex: 1 }}>
         {/* Top Header */}
       <View style={styles.header}>
         {/* The action is goBack(), so the icon is a back arrow. It was a
@@ -797,7 +798,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
           setDateTimePickerVisible(false);
         }}
       />
-      </KeyboardAvoidingView>
+      </View>
     </ScreenLayout>
   );
 }

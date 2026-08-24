@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Modal, TextInput, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { verificationService, CloseOutIncident } from '../services/verificationService';
+import { KeyboardAvoider, SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 
 /** One completeness check the auditor validates before signing off. */
 function Check({ label, ok, detail }: { label: string; ok: boolean; detail?: string | null }) {
@@ -58,7 +58,7 @@ export function CloseOutReviewScreen({ navigation }: any) {
   const pending = rows.filter(r => !r.auditor_verified_at).length;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0B1C30" />
@@ -131,7 +131,7 @@ export function CloseOutReviewScreen({ navigation }: any) {
       </ScrollView>
 
       <Modal visible={target != null} transparent animationType="slide" onRequestClose={() => setTarget(null)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Sign Off {target?.reference}</Text>
             <Text style={styles.sheetSub}>
@@ -160,9 +160,9 @@ export function CloseOutReviewScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

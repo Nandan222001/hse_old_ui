@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { X } from "lucide-react-native";
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 
 /**
  * The manager's sign-off before a report is closed for good.
@@ -72,7 +73,7 @@ export function ReportClosureModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleCancel}>
       <KeyboardAvoidingView
         style={styles.backdrop}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
       >
         <View style={styles.sheet}>
           <View style={styles.header}>

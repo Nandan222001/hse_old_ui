@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../components/display/Icon';
@@ -106,7 +106,8 @@ export default function AssignedTaskFillScreen({ route, navigation }: any) {
         <View style={{ width: 22 }} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Keyboard avoidance is ScreenLayout's job now — see KeyboardAvoider. */}
+      <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Task summary */}
           <View style={styles.summaryCard}>
@@ -174,7 +175,7 @@ export default function AssignedTaskFillScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <View style={{ height: 40 }} />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </ScreenLayout>
   );
 }

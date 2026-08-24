@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Card, EmptyState, Loading, HSE_COLORS } from '../components/hseiq';
 import { contractorService, ContractorCompany } from '../services/hseiqService';
+import { KeyboardAvoider } from '../components/layout/KeyboardAvoider';
 
 const ACCESS_COLOR: Record<string, string> = {
   granted: HSE_COLORS.pass,
@@ -76,7 +77,7 @@ export default function ContractorSiteControlScreen({ navigation }: any) {
   );
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -186,7 +187,7 @@ export default function ContractorSiteControlScreen({ navigation }: any) {
           </Card>
         ) : null}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

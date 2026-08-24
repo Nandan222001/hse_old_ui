@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Card, EmptyState, Loading, PrimaryButton, bandColor, HSE_COLORS } from '../../components/hseiq';
 import { competenceService, fatigueService, FatigueDeclaration } from '../../services/hseiqService';
+import { KeyboardAvoider } from '../../components/layout/KeyboardAvoider';
 
 export default function MgrHumanReadiness({ setCurrentScreen }: any) {
   const [matrix, setMatrix] = useState<any[]>([]);
@@ -95,7 +96,7 @@ export default function MgrHumanReadiness({ setCurrentScreen }: any) {
   }, [target, reason, load]);
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -228,7 +229,7 @@ export default function MgrHumanReadiness({ setCurrentScreen }: any) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

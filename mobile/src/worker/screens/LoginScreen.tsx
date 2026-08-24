@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, KeyboardAvoidingView, Platform, ScrollView, Alert,
+  StatusBar, KeyboardAvoidingView, ScrollView, Alert,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { Colors } from '../theme/colors';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
@@ -36,7 +37,7 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
     >
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

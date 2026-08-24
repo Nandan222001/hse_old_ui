@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Shield, Lock, User } from "lucide-react-native";
 import type { ScreenProps } from "./types";
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 
 export function LoginScreenView({
   setCurrentScreen,
@@ -37,7 +38,7 @@ export function LoginScreenView({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={KEYBOARD_BEHAVIOR}
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MapPin, Calendar, Camera } from 'lucide-react-native';
 import type { ScreenProps } from './types';
@@ -229,7 +230,7 @@ export function MgrInvestigation({ setCurrentScreen, selectedIncident, showToast
         <View style={styles.mgrBadge}><Text style={styles.mgrBadgeText}>HSE MANAGER</Text></View>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Incident card */}
           <View style={[styles.incCard, { borderLeftColor: sev.color }]}>

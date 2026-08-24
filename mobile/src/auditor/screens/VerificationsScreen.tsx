@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Modal, TextInput, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   verificationService, PermitToVerify, HazardToVerify, VERIFICATION_RESULTS,
 } from '../services/verificationService';
+import { KeyboardAvoider, SafeAreaScreen } from '../../components/layout/KeyboardAvoider';
 
 type Tab = 'permits' | 'hazards';
 
@@ -63,7 +63,7 @@ export function VerificationsScreen({ navigation }: any) {
   const pendingHazards = hazards.filter(h => !h.auditor_verified_at).length;
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaScreen style={styles.root}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#0B1C30" />
@@ -162,7 +162,7 @@ export function VerificationsScreen({ navigation }: any) {
       </ScrollView>
 
       <Modal visible={target != null} transparent animationType="slide" onRequestClose={() => setTarget(null)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Verify {target?.label}</Text>
 
@@ -206,9 +206,9 @@ export function VerificationsScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

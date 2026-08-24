@@ -22,6 +22,7 @@ import {
 } from "../../../hooks/useManagerReportQueue";
 import { reportWorkflowService } from "../../../services/reportWorkflowService";
 import { ReportClosureModal, type ClosureFormValues } from "../ReportClosureModal";
+import { KeyboardAvoider } from "../../../components/layout/KeyboardAvoider";
 
 /**
  * The manager's steps on worker-reported near misses, unsafe acts and risks.
@@ -311,39 +312,41 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
-    >
-      <Text style={styles.sectionHeader}>Waiting on you</Text>
+    <KeyboardAvoider>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+      >
+        <Text style={styles.sectionHeader}>Waiting on you</Text>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={styles.error}>{error}</Text>}
 
-      {queue.length === 0 && !isLoading && !error ? (
-        <View style={styles.empty}>
-          <CheckCircle2 size={40} color="#A0AEC0" />
-          <Text style={styles.emptyTitle}>Nothing waiting on you</Text>
-          <Text style={styles.emptySub}>
-            Reports appear here once a supervisor escalates or finishes investigating, and again
-            when their corrective action is ready to verify.
-          </Text>
-        </View>
-      ) : (
-        queue.map(renderCard)
-      )}
+        {queue.length === 0 && !isLoading && !error ? (
+          <View style={styles.empty}>
+            <CheckCircle2 size={40} color="#A0AEC0" />
+            <Text style={styles.emptyTitle}>Nothing waiting on you</Text>
+            <Text style={styles.emptySub}>
+              Reports appear here once a supervisor escalates or finishes investigating, and again
+              when their corrective action is ready to verify.
+            </Text>
+          </View>
+        ) : (
+          queue.map(renderCard)
+        )}
 
-      <ReportClosureModal
-        visible={closing !== null}
-        reportLabel={
-          closing
-            ? `${TYPE_META[closing.report_type]?.label ?? "Report"} ${closing.reference} · ${closing.description ?? ""}`
-            : ""
-        }
-        isSubmitting={busyId !== null && closing !== null && busyId === queueKey(closing)}
-        onCancel={() => setClosing(null)}
-        onSubmit={submitClosure}
-      />
-    </ScrollView>
+        <ReportClosureModal
+          visible={closing !== null}
+          reportLabel={
+            closing
+              ? `${TYPE_META[closing.report_type]?.label ?? "Report"} ${closing.reference} · ${closing.description ?? ""}`
+              : ""
+          }
+          isSubmitting={busyId !== null && closing !== null && busyId === queueKey(closing)}
+          onCancel={() => setClosing(null)}
+          onSubmit={submitClosure}
+        />
+      </ScrollView>
+    </KeyboardAvoider>
   );
 }
 

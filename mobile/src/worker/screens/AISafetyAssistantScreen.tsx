@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator,
+  TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,10 +93,10 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      {/* Keyboard avoidance is ScreenLayout's job now — see KeyboardAvoider.
+          It wraps the header too, which is what a pinned composer wants: the
+          header holds still and the chat area takes the shrink. */}
+      <View style={styles.container}>
         <ScrollView
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
@@ -235,7 +235,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </ScreenLayout>
   );
 }

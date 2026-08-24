@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Card, EmptyState, Loading, PrimaryButton, HSE_COLORS } from '../../components/hseiq';
 import { contractorService, ContractorCompany } from '../../services/hseiqService';
+import { KeyboardAvoider } from '../../components/layout/KeyboardAvoider';
 
 const STATUS_COLOR: Record<string, string> = {
   approved: HSE_COLORS.pass,
@@ -96,7 +97,7 @@ export default function MgrContractorOversight({ setCurrentScreen }: any) {
   }, [load]);
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -202,7 +203,7 @@ export default function MgrContractorOversight({ setCurrentScreen }: any) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

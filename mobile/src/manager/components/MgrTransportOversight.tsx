@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Card, ScoreTile, EmptyState, Loading, PrimaryButton, HSE_COLORS } from '../../components/hseiq';
 import { transportService, changeLogService, ChangeEvent } from '../../services/hseiqService';
+import { KeyboardAvoider } from '../../components/layout/KeyboardAvoider';
 
 const CHANGE_TYPES = [
   { key: 'temporary_arrangement', label: 'Temporary arrangement' },
@@ -65,7 +66,7 @@ export default function MgrTransportOversight({ setCurrentScreen }: any) {
   );
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -170,7 +171,7 @@ export default function MgrTransportOversight({ setCurrentScreen }: any) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

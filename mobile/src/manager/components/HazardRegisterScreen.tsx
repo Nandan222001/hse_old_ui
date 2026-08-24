@@ -3,7 +3,6 @@ import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator,
   RefreshControl, Alert, Modal, TextInput,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, Plus, ShieldAlert, ChevronRight, AlertTriangle } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { StageTracker } from "./StageTracker";
@@ -14,6 +13,7 @@ import {
   type ControlHierarchy, type HazardNextAction, type HazardRegisterItem,
 } from "../../services/hazardRegisterService";
 import { WORKFLOW_STAGES, type WorkflowStageKey } from "../../services/workflowStages";
+import { KeyboardAvoider, SafeAreaScreen } from "../../components/layout/KeyboardAvoider";
 
 /**
  * The hazard register, driven by the eight-stage workflow engine.
@@ -471,7 +471,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
 
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+    <SafeAreaScreen style={styles.container} edges={["top", "left", "right"]}>
       <View style={styles.headerBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => setCurrentScreen("app")}>
           <ArrowLeft size={22} color="#0B3D91" />
@@ -624,7 +624,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
 
       {/* ── New hazard ────────────────────────────────────────────────────── */}
       <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>New Hazard Entry</Text>
             <Text style={styles.sheetRef}>
@@ -720,9 +720,9 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
               <View style={{ height: 24 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoider>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaScreen>
   );
 }
 

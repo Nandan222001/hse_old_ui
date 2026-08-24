@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+import { KEYBOARD_BEHAVIOR } from '../components/layout/KeyboardAvoider';
 import { useAuth } from '../hooks/useAuth';
 import { Input, PINInput, LoadingOverlay } from '../components';
 import { Colors } from '../theme/colors';
@@ -55,7 +56,7 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
     >
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
       <LoadingOverlay visible={isLoading} message="Signing in..." />

@@ -18,6 +18,7 @@ import {
   Card, GateRow, PrimaryButton, EmptyState, Loading, bandColor, HSE_COLORS,
 } from '../components/hseiq';
 import { fatigueService, gateService, FatigueDeclaration, OverrideRecord } from '../services/hseiqService';
+import { KeyboardAvoider } from '../components/layout/KeyboardAvoider';
 
 export default function GateOverrideConsoleScreen({ navigation }: any) {
   const [flags, setFlags] = useState<FatigueDeclaration[]>([]);
@@ -117,7 +118,7 @@ export default function GateOverrideConsoleScreen({ navigation }: any) {
   }, [target, reason, context, outcome, load]);
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
@@ -272,7 +273,7 @@ export default function GateOverrideConsoleScreen({ navigation }: any) {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 

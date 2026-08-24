@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Card, PrimaryButton, ScoreTile, EmptyState, HSE_COLORS } from '../components/hseiq';
 import { contractorService, ContractorCompany, RamsScore } from '../services/hseiqService';
+import { KeyboardAvoider } from '../components/layout/KeyboardAvoider';
 
 const CRITERIA = [
   { key: 'hazard_identification', label: 'Hazard identification' },
@@ -67,7 +68,7 @@ export default function RamsScoringScreen({ navigation }: any) {
   }, [companyId, task, scores, load]);
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoider style={styles.screen}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <Text style={styles.title}>RAMS Scoring</Text>
         <Text style={styles.subtitle}>
@@ -171,7 +172,7 @@ export default function RamsScoringScreen({ navigation }: any) {
           )}
         </Card>
       </ScrollView>
-    </View>
+    </KeyboardAvoider>
   );
 }
 
