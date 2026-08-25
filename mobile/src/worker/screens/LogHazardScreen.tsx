@@ -78,6 +78,7 @@ export default function LogHazardScreen({ navigation }: any) {
         location: location.trim() || undefined,
         controls: existingControls.trim() || undefined,
         persons_exposed: personsExposed ? Number(personsExposed) : undefined,
+        still_present: stillPresent,
       });
       Alert.alert(
         res.queued ? 'Saved — waiting to send' : 'Hazard Logged',

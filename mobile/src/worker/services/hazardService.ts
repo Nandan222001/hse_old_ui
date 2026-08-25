@@ -23,6 +23,9 @@ export interface LogHazardRequest {
   location_station_id?: number;
   controls?: string;
   persons_exposed?: number;
+  /** The "It is still there" toggle — collected by the form since it was
+   *  written and, until now, never actually sent. */
+  still_present?: boolean;
   gps_latitude?: string;
   gps_longitude?: string;
 }

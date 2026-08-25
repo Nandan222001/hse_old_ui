@@ -69,8 +69,22 @@ export interface HazardRegisterItem {
   description: string | null;
   severity: string | null;
   probability: string | null;
+  /** The reporter's own scoring. `severity` and `probability` above are
+   *  rewritten by stage 02, so these are the only record of what the person
+   *  who found the hazard said. */
+  reported_severity: string | null;
+  reported_probability: string | null;
+  /** What the reporter said is already protecting people. `controls` is
+   *  overwritten by stage 05 with the planned measure. */
+  existing_controls: string | null;
+  /** Revised in place by stages 02 and 04, so frozen the same way. */
+  reported_persons_exposed: number | null;
   register_status: HazardRegisterStatus | string | null;
   location_station_id: number | null;
+  /** Where the worker said it is, when that matched no station on record. */
+  location_other: string | null;
+  /** The worker's "It is still there" answer. Null means they were not asked. */
+  still_present: boolean | null;
   controls: string | null;
   logged_by: number | null;
   logged_at: string | null;
@@ -135,6 +149,13 @@ export interface HazardRegisterItem {
   logged_by_name: string | null;
   reviewed_by_name: string | null;
   control_owner_name: string | null;
+  assessed_by_name: string | null;
+  interim_control_by_name: string | null;
+  controls_planned_by_name: string | null;
+  controls_verified_by_name: string | null;
+  lesson_captured_by_name: string | null;
+  closed_by_name: string | null;
+  auditor_verified_by_name: string | null;
   station_name: string | null;
   category_name: string | null;
   is_overdue: boolean | null;

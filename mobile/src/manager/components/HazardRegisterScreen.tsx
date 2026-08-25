@@ -6,6 +6,7 @@ import {
 import { ArrowLeft, Plus, ShieldAlert, ChevronRight, AlertTriangle } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { StageTracker } from "./StageTracker";
+import { HazardRecordCard } from "../../components/workflow/HazardRecordCard";
 import { apiClient } from "../../api/client";
 import {
   CONTROL_HIERARCHY, HAZARD_STATUS_LABEL, HIERARCHY_LABEL,
@@ -604,18 +605,14 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
                 <ActivityIndicator color="#0B3D91" style={{ marginVertical: 20 }} />
               )}
 
-              {!!selected?.description && (
-                <>
-                  <Text style={styles.readonlyLabel}>DESCRIPTION</Text>
-                  <Text style={styles.readonlyValue}>{selected.description}</Text>
-                </>
-              )}
-              {!!selected?.interim_control && (
-                <>
-                  <Text style={styles.readonlyLabel}>INTERIM CONTROL</Text>
-                  <Text style={styles.readonlyValue}>{selected.interim_control}</Text>
-                </>
-              )}
+              {/* The sheet used to show a description and an interim control.
+                  A manager approving a hazard's controls could not see who
+                  reported it, what the assessment concluded, the root cause the
+                  control answers, or whether verification had already failed
+                  once — all of it in the same response the sheet was reading.
+                  The supervisor's screen renders the identical card, so the two
+                  roles are looking at one record rather than two summaries. */}
+              <HazardRecordCard hazard={selected} />
 
               {renderStageForm()}
               <View style={{ height: 32 }} />

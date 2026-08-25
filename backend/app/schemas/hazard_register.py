@@ -35,6 +35,7 @@ class HazardLog(BaseModel):
     probability: Optional[str] = None
     location: Optional[str] = None
     location_station_id: Optional[int] = None
+    still_present: Optional[bool] = None
     controls: Optional[str] = None
     persons_exposed: Optional[int] = Field(
         None, ge=0, description="How many people the hazard can reach"
@@ -192,8 +193,15 @@ class HazardRegisterResponse(BaseModel):
     description: Optional[str] = None
     severity: Optional[str] = None
     probability: Optional[str] = None
+    # What the reporter said, kept apart from the assessor's rescoring above.
+    reported_severity: Optional[str] = None
+    reported_probability: Optional[str] = None
+    existing_controls: Optional[str] = None
+    reported_persons_exposed: Optional[int] = None
     register_status: Optional[str] = None
     location_station_id: Optional[int] = None
+    location_other: Optional[str] = None
+    still_present: Optional[bool] = None
     controls: Optional[str] = None
     logged_by: Optional[int] = None
     logged_at: Optional[datetime] = None
@@ -259,6 +267,15 @@ class HazardRegisterResponse(BaseModel):
     logged_by_name: Optional[str] = None
     reviewed_by_name: Optional[str] = None
     control_owner_name: Optional[str] = None
+    # Every other actor column was an id with no name beside it, so a manager
+    # reviewing a hazard could see that stage 05 had been done and not by whom.
+    assessed_by_name: Optional[str] = None
+    interim_control_by_name: Optional[str] = None
+    controls_planned_by_name: Optional[str] = None
+    controls_verified_by_name: Optional[str] = None
+    lesson_captured_by_name: Optional[str] = None
+    closed_by_name: Optional[str] = None
+    auditor_verified_by_name: Optional[str] = None
     station_name: Optional[str] = None
     category_name: Optional[str] = None
     is_overdue: Optional[bool] = None

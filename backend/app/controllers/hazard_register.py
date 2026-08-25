@@ -148,10 +148,16 @@ def _name_map(db: Session, employee_ids: Sequence[Optional[int]]) -> Dict[int, s
 
 
 def _lookup_maps(db: Session, rows: Sequence[Hazard]) -> Dict[str, Dict[int, str]]:
+    # Every column holding an employee id, not just the three that had names.
+    # One query covers the lot, so adding the rest costs nothing.
     people = _name_map(db, [
-        v
+        getattr(r, f, None)
         for r in rows
-        for v in (r.logged_by, r.reviewed_by, r.control_owner_id)
+        for f in (
+            "logged_by", "reviewed_by", "control_owner_id", "assessed_by",
+            "interim_control_by", "controls_planned_by", "controls_verified_by",
+            "lesson_captured_by", "closed_by", "auditor_verified_by",
+        )
     ])
 
     station_ids = sorted({r.location_station_id for r in rows if r.location_station_id})
@@ -205,6 +211,13 @@ def _respond(row: Hazard, maps: Optional[Dict[str, Dict[int, str]]] = None) -> H
         out.logged_by_name = people.get(row.logged_by or 0)
         out.reviewed_by_name = people.get(row.reviewed_by or 0)
         out.control_owner_name = people.get(row.control_owner_id or 0)
+        out.assessed_by_name = people.get(row.assessed_by or 0)
+        out.interim_control_by_name = people.get(row.interim_control_by or 0)
+        out.controls_planned_by_name = people.get(row.controls_planned_by or 0)
+        out.controls_verified_by_name = people.get(row.controls_verified_by or 0)
+        out.lesson_captured_by_name = people.get(row.lesson_captured_by or 0)
+        out.closed_by_name = people.get(row.closed_by or 0)
+        out.auditor_verified_by_name = people.get(row.auditor_verified_by or 0)
         out.station_name = maps.get("stations", {}).get(row.location_station_id or 0)
         out.category_name = maps.get("categories", {}).get(row.category_id or 0)
     return out
@@ -258,19 +271,37 @@ def log_hazard(
 ):
     now = datetime.now()
     data = payload.model_dump()
+    typed_location = (data.get("location") or "").strip()
+    station_id = data.get("location_station_id") or station_id_for(
+        db, typed_location, current_user.org_id
+    )
     row = Hazard(
         organisation_id=current_user.org_id,
         category_id=_resolve_category_id(db, data.get("category_id"), current_user.org_id),
         hazard_name=data.get("hazard_name"),
         severity=data.get("severity"),
         probability=data.get("probability"),
+        # The same two values again, in columns nothing downstream writes to.
+        # Stage 02 rescores severity/probability in place, so without this the
+        # reporter's answer does not survive their supervisor opening it.
+        reported_severity=data.get("severity"),
+        reported_probability=data.get("probability"),
         description=data.get("description"),
-        location_station_id=(
-            data.get("location_station_id")
-            or station_id_for(db, data.get("location"), current_user.org_id)
+        location_station_id=station_id,
+        # Kept only when what the worker typed matched no station. Storing it
+        # either way would put the same place in two columns and leave whoever
+        # reads the hazard to guess which one is authoritative.
+        location_other=typed_location if typed_location and not station_id else None,
+        still_present=(
+            None if data.get("still_present") is None else int(bool(data.get("still_present")))
         ),
         controls=data.get("controls"),
+        # `controls` is overwritten by /plan-controls with the planned measure.
+        # This keeps what the reporter said is already protecting people.
+        existing_controls=data.get("controls"),
         persons_exposed=data.get("persons_exposed"),
+        # Also revised in place, by /assess and again by /findings.
+        reported_persons_exposed=data.get("persons_exposed"),
         gps_latitude=data.get("gps_latitude"),
         gps_longitude=data.get("gps_longitude"),
         register_status="open",
