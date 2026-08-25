@@ -72,6 +72,19 @@ export const hazardService = {
     );
   },
 
+  /** The org's own hazard categories, for the log form's dropdown.
+   *
+   *  The form used to carry these hard-coded as ids 1-10, which belong to
+   *  organisation 1 — so a worker anywhere else picked a label from one org and
+   *  filed the hazard against another's category row.
+   */
+  async categories(): Promise<Array<{ id: number; category_name: string }>> {
+    const { data } = await apiClient.get<Array<{ id: number; category_name: string }>>(
+      ENDPOINTS.HAZARD_REGISTER.CATEGORIES,
+    );
+    return data ?? [];
+  },
+
   /** Every hazard this worker logged, newest first, each with its stage. */
   async myHazards(): Promise<MyHazard[]> {
     const { data } = await apiClient.get<MyHazard[]>(ENDPOINTS.HAZARD_REGISTER.MY_LOGS);

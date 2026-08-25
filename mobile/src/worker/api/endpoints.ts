@@ -90,6 +90,7 @@ export const ENDPOINTS = {
    */
   HAZARD_REGISTER: {
     LOG: '/hazard-register/log',
+    CATEGORIES: '/hazard-register/categories',
     MY_LOGS: '/hazard-register/my-logs',
     DETAIL: (id: string | number) => `/hazard-register/${id}`,
     NEXT_ACTION: (id: string | number) => `/hazard-register/${id}/next-action`,

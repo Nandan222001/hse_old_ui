@@ -169,6 +169,7 @@ export const HAZARD_REGISTER = {
   // 01 RECORD
   LOG: '/hazard-register/log',
   LIST: '/hazard-register',
+  CATEGORIES: '/hazard-register/categories',
   MY_LOGS: '/hazard-register/my-logs',
   DETAIL: (id: string | number) => `/hazard-register/${id}`,
 

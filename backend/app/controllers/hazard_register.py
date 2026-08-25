@@ -234,7 +234,39 @@ def _respond_many(db: Session, rows: Sequence[Hazard]) -> List[HazardRegisterRes
 
 def _resolve_category_id(db: Session, given: Optional[int], org_id: Optional[int]) -> Optional[int]:
     """hazards.category_id is NOT NULL, but a worker logging a field hazard may not
-    pick one — fall back to any category in the org so the log still succeeds."""
+    pick one — fall back to any category in the org so the log still succeeds.
+
+    A supplied id is also checked against the caller's org before it is trusted.
+    The mobile forms shipped with the category list hard-coded to ids 1-10,
+    which are organisation 1's rows; every other tenant's worker was filing
+    hazards against another organisation's category. The names are seeded
+    identically so the label looked right, which is what kept it hidden — but
+    the id was foreign, and _is_recurring() groups on category_id, so hazards
+    were being counted against the wrong population. An id from outside the org
+    is remapped to the org's own category of the same name.
+    """
+    if given:
+        row = db.execute(
+            text("SELECT id, category_name, organisation_id FROM hazard_categories WHERE id = :id"),
+            {"id": given},
+        ).mappings().first()
+        if row is None:
+            given = None
+        elif row["organisation_id"] in (None, org_id):
+            return given
+        else:
+            mine = db.execute(
+                text(
+                    "SELECT id FROM hazard_categories "
+                    "WHERE category_name = :name AND organisation_id = :org LIMIT 1"
+                ),
+                {"name": row["category_name"], "org": org_id},
+            ).mappings().first()
+            # No same-named category in this org: fall through to the default
+            # rather than store another tenant's row.
+            if mine:
+                return mine["id"]
+            given = None
     if given:
         return given
     row = db.execute(
@@ -326,6 +358,32 @@ def log_hazard(
         )
 
     return _respond_one(db, row)
+
+
+@router.get("/categories")
+def list_categories(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """The caller's own hazard categories, for the report forms' dropdown.
+
+    The forms used to carry the list hard-coded with ids 1-10 — organisation 1's
+    rows — so every other tenant's worker picked a label from one org and filed
+    against another. Serving the list is the only way the id a worker sends can
+    be the id their organisation actually uses.
+
+    Global rows (organisation_id IS NULL) are included so a tenant with no
+    categories of its own still gets a usable list.
+    """
+    rows = db.execute(
+        text(
+            "SELECT id, category_name FROM hazard_categories "
+            "WHERE organisation_id = :org OR organisation_id IS NULL "
+            "ORDER BY (organisation_id = :org) DESC, id"
+        ),
+        {"org": current_user.org_id},
+    ).mappings().all()
+    return [{"id": r["id"], "category_name": r["category_name"]} for r in rows]
 
 
 @router.get("", response_model=List[HazardRegisterResponse])

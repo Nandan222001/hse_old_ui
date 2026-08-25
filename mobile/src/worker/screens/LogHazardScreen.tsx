@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Text } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
@@ -26,23 +26,15 @@ import { Colors } from '../theme/colors';
  */
 
 // Ids match the backend hazard_categories seed order 1-10.
-const CATEGORIES = [
-  { label: 'Mechanical',            value: '1' },
-  { label: 'Electrical',            value: '2' },
-  { label: 'Chemical',              value: '3' },
-  { label: 'Ergonomic',             value: '4' },
-  { label: 'Fall / Height',         value: '5' },
-  { label: 'Noise / Environmental', value: '6' },
-  { label: 'Biological',            value: '7' },
-  { label: 'Psychosocial',          value: '8' },
-  { label: 'Fire / Explosion',      value: '9' },
-  { label: 'Confined Space',        value: '10' },
-];
 
 const SEVERITIES = ['Low', 'Medium', 'High', 'Critical'];
 const PROBABILITIES = ['Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'];
 
 export default function LogHazardScreen({ navigation }: any) {
+  // Fetched, not hard-coded. The list used to be ids 1-10 in this file, which
+  // are organisation 1's category rows — so a worker in any other org picked a
+  // label here and the hazard was filed against a different org's category.
+  const [categories, setCategories] = useState<Array<{ label: string; value: string }>>([]);
   const [category, setCategory] = useState('');
   const [hazardName, setHazardName] = useState('');
   const [description, setDescription] = useState('');
@@ -54,6 +46,18 @@ export default function LogHazardScreen({ navigation }: any) {
   const [stillPresent, setStillPresent] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    hazardService
+      .categories()
+      .then(rows =>
+        setCategories(rows.map(r => ({ label: r.category_name, value: String(r.id) }))),
+      )
+      // An empty dropdown is honest here: the alternative is guessing ids
+      // again, and a wrong category is worse than an unset one — the backend
+      // fills in a default rather than rejecting the log.
+      .catch(() => setCategories([]));
+  }, []);
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -117,10 +121,10 @@ export default function LogHazardScreen({ navigation }: any) {
 
         <FormSection label="Hazard Category" required>
           <Dropdown
-            options={CATEGORIES}
+            options={categories}
             value={category}
             onChange={(v: string) => { setCategory(v); setErrors(e => ({ ...e, category: '' })); }}
-            placeholder="Select hazard type..."
+            placeholder={categories.length ? 'Select hazard type...' : 'Loading categories...'}
           />
           {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
         </FormSection>
