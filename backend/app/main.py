@@ -53,6 +53,7 @@ from app.controllers import (
     incident_trail as incident_trail_controller,
     near_miss_trail as near_miss_trail_controller,
     risk_trail as risk_trail_controller,
+    risk_assessment as risk_assessment_controller,
     permit_trail as permit_trail_controller,
     # ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ───────────────────────────
     competence as competence_controller,
@@ -168,6 +169,9 @@ def create_app() -> FastAPI:
     # Risk observations on `risk_reports`. Its own trail, separate from the
     # hazard register's below — different table, different status vocabulary.
     app.include_router(risk_trail_controller.router, prefix=prefix)
+    # WF-01 Flow B. Separate from risk_workflow above: that is a worker's
+    # sighting of one hazard, this is the ten-step assessment of an activity.
+    app.include_router(risk_assessment_controller.router, prefix=prefix)
     app.include_router(permit_trail_controller.router, prefix=prefix)
     # Near miss / unsafe act / risk each get their own table and their own workflow.
     app.include_router(near_miss_workflow_controller.router, prefix=prefix)
