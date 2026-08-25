@@ -47,6 +47,19 @@ const RATING_COLOR: Record<Rating, string> = {
   Critical: Colors.critical,
 };
 
+/**
+ * Reporting a risk — one unsafe condition somebody saw, on `risk_reports`.
+ *
+ * This screen used to be titled "Report a Hazard", which put it in direct
+ * competition with LogHazardScreen ("Log a Hazard") for the same words. Two
+ * screens announcing themselves as hazards, writing to two different tables
+ * with two different lifecycles, is how a worker logs a standing hazard as a
+ * one-off observation and a supervisor then cannot find it on the register.
+ * That happened.
+ *
+ * The WF-01 spec draws the line the wording now follows: "A hazard is what
+ * exists. A risk is what might happen because of it." This is the second one.
+ */
 export default function ReportRiskScreen({ navigation }: any) {
   const {
     items: mediaItems, attachments: mediaAttachments,
@@ -70,8 +83,8 @@ export default function ReportRiskScreen({ navigation }: any) {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!category)            e.category = 'Select a hazard category';
-    if (!description.trim())  e.description = 'Describe the hazard';
+    if (!category)            e.category = 'Select a category';
+    if (!description.trim())  e.description = 'Describe what you saw';
     if (!severity)            e.severity = 'Select the severity';
     if (!probability)         e.probability = 'Select the likelihood';
     setErrors(e);
@@ -90,14 +103,14 @@ export default function ReportRiskScreen({ navigation }: any) {
         photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
       });
       Alert.alert(
-        res.queued ? 'Saved — waiting to send' : 'Hazard Reported',
+        res.queued ? 'Saved — waiting to send' : 'Risk Reported',
         res.queued
           ? 'Saved on this device. There is no signal right now, so it will be sent automatically as soon as you are back online.'
-          : `Your ${rating ?? ''} hazard observation has been submitted to your supervisor.`,
+          : `Your ${rating ?? ''} risk observation has been sent to your supervisor.`,
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch {
-      Alert.alert('Submission Failed', 'Could not submit the hazard report. Please try again.');
+      Alert.alert('Submission Failed', 'Could not submit the risk report. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -105,22 +118,22 @@ export default function ReportRiskScreen({ navigation }: any) {
 
   return (
     <ScreenLayout>
-      <AppHeader title="Report a Hazard" onBack={() => navigation.goBack()} rightIcon="🔔" />
+      <AppHeader title="Report a Risk" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <FormSection label="Hazard Category" required>
+        <FormSection label="Category" required>
           <Dropdown
             options={CATEGORIES}
             value={category}
             onChange={v => { setCategory(v); setErrors(e => ({ ...e, category: '' })); }}
-            placeholder="Select hazard type..."
+            placeholder="What kind of risk is it?"
           />
           {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
         </FormSection>
 
-        <FormSection label="Hazard Description" required>
+        <FormSection label="What did you see?" required>
           <TextArea
-            placeholder="What is the hazard? e.g. exposed live wiring near walkway..."
+            placeholder="Describe the unsafe condition, e.g. exposed live wiring near the walkway..."
             value={description}
             onChangeText={v => { setDescription(v); setErrors(e => ({ ...e, description: '' })); }}
             minHeight={100}
@@ -131,7 +144,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         <FormSection label="Location">
           <Input
-            placeholder="Where is the hazard? e.g. Bay 4, Loading Dock"
+            placeholder="Where did you see it? e.g. Bay 4, Loading Dock"
             value={location}
             onChangeText={setLocation}
           />
@@ -157,7 +170,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         {rating && (
           <View style={[styles.ratingCard, { borderColor: RATING_COLOR[rating] }]}>
-            <Text style={styles.ratingLabel}>CALCULATED HAZARD RATING</Text>
+            <Text style={styles.ratingLabel}>CALCULATED RISK RATING</Text>
             <View style={[styles.ratingBadge, { backgroundColor: RATING_COLOR[rating] }]}>
               <Text style={styles.ratingBadgeText}>{rating.toUpperCase()}</Text>
             </View>
@@ -175,7 +188,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         <FormSection label="Immediate Danger">
           <ToggleRow
-            title="Hazard is still present"
+            title="It is still there"
             subtitle="Is the danger active right now?"
             value={stillPresent}
             onChange={setStillPresent}
@@ -184,7 +197,7 @@ export default function ReportRiskScreen({ navigation }: any) {
 
         <FormSection label="Suggested Control / Mitigation">
           <TextArea
-            placeholder="How could this hazard be controlled or removed?"
+            placeholder="How could this be controlled or removed?"
             value={mitigation}
             onChangeText={setMitigation}
             minHeight={80}
