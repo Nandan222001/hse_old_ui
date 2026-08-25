@@ -42,6 +42,14 @@ export interface ReportListItem {
 }
 
 export interface ReportDetail extends ReportListItem {
+  /** Resolved names — the list rows carry only the ids these came from. */
+  reported_by_name: string | null;
+  station_name: string | null;
+  witnesses: Array<{ name?: string; employee_id?: number } | string>;
+  /** When the event happened, as opposed to when it was reported. */
+  observed_at: string | null;
+  gps_latitude: number | null;
+  gps_longitude: number | null;
   root_cause: string | null;
   immediate_actions_taken: string | null;
   escalation_reason: string | null;

@@ -10,7 +10,10 @@ import { EmptyState } from '../feedback/EmptyState';
 import { InvestigationFormModal } from './InvestigationFormModal';
 import { useReportWorkflow } from '../../hooks/useReportWorkflow';
 import type { ReportType } from '../../api/endpoints';
-import type { InvestigatePayload, ReportNextActionItem } from '../../services/reportWorkflowService';
+import { reportWorkflowService } from '../../services/reportWorkflowService';
+import type {
+  InvestigatePayload, ReportDetail, ReportNextActionItem,
+} from '../../services/reportWorkflowService';
 
 /**
  * The supervisor's half of one report family, run on the eight-stage engine.
@@ -62,6 +65,43 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+/** `potential_consequence` -> `Potential consequence`. The keys are the
+ *  backend's column names and are shown to a supervisor, so they get read. */
+function humanise(key: string): string {
+  const words = key.replace(/_/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** One reported value. A pair, so an absent value drops its own label rather
+ *  than leaving a heading over nothing. */
+/** Column values reach the screen as they sit in the database: snake_case
+ *  enums, 0/1 booleans, MySQL's 'Yes'/'No' strings. A supervisor should read
+ *  "Minor injury", not "minor_injury". */
+function prettyValue(value: any, key = ''): string {
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  // MySQL stores these flags as tinyint, so they arrive as 0 and 1. The column
+  // type cannot tell a flag from a count — `uplift_total` is an integer too —
+  // so the name decides: only yes/no-shaped keys get read as yes/no.
+  if ((value === 0 || value === 1) && /^(blocks|is|has|requires|was)_/.test(key)) {
+    return value === 1 ? 'Yes' : 'No';
+  }
+  const text = String(value).replace(/_/g, ' ').trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Anything long enough to wrap gets its own full-width block instead of a
+ *  chip, so a paragraph of explanation does not squeeze into half a row. */
+const LONG_VALUE = 45;
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldKey}>{label}</Text>
+      <Text style={styles.fieldVal}>{value}</Text>
+    </View>
+  );
+}
+
 export function ReportWorkflowList({
   navigation,
   reportType,
@@ -74,8 +114,16 @@ export function ReportWorkflowList({
     acknowledge, startInvestigation, investigate, escalate,
   } = useReportWorkflow(reportType);
 
+  // The hook covers the queue and the transitions; the one-report read is not
+  // part of that, so the family's service is built here for it.
+  const api = useMemo(() => reportWorkflowService(reportType), [reportType]);
+
   const [tab, setTab] = useState<Tab>('mine');
   const [expandedId, setExpanded] = useState<number | null>(null);
+  // Fetched when a card opens rather than for the whole list: the queue row
+  // carries enough to triage, and pulling every report's detail to render one
+  // would make the list slower for the common case of just scanning it.
+  const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [investigating, setInvestigating] = useState<ReportNextActionItem | null>(null);
   const [notes, setNotes] = useState('');
 
@@ -190,6 +238,14 @@ export function ReportWorkflowList({
   // ══════════════════════════════════════════════════════════════════════════
   const renderCard = (item: ReportNextActionItem) => {
     const isOpen = expandedId === item.id;
+    // The family's own columns, whatever the backend chose to expose for it.
+    // Rendered from the dict rather than three hardcoded blocks, so near miss,
+    // unsafe act and risk each show their own set and a column added to
+    // detail_fields appears here without another edit. Ids are dropped: the
+    // reader wants the hazard, not hazard_id.
+    const reported = Object.entries(detail?.details ?? {}).filter(
+      ([k, v]) => v != null && v !== '' && !k.endsWith('_id'),
+    );
     const isBusy = busyId === item.id;
 
     return (
@@ -197,8 +253,13 @@ export function ReportWorkflowList({
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={() => {
-            setExpanded(isOpen ? null : item.id);
+            const opening = !isOpen;
+            setExpanded(opening ? item.id : null);
             setNotes('');
+            setDetail(null);
+            if (opening) {
+              api.getDetail(item.id).then(setDetail).catch(() => setDetail(null));
+            }
           }}
         >
           <View style={styles.cardHeader}>
@@ -252,6 +313,67 @@ export function ReportWorkflowList({
 
         {isOpen && (
           <View style={styles.formBox}>
+            {/* What the reporter actually put in, before what the supervisor is
+                being asked to add. The card showed a description and the next
+                step, so the person deciding could not see the consequence the
+                reporter feared, the condition behind it, or who witnessed it —
+                all of which the detail response has always carried. */}
+            <Text style={styles.reportedHeading}>WHAT THE REPORTER SUBMITTED</Text>
+            <View style={styles.reportedGrid}>
+              {!!detail?.reported_by_name && (
+                <Field label="Reported by" value={detail.reported_by_name} />
+              )}
+              {!!item.severity_label && <Field label="Assessed" value={item.severity_label} />}
+              {!!detail?.severity && (
+                <Field label="Reported severity" value={prettyValue(detail.severity)} />
+              )}
+              {!!(detail?.station_name || item.station_name) && (
+                <Field label="Where" value={detail?.station_name || item.station_name!} />
+              )}
+              {!!detail?.observed_at && (
+                <Field label="When it happened" value={new Date(detail.observed_at).toLocaleString()} />
+              )}
+              {!!detail?.reported_at && (
+                <Field label="Reported" value={new Date(detail.reported_at).toLocaleString()} />
+              )}
+              {detail?.gps_latitude != null && detail?.gps_longitude != null && (
+                <Field
+                  label="GPS"
+                  value={`${detail.gps_latitude.toFixed(5)}, ${detail.gps_longitude.toFixed(5)}`}
+                />
+              )}
+              {reported
+                .filter(([, v]) => String(v).length <= LONG_VALUE)
+                .map(([k, v]) => <Field key={k} label={humanise(k)} value={prettyValue(v, k)} />)}
+            </View>
+
+            {reported
+              .filter(([, v]) => String(v).length > LONG_VALUE)
+              .map(([k, v]) => (
+                <React.Fragment key={k}>
+                  <Text style={styles.readonlyLabel}>{humanise(k).toUpperCase()}</Text>
+                  <Text style={styles.readonlyValue}>{prettyValue(v, k)}</Text>
+                </React.Fragment>
+              ))}
+
+            {!!detail?.witnesses?.length && (
+              <>
+                <Text style={styles.readonlyLabel}>WITNESSES</Text>
+                <Text style={styles.readonlyValue}>
+                  {detail.witnesses
+                    .map(w => (typeof w === 'string' ? w : w?.name || `EMP-${w?.employee_id}`))
+                    .join(', ')}
+                </Text>
+              </>
+            )}
+
+            {!!detail?.immediate_actions_taken && (
+              <>
+                <Text style={styles.readonlyLabel}>DONE STRAIGHT AWAY</Text>
+                <Text style={styles.readonlyValue}>{detail.immediate_actions_taken}</Text>
+              </>
+            )}
+
             <Text style={styles.actionHeading}>{item.detail}</Text>
 
             {/* An IMPROVE row names the action actually holding it, so a
@@ -444,6 +566,22 @@ const styles = StyleSheet.create({
   subjectDesc: { fontSize: 12.5, color: Colors.textDark, lineHeight: 17, marginTop: 3 },
   subjectDue: { fontSize: 11, color: Colors.textMuted, marginTop: 3, fontWeight: '600' },
 
+  reportedHeading: {
+    fontSize: 10.5, fontWeight: '800', color: Colors.primary,
+    letterSpacing: 0.6, marginBottom: 8,
+  },
+  reportedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  field: {
+    minWidth: '46%', backgroundColor: Colors.background,
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  fieldKey: { fontSize: 9.5, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.4 },
+  fieldVal: { fontSize: 13, fontWeight: '600', color: Colors.textDark, marginTop: 2 },
+  readonlyLabel: {
+    fontSize: 10, fontWeight: '800', color: Colors.textMuted,
+    letterSpacing: 0.5, marginTop: 4, marginBottom: 3,
+  },
+  readonlyValue: { fontSize: 13, color: Colors.textMid, lineHeight: 18, marginBottom: 8 },
   fieldLabel: {
     fontSize: 11, fontWeight: '800', color: Colors.textMuted,
     letterSpacing: 0.5, marginBottom: 6,

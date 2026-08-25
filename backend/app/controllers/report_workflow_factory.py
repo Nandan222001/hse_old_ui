@@ -143,6 +143,27 @@ def _station_id_for(db: Session, name: Optional[str], org_id: Optional[int]) -> 
     return row["id"] if row else None
 
 
+def _person_name(db: Session, employee_id: Optional[int]) -> Optional[str]:
+    """employees.id -> full_name, for the one record being opened."""
+    if not employee_id:
+        return None
+    row = db.execute(
+        text("SELECT full_name FROM employees WHERE id = :id"),
+        {"id": int(employee_id)},
+    ).mappings().first()
+    return row["full_name"] if row else None
+
+
+def _station_name(db: Session, station_id: Optional[int]) -> Optional[str]:
+    if not station_id:
+        return None
+    row = db.execute(
+        text("SELECT station_name FROM working_stations WHERE id = :id"),
+        {"id": int(station_id)},
+    ).mappings().first()
+    return row["station_name"] if row else None
+
+
 def build_workflow_router(
     *,
     report_type: str,
@@ -178,8 +199,14 @@ def build_workflow_router(
             raise HTTPException(status_code=404, detail=f"{noun.capitalize()} {record_id} not found")
         return row
 
-    def _respond(row) -> ReportWorkflowResponse:
+    def _respond(row, db: Optional[Session] = None) -> ReportWorkflowResponse:
         _stage = workflow_stages.describe(report_type, row.workflow_status)
+        # Only the single-record read passes `db`. The list and transition
+        # responses skip the two lookups: they render a queue, where an id is
+        # never displayed, and paying per row for a name nobody sees is how a
+        # list gets slow.
+        _who = _person_name(db, row.reported_by) if db is not None else None
+        _where = _station_name(db, row.location_station_id) if db is not None else None
         return ReportWorkflowResponse(
             id=row.id,
             report_type=report_type,
@@ -220,6 +247,22 @@ def build_workflow_router(
             stage_label=_stage.get("stage_label"),
             completed_stages=_stage.get("completed_stages"),
             total_stages=_stage.get("total_stages"),
+            # Resolved for display. The reporter and the station were sent as
+            # bare ids, so a supervisor opening a report saw "reported_by: 41"
+            # and had no way to tell who had reported it or where.
+            reported_by_name=_who,
+            station_name=_where,
+            # When it happened, as opposed to when it was typed in. Every
+            # family has stored this since the forms grew a date picker; the
+            # column is named differently per table, which is why it needs the
+            # same indirection the writer uses.
+            observed_at=getattr(row, observed_at_field, None),
+            gps_latitude=getattr(row, "gps_latitude", None),
+            gps_longitude=getattr(row, "gps_longitude", None),
+            # Collected by the report forms and, until now, never read back:
+            # the supervisor deciding whether to investigate could not see who
+            # had witnessed the event.
+            witnesses=getattr(row, "witnesses_json", None) or [],
             details={f: getattr(row, f, None) for f in detail_fields},
         )
 
@@ -1121,6 +1164,6 @@ def build_workflow_router(
         db: Session = Depends(get_db),
         current_user: CurrentUser = Depends(get_current_user),
     ):
-        return _respond(_get(db, record_id, current_user.org_id))
+        return _respond(_get(db, record_id, current_user.org_id), db)
 
     return router

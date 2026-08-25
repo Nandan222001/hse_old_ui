@@ -157,6 +157,17 @@ class ReportWorkflowResponse(BaseModel):
     location_station_id: Optional[int] = None
     reported_by: Optional[int] = None
 
+    # Resolved on the single-record read only; the list responses leave these
+    # None rather than pay for a lookup per row on a queue that shows neither.
+    reported_by_name: Optional[str] = None
+    station_name: Optional[str] = None
+    # Whoever the reporter named as having seen it. Stored since the report
+    # forms grew a witness picker, never sent back until now.
+    witnesses: List[Any] = []
+    observed_at: Optional[datetime] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+
     reported_at: Optional[datetime] = None
     acknowledged_at: Optional[datetime] = None
     investigation_completed_at: Optional[datetime] = None
