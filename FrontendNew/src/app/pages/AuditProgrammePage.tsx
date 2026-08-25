@@ -12,6 +12,7 @@
  * audit screens, so naming them here would describe a workflow that deadlocks.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import {
   CalendarClock, CheckCircle2, ChevronDown, ChevronRight, Loader2, RefreshCw,
   ShieldCheck, Sparkles, TriangleAlert, Bell,
@@ -101,11 +102,18 @@ export function AuditProgrammePage() {
       <AuditsTabBar />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-bold text-slate-900">Audit programme</h1>
-          <p className="mt-1 max-w-3xl text-[13px] text-slate-500">
-            Generated from each site's risk band, and that band is driven by the site's own safety
-            performance score. A site that deteriorates gets audited more often, automatically —
-            nobody books an audit by hand.
+          <h1 className="text-[22px] font-bold text-slate-900">Audit schedule</h1>
+          {/* Says what the page is before it says how it works. The previous copy
+              opened with "generated from each site's risk band", which only makes
+              sense to somebody who already knows what this page does. */}
+          <p className="mt-1 max-w-3xl text-[13px] text-slate-600">
+            The site visits booked for {year} — which sites, and when. Press <strong>Generate {year} calendar</strong>
+            {" "}to fill the year.
+          </p>
+          <p className="mt-1 max-w-3xl text-[12.5px] text-slate-500">
+            How often a site is visited comes from its risk band, and the band comes from that site's own
+            safety score. A site that deteriorates is visited more often, automatically — nobody books a
+            visit by hand.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -133,25 +141,56 @@ export function AuditProgrammePage() {
         </Banner>
       )}
 
-      {results && (
-        <Banner
-          tone={results.some((r) => r.total > 0) ? "ok" : "info"}
-          title={`Generated ${results.reduce((n, r) => n + r.total, 0)} event(s)`}
-          icon={<CalendarClock className="h-4 w-4" />}
-        >
-          <ul className="mt-1 space-y-0.5">
-            {results.map((r) => (
-              <li key={`${r.site_id}`}>
-                <span className="font-semibold">{r.site_name ?? "Site"}</span>{" — "}
-                {r.reason
-                  ? r.reason
-                  : `${r.inspections_created} inspection(s) + ${r.audits_created} audit(s)` +
-                    (r.skipped_existing ? `, ${r.skipped_existing} already booked` : "")}
-              </li>
-            ))}
-          </ul>
-        </Banner>
-      )}
+      {results && (() => {
+        const created = results.reduce((n, r) => n + r.total, 0);
+        const already = results.reduce((n, r) => n + (r.skipped_existing ?? 0), 0);
+        return (
+          <Banner
+            tone={created > 0 ? "ok" : "info"}
+            title={
+              created > 0
+                ? `${created} visit${created === 1 ? "" : "s"} booked`
+                : "Nothing to book — the year is already full"
+            }
+            icon={<CalendarClock className="h-4 w-4" />}
+          >
+            <ul className="mt-1 space-y-0.5">
+              {results.map((r) => (
+                <li key={`${r.site_id}`}>
+                  <span className="font-semibold">{r.site_name ?? "Site"}</span>{" — "}
+                  {r.reason
+                    ? r.reason
+                    : `${r.inspections_created} inspection(s) + ${r.audits_created} audit(s)` +
+                      (r.skipped_existing ? `, ${r.skipped_existing} already booked` : "")}
+                </li>
+              ))}
+            </ul>
+            {/* The page used to stop at the count and leave the reader guessing.
+                A booked visit has nobody assigned to it, so nothing happens until
+                somebody is named on it in the Register — that is the next step and
+                it belongs here, where the question is being asked. */}
+            <p className="mt-2 text-[12.5px]">
+              {created > 0 ? (
+                <>
+                  Nobody is assigned to {created === 1 ? "it" : "them"} yet.{" "}
+                  <Link to="/audits" className="font-semibold underline underline-offset-2">
+                    Open the Register
+                  </Link>{" "}
+                  and press Assign to give {created === 1 ? "it" : "each one"} an auditor — until then it is
+                  only a date in a diary.
+                </>
+              ) : (
+                <>
+                  {already > 0
+                    ? `Every slot for ${year} already has a visit booked, so nothing was added. `
+                    : ""}
+                  Pressing this again is safe — it never books the same visit twice.
+                </>
+              )}
+            </p>
+          </Banner>
+        );
+      })()}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label="Sites" value={counts.total} hint="in the programme" tone="#2563EB" />

@@ -3,7 +3,10 @@ import { BookOpenText, CalendarClock, ListChecks, TrendingUp } from "lucide-reac
 
 const TABS = [
   { name: "Register", icon: ListChecks, path: "/audits" },
-  { name: "Programme", icon: CalendarClock, path: "/audits/programme" },
+  // "Audit Schedule", not "Programme". The page books each site's visits for
+  // the year; "programme" is the industry word for that and means nothing to
+  // someone meeting the product for the first time.
+  { name: "Audit Schedule", icon: CalendarClock, path: "/audits/programme" },
   { name: "Trends", icon: TrendingUp, path: "/audits/trends" },
   { name: "Templates", icon: BookOpenText, path: "/audits/templates" },
 ];
