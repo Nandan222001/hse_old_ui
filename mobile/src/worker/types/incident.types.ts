@@ -55,7 +55,9 @@ export interface ReportIncidentRequest {
   control_failure?: YesNo;
   hazard_still_present?: YesNo;
   immediate_actions_taken?: string;
-  witnesses?: string[];
+  /** A picked employee carries their id; a typed name is a bare string. Both
+   *  shapes are stored as sent, so the link survives where one exists. */
+  witnesses?: Array<string | { name: string; employee_id?: number }>;
   gps_latitude?: number;
   gps_longitude?: number;
   photos?: PhotoAttachment[];

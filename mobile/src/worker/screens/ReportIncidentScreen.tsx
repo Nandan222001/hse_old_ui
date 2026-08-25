@@ -11,6 +11,7 @@ import { DateTimePickerModal } from '../components/inputs/DateTimePickerModal';
 import { Colors } from '../theme/colors';
 import { useIncidents } from '../hooks/useIncidents';
 import { useGeoTag } from '../hooks/useGeoTag';
+import { EmployeePickerModal } from '../components/inputs/EmployeePickerModal';
 import { lookupService, WorkingStation, HazardOption, EmployeeOption } from '../services/lookupService';
 import type { IncidentType, PhotoAttachment, SeverityLevel, YesNo } from '../types';
 
@@ -32,6 +33,13 @@ const TREATMENT_LEVELS = [
   { value: 'hospitalisation', label: 'Hospitalised / >3 days lost' },
   { value: 'fatality', label: 'Fatality' },
 ];
+
+/**
+ * One witness. `employee_id` is present when they were picked from the register
+ * and absent when the name was typed — a contractor or visitor has no staff
+ * number. Same shape the near miss form sends.
+ */
+type Witness = { name: string; employee_id?: number };
 
 export default function ReportIncidentScreen({ navigation }: any) {
   const { reportIncident, isLoading: isSubmitting } = useIncidents();
@@ -69,8 +77,10 @@ export default function ReportIncidentScreen({ navigation }: any) {
   const [controlFailure, setControlFailure] = useState<YesNo>('No');
   const [hazardStillPresent, setHazardStillPresent] = useState<YesNo>('No');
   const [immediateActions, setImmediateActions] = useState('');
-  const [witnessDraft, setWitnessDraft] = useState('');
-  const [witnesses, setWitnesses] = useState<string[]>([]);
+  // Structured, so a witness picked from the register keeps their id instead of
+  // it being baked into a display string. See EmployeePickerModal.
+  const [witnesses, setWitnesses] = useState<Witness[]>([]);
+  const [witnessPickerOpen, setWitnessPickerOpen] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
   // Real files now, not invented filenames. PhotoAttachment is what
@@ -89,17 +99,6 @@ export default function ReportIncidentScreen({ navigation }: any) {
     lookupService.employees().then(setEmployees).catch(() => setEmployees([]));
   }, []);
 
-  const filteredEmployees = useMemo(() => {
-    const q = witnessDraft.trim().toLowerCase();
-    if (!q) return [];
-    return employees.filter(
-      emp =>
-        emp.full_name.toLowerCase().includes(q) ||
-        `emp-${emp.id}`.includes(q) ||
-        String(emp.id).includes(q)
-    );
-  }, [employees, witnessDraft]);
-
   const stationName = useMemo(
     () => stations.find(s => s.id === stationId)?.station_name ?? 'Select a station',
     [stations, stationId],
@@ -109,11 +108,9 @@ export default function ReportIncidentScreen({ navigation }: any) {
     [hazards, hazardId],
   );
 
-  const addWitness = () => {
-    const name = witnessDraft.trim();
-    if (!name) return;
-    setWitnesses(prev => [...prev, name]);
-    setWitnessDraft('');
+  const addWitness = (w: Witness) => {
+    setWitnesses(prev => [...prev, w]);
+    setWitnessPickerOpen(false);
   };
 
   /**
@@ -519,57 +516,31 @@ export default function ReportIncidentScreen({ navigation }: any) {
 
         {/* Witnesses */}
         <Text style={styles.inputLabel}>Witnesses</Text>
-        <View style={[styles.witnessRow, { zIndex: 10, position: 'relative' }]}>
-          <View style={{ flex: 1, position: 'relative' }}>
-            <View style={[styles.inputContainer, styles.witnessInput, { marginBottom: 0 }]}>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Add a witness name..."
-                placeholderTextColor="#94A3B8"
-                value={witnessDraft}
-                onChangeText={setWitnessDraft}
-                onSubmitEditing={addWitness}
-                returnKeyType="done"
-              />
-            </View>
-            {filteredEmployees.length > 0 && (
-              <View style={styles.autocompleteDropdown}>
-                <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
-                  {filteredEmployees.slice(0, 5).map((emp) => {
-                    const empRef = `EMP-${emp.id}`;
-                    return (
-                      <TouchableOpacity
-                        key={emp.id}
-                        style={styles.autocompleteItem}
-                        onPress={() => {
-                          const displayText = `${empRef} - ${emp.full_name}`;
-                          if (!witnesses.includes(displayText)) {
-                            setWitnesses(prev => [...prev, displayText]);
-                          }
-                          setWitnessDraft('');
-                        }}
-                      >
-                        <Text style={styles.autocompleteItemName}>{emp.full_name}</Text>
-                        <Text style={styles.autocompleteItemRef}>{empRef}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-          <TouchableOpacity style={[styles.witnessAddBtn, { marginBottom: 0 }]} onPress={addWitness}>
-            <Icon name="plus" size={16} color="#2563EB" />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.addWitnessBtn}
+          onPress={() => setWitnessPickerOpen(true)}
+          activeOpacity={0.8}
+        >
+          <Icon name="user-plus" size={17} color="#2563EB" />
+          <Text style={styles.addWitnessLabel}>Add a witness</Text>
+        </TouchableOpacity>
+
         {witnesses.length > 0 && (
-          <View style={styles.photoWrapper}>
-            {witnesses.map((name, idx) => (
-              <View key={`${name}-${idx}`} style={styles.photoTag}>
-                <Icon name="user" size={12} color="#334155" style={{ marginRight: 4 }} />
-                <Text style={styles.photoLabel}>{name}</Text>
-                <TouchableOpacity onPress={() => setWitnesses(prev => prev.filter((_, i) => i !== idx))}>
-                  <Icon emoji="✕" style={styles.photoRemoveBtn} />
+          <View style={styles.witnessList}>
+            {witnesses.map((w, idx) => (
+              <View key={`${w.name}-${w.employee_id ?? 'x'}-${idx}`} style={styles.witnessItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.witnessName}>{w.name}</Text>
+                  <Text style={styles.witnessCode}>
+                    {w.employee_id ? `EMP-${w.employee_id}` : 'Not an employee'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setWitnesses(prev => prev.filter((_, i) => i !== idx))}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityLabel={`Remove ${w.name}`}
+                >
+                  <Icon name="x" size={17} color="#94A3B8" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -799,6 +770,15 @@ export default function ReportIncidentScreen({ navigation }: any) {
         }}
       />
       </View>
+
+      <EmployeePickerModal
+        visible={witnessPickerOpen}
+        employees={employees}
+        chosenIds={witnesses.map(w => w.employee_id).filter((n): n is number => n != null)}
+        onPick={(e) => addWitness({ name: e.full_name, employee_id: e.id })}
+        onAddFreeText={(name) => addWitness({ name })}
+        onClose={() => setWitnessPickerOpen(false)}
+      />
     </ScreenLayout>
   );
 }
@@ -989,25 +969,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     textAlign: 'center',
-  },
-  witnessRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  witnessInput: {
-    flex: 1,
-  },
-  witnessAddBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
   },
   gpsRow: {
     flexDirection: 'row',
@@ -1273,40 +1234,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     paddingHorizontal: 4,
   },
-  autocompleteDropdown: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    zIndex: 1000,
+  addWitnessBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+    borderStyle: 'dashed', backgroundColor: '#F8FAFC', marginBottom: 10,
   },
-  autocompleteItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  addWitnessLabel: { fontSize: 14, fontWeight: '700', color: '#2563EB' },
+  witnessList: { gap: 8, marginBottom: 16 },
+  witnessItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0',
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
   },
-  autocompleteItemName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
-  autocompleteItemRef: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
+  witnessName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
+  witnessCode: { fontSize: 11.5, color: '#64748B', marginTop: 1, fontVariant: ['tabular-nums'] },
 });

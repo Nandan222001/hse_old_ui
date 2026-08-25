@@ -32,8 +32,24 @@ export const lookupService = {
     return Array.isArray(data) ? data : [];
   },
 
+  /**
+   * Everyone in the signed-in user's organisation.
+   *
+   * Scoped by the server, not here: /employees/ filters on the org from the
+   * caller's token, so a worker in one organisation cannot be shown another's
+   * staff whatever this asks for.
+   *
+   * The explicit limit matters though. The endpoint defaults to 100 and this
+   * organisation has 157 people, so the witness picker was silently missing 57
+   * of them — and a picker that cannot find the person you are looking for is
+   * worse than no picker, because the reporter assumes they are not on the
+   * system. 1000 covers any single site comfortably; past that the picker
+   * should ask the server to search rather than paging through everybody.
+   */
   async employees(): Promise<EmployeeOption[]> {
-    const { data } = await apiClient.get<EmployeeOption[]>(ENDPOINTS.LOOKUPS.EMPLOYEES);
+    const { data } = await apiClient.get<EmployeeOption[]>(ENDPOINTS.LOOKUPS.EMPLOYEES, {
+      params: { limit: 1000 },
+    });
     return Array.isArray(data) ? data : [];
   },
 };

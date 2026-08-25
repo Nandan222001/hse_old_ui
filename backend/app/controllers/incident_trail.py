@@ -227,22 +227,24 @@ def _build_people(db: Session, inc: dict, actions: List[dict]) -> List[dict]:
 def _named_in_report(inc: dict) -> dict:
     """People the report names who are not process actors.
 
-    The injured party and any witnesses are free text — the schema never links
-    them to an employee row — so they are returned separately and without an
-    employee id rather than being mixed into `people`, where every entry is
-    backed by one.
+    Kept separate from `people`, where every entry is backed by an employee row
+    and a role in the process. A witness may be an employee — the form now picks
+    them from the register and their id comes with the name — but they are not
+    an actor in the workflow, and the injured party is free text either way.
+
+    Witness labels are built by `report_trail_factory._witness_label`, the same
+    helper the other families use, so a picked employee reads "Henry Jackson
+    (EMP-21)" here exactly as it does on a near miss.
     """
     witnesses: List[str] = []
     raw = inc.get("witnesses_json")
     if raw:
         import json
+        from app.controllers.report_trail_factory import _witness_label
         try:
             parsed = json.loads(raw) if isinstance(raw, str) else raw
             if isinstance(parsed, list):
-                witnesses = [
-                    (w.get("name") or w.get("full_name") or str(w)) if isinstance(w, dict) else str(w)
-                    for w in parsed
-                ]
+                witnesses = [_witness_label(w) for w in parsed]
             elif parsed:
                 witnesses = [str(parsed)]
         except (ValueError, TypeError):
