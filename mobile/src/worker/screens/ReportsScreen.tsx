@@ -15,37 +15,39 @@ import {
 } from '../services/submissionsService';
 import { formatDate } from '../utils/formatters';
 
-/**
- * The five things a worker can report.
- *
- * `tint` is the icon chip's background and `ink` the icon drawn on it. The card
- * itself stays white — colour identifies the report type at a glance and does
- * nothing else.
- *
- * It used to wash the whole card in the tint and set the title in `ink` to
- * match, which put five saturated blocks side by side and made most of the text
- * hard to read. Measured against the old values: the "Near Miss" title was
- * amber #F59E0B on amber #FEF3C7, a contrast ratio of 1.93:1 where 4.5 is the
- * minimum for text — and every description line failed too, because a muted
- * grey that works on white does not work on a tint. Near Miss and Hazard
- * Register also shared #FEF3C7 outright, so two of the five were the same
- * colour.
- *
- * Every pair below clears 3.9:1 on its chip, and all five tints are distinct —
- * Hazard Register moved to teal, which also suits it: a register is standing
- * reference data, not an event that just happened.
- */
 /** Rows per page in Recent Submissions. */
 const PAGE_SIZE = 15;
 
+/**
+ * The five things a worker can report.
+ *
+ * `tint` is the icon chip's background. The glyph on it is drawn in the app's
+ * standard black outline — no `color` is passed, so Icon.tsx falls back to
+ * DEFAULT_COLOR and these follow it if it ever changes. Every other Feather
+ * icon in the worker UI is that same black line, and five coloured glyphs on
+ * one grid broke the only visual convention these screens keep.
+ *
+ * So colour identifies the report type through the chip behind the glyph and
+ * does nothing else. Black on each of the five tints ranges 15.46:1 to 16.96:1,
+ * which is as legible as this screen gets.
+ *
+ * Before any of this the whole card was washed in the tint with the title set
+ * to match, which stacked five saturated blocks side by side and made most of
+ * the text unreadable — the "Near Miss" title was amber #F59E0B on amber
+ * #FEF3C7 at 1.93:1, against a 4.5:1 minimum, and every description line failed
+ * too. Near Miss and Hazard Register also shared #FEF3C7 outright, so two of
+ * the five were the same colour. All five tints are distinct now; Hazard
+ * Register moved to teal, which suits it — a register is standing reference
+ * data, not an event that just happened.
+ */
 const REPORT_TYPES = [
-  { id: 'near_miss',  icon: 'alert-triangle', title: 'Near Miss',       desc: 'Report a near miss event',            ink: '#B45309', tint: '#FEF3C7', screen: 'ReportNearMiss'  },
-  { id: 'incident',   icon: 'alert-octagon',  title: 'Incident',        desc: 'Report a safety incident',            ink: '#DC2626', tint: '#FEE2E2', screen: 'ReportIncident'  },
-  { id: 'unsafe_act', icon: 'eye',            title: 'Unsafe Act',      desc: 'Report an unsafe behaviour',          ink: '#1D4ED8', tint: '#DBEAFE', screen: 'ReportUnsafeAct' },
-  { id: 'risk',       icon: 'shield',         title: 'Risk Observation', desc: 'One-off unsafe condition you saw',   ink: '#6D28D9', tint: '#EDE9FE', screen: 'ReportRisk'      },
+  { id: 'near_miss',  icon: 'alert-triangle', title: 'Near Miss',       desc: 'Report a near miss event',            tint: '#FEF3C7', screen: 'ReportNearMiss'  },
+  { id: 'incident',   icon: 'alert-octagon',  title: 'Incident',        desc: 'Report a safety incident',            tint: '#FEE2E2', screen: 'ReportIncident'  },
+  { id: 'unsafe_act', icon: 'eye',            title: 'Unsafe Act',      desc: 'Report an unsafe behaviour',          tint: '#DBEAFE', screen: 'ReportUnsafeAct' },
+  { id: 'risk',       icon: 'shield',         title: 'Risk Observation', desc: 'One-off unsafe condition you saw',   tint: '#EDE9FE', screen: 'ReportRisk'      },
   // Flow 5. Kept apart from the risk observation above: a register entry is a
   // standing condition that runs all eight stages, and the worker can follow it.
-  { id: 'hazard',     icon: 'tool',           title: 'Hazard Register', desc: 'Log a hazard that needs controlling', ink: '#0F766E', tint: '#CCFBF1', screen: 'LogHazard'       },
+  { id: 'hazard',     icon: 'tool',           title: 'Hazard Register', desc: 'Log a hazard that needs controlling', tint: '#CCFBF1', screen: 'LogHazard'       },
 ];
 
 /** `under_investigation` -> `under investigation`. Every family stores its
@@ -135,7 +137,7 @@ export default function ReportsScreen({ navigation }: any) {
           activeOpacity={0.8}
         >
           <View style={[styles.registerChip, { backgroundColor: '#FEE2E2' }]}>
-            <Icon name="alert-octagon" style={styles.registerIcon} color="#DC2626" />
+            <Icon name="alert-octagon" style={styles.registerIcon} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Incidents</Text>
@@ -153,7 +155,7 @@ export default function ReportsScreen({ navigation }: any) {
           activeOpacity={0.8}
         >
           <View style={[styles.registerChip, { backgroundColor: '#CCFBF1' }]}>
-            <Icon name="list" style={styles.registerIcon} color="#0F766E" />
+            <Icon name="list" style={styles.registerIcon} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Hazards</Text>
@@ -171,7 +173,7 @@ export default function ReportsScreen({ navigation }: any) {
           activeOpacity={0.8}
         >
           <View style={[styles.registerChip, { backgroundColor: '#FEF3C7' }]}>
-            <Icon name="alert-triangle" style={styles.registerIcon} color="#B45309" />
+            <Icon name="alert-triangle" style={styles.registerIcon} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Near Misses</Text>
@@ -190,7 +192,7 @@ export default function ReportsScreen({ navigation }: any) {
           activeOpacity={0.8}
         >
           <View style={[styles.registerChip, { backgroundColor: '#EDE9FE' }]}>
-            <Icon name="shield" style={styles.registerIcon} color="#6D28D9" />
+            <Icon name="shield" style={styles.registerIcon} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Risk Reports</Text>
@@ -210,7 +212,7 @@ export default function ReportsScreen({ navigation }: any) {
               activeOpacity={0.8}
             >
               <View style={[styles.reportChip, { backgroundColor: rt.tint }]}>
-                <Icon name={rt.icon} style={styles.reportIcon} color={rt.ink} />
+                <Icon name={rt.icon} style={styles.reportIcon} />
               </View>
               <Text style={styles.reportTitle}>{rt.title}</Text>
               <Text style={styles.reportDesc}>{rt.desc}</Text>
