@@ -19,9 +19,15 @@ from app.models.permit_to_work import PermitToWork
 from app.models.capa_action import CapaAction
 from app.models.notification import Notification
 from app.services import audit_calendar, capa_scheduler
+from app.services.workflow_stages import PERMIT_LIVE_STATUSES
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Granted, being worked under, or worked under and verified — the states in
+# which a permit authorises work right now, and so the only ones expiry
+# applies to. Defined next to the stage mapping it has to agree with.
+LIVE_STATUSES = list(PERMIT_LIVE_STATUSES)
 
 
 def check_checklist_sla_breaches() -> None:
@@ -54,21 +60,50 @@ def check_checklist_sla_breaches() -> None:
 
 
 def expire_overdue_permits() -> None:
+    """Take live permits out of service once their validity window has closed.
+
+    A permit authorises work for a stated period, and nothing was ending that
+    authorisation when the period ran out — a permit issued for a Tuesday
+    afternoon still read as live work indefinitely. `/activate` and `/resume`
+    now refuse to *start* work outside the window, but a permit that lapses
+    while already active needs something to notice, and only the clock can.
+
+    Two things this used to get wrong.
+
+    It selected and wrote `status`, the website's business field. The lifecycle
+    rides on `workflow_status` — that is what the stage mapping, the next-action
+    resolver, PERMIT_LIVE_STATUSES and the gate engine's clash check all read —
+    so expiring one and not the other left a permit that every dashboard called
+    Expired while the whole workflow still treated it as live. Both are written
+    now, and the selection is driven by the lifecycle.
+
+    And `status == "Active"` is not the same set as "authorises work right now".
+    LIVE_STATUSES is: issued, active, verified. A permit at `work_complete` is
+    deliberately excluded — its work is finished, and the window closing after
+    the fact changes nothing it owes.
+
+    Uses local time, matching the validity_end values written by the approval
+    endpoint. The previous utcnow() would have expired permits up to five and a
+    half hours early against this database's timestamps.
+    """
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now()
         count = (
             db.query(PermitToWork)
             .filter(
-                PermitToWork.status == "Active",
+                PermitToWork.workflow_status.in_(LIVE_STATUSES),
                 PermitToWork.validity_end.isnot(None),
                 PermitToWork.validity_end < now,
             )
-            .update({"status": "Expired"}, synchronize_session=False)
+            .update(
+                {"workflow_status": "expired", "status": "Expired"},
+                synchronize_session=False,
+            )
         )
         db.commit()
         if count:
-            logger.info("Scheduler: auto-expired %s permits past their validity_end", count)
+            logger.info("Scheduler: expired %s permits past their validity_end", count)
     except Exception:
         db.rollback()
         logger.exception("Scheduler: permit expiry check failed")
@@ -153,11 +188,25 @@ def start_scheduler() -> None:
         capa_scheduler.flag_systemic_issues, "interval", hours=24,
         id="capa_systemic_flag", next_run_time=now,
     )
-    # expire_overdue_permits is intentionally NOT scheduled: the current dataset's
-    # permits all carry validity_end dates from 2024-2025 while the system clock is
-    # 2026, so every "Active" permit reads as already-expired and the job would wipe
-    # out /actions' entire "active work" view on its first run. Re-enable once
-    # validity_end reflects real, currently-relevant dates.
+    # ── Permit expiry ────────────────────────────────────────────────────────
+    # Every 15 minutes, matching the checklist SLA sweep above: a permit whose
+    # window has closed is a live safety condition, not a daily report.
+    #
+    # This was previously left unscheduled because the dataset's permits carry
+    # validity_end dates from 2024-2025 and the job would reclassify all of them
+    # on its first run. That is still what happens — and it is the point. Those
+    # permits ended; 2,241 of them in 2024. Reporting them as live work was the
+    # error, and an "active work" view built on 3,211 permits that expired up to
+    # two years ago was showing a number that was never true.
+    #
+    # Expect the first run to move them to `expired`, which is stage 03 RESPOND
+    # and supervisor-owned, so they leave the auditor's verification queue and
+    # land in the supervisor's as "confirm work has stopped, then close". That
+    # backlog is real and is now visible instead of hidden.
+    _scheduler.add_job(
+        expire_overdue_permits, "interval", minutes=15,
+        id="permit_expiry_sweep", next_run_time=now,
+    )
     # ── WF-05 · "sets a reminder 14 days out" ────────────────────────────────
     # Daily is the right cadence: the reminder is stamped once per audit, so a
     # tighter sweep would find nothing new and a looser one could skip the
