@@ -8,8 +8,9 @@
  * showed a description and an interim control — approving controls without
  * being able to read the root cause they answer.
  *
- * Six blocks, in the order the record was filled in:
+ * Seven blocks, in the order the record was filled in:
  *
+ *   0. Record                  — reference, stage, status, audit timestamps
  *   1. Reported by the worker  — the log form, every field of it
  *   2. Assessment              — 02 ASSESS, the priority that ranks it
  *   3. Immediate response      — 03 RESPOND, what was done that day
@@ -31,6 +32,13 @@ const HIERARCHY_LABEL: Record<string, string> = {
   engineering: 'Engineering control',
   administrative: 'Administrative control',
   ppe: 'PPE only',
+};
+
+/** register_status is stored snake_case and read by people. */
+const statusLabel = (v?: string | null) => {
+  if (!v) return null;
+  const words = String(v).replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
 const fmtDateTime = (iso?: string | null) => {
@@ -76,6 +84,23 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
 
   return (
     <View>
+      {/* ── 0. The record itself ─────────────────────────────────────────── */}
+      <View style={[styles.block, styles.recordBlock]}>
+        <Text style={styles.blockTitle}>Record</Text>
+        <Row label="Reference" value={h.reference} />
+        <Row
+          label="Stage"
+          value={
+            h.stage_label
+              ? `${h.stage_number ?? '?'} of ${h.total_stages ?? 8} — ${h.stage_label}`
+              : null
+          }
+        />
+        <Row label="Status" value={statusLabel(h.register_status)} />
+        <Row label="Created" value={fmtDateTime(h.created_at)} />
+        <Row label="Last updated" value={fmtDateTime(h.updated_at)} />
+      </View>
+
       {/* ── 1. Reported by the worker ────────────────────────────────────── */}
       <View style={styles.block}>
         <Text style={styles.blockTitle}>Reported by the worker</Text>
@@ -105,6 +130,11 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
           <Text style={styles.blockTitle}>Assessment</Text>
           <Row label="Priority" value={h.assessed_priority} />
           <Row label="Assessed as" value={h.assessed_label} />
+          {/* The assessor's own scoring. These are the live columns the engine
+              reads, and they are what the priority above was derived from —
+              block 1 shows the reporter's frozen copies of the same two. */}
+          <Row label="Severity" value={h.severity} />
+          <Row label="Likelihood" value={h.probability} />
           <Row label="Risk score" value={h.risk_score != null ? `${h.risk_score} / 25` : null} />
           <Row label="People exposed" value={h.persons_exposed} />
           <Row label="Assessed by" value={h.assessed_by_name} />
@@ -157,6 +187,14 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
           <Row label="Verified by" value={h.controls_verified_by_name} />
           <Row label="Verified at" value={fmtDateTime(h.controls_verified_at)} />
           <Row label="What was checked" value={h.control_verification_notes} />
+          {/* `controls` normally mirrors one of the two above — it holds the
+              reporter's answer until planning copies the planned measure into
+              it, and both are already shown. It only says something of its own
+              when the website's /review edited it directly, so it renders only
+              in that case rather than printing the same text a third time. */}
+          {h.controls !== h.planned_controls && h.controls !== h.existing_controls && (
+            <Row label="Register entry" value={h.controls} />
+          )}
           {/* A verification that failed sent the hazard back a stage. The count
               is the honest record of that and belongs in front of whoever is
               deciding whether to trust this control. */}
@@ -200,6 +238,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
+  recordBlock: { backgroundColor: '#F8FAFC' },
   assessBlock: { backgroundColor: '#F8FAFC' },
   controlBlock: { borderColor: '#BFDBFE' },
   blockTitle: {

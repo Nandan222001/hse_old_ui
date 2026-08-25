@@ -255,6 +255,12 @@ class HazardRegisterResponse(BaseModel):
     closed_by: Optional[int] = None
     closed_at: Optional[datetime] = None
 
+    # The row's own audit timestamps. `logged_at` is when the worker submitted;
+    # these are when the record was written and last touched, which is not the
+    # same thing for a hazard created by an import or edited on the website.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
     # Position on the eight stages, derived from register_status by
     # workflow_stages.describe("hazard_register", ...) — never stored.
     stage: Optional[str] = None

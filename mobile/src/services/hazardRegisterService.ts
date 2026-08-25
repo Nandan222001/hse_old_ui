@@ -138,6 +138,9 @@ export interface HazardRegisterItem {
   closed_by: number | null;
   closed_at: string | null;
 
+  created_at: string | null;
+  updated_at: string | null;
+
   // Derived server-side from register_status — flat shape, never stored.
   stage: WorkflowStageKey | null;
   stage_number: number | null;
