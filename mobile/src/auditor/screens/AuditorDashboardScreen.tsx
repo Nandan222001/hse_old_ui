@@ -62,9 +62,33 @@ export function AuditorDashboardScreen({ navigation }: any) {
     return unsub;
   }, [navigation, load]);
 
+  // Open, not "in flight". The tiles used to count a fixed list of active
+  // statuses, so an audit at capa_open — report issued, findings still being
+  // tracked out — was in neither tile: 2 in flight + 2 closed against a list of
+  // 5. Open and closed are complements of one another, so every audit lands in
+  // exactly one and the pair always reconciles with the queue below, whatever
+  // statuses get added later.
+  const open = audits.filter((a) => !a.closed_at);
+  const closed = audits.filter((a) => a.closed_at);
+  // Still needed for the queue further down, which lists what is being worked
+  // on now rather than everything unclosed.
   const inFlight = audits.filter((a) => ACTIVE_STATUSES.includes(a.status) && !a.closed_at);
   const stopped = audits.filter((a) => a.status === 'immediate_action');
-  const scores = audits.map((a) => a.compliance_score).filter((s): s is number => typeof s === 'number');
+  // Only audits that have actually been scored. An audit that has not reached
+  // stage 07 carries compliance_score 0, which is a placeholder and not a
+  // result — averaging it in reported this auditor's work as 54 when the four
+  // scored audits average 68, and dropped the band label from "acceptable" to
+  // "poor" on the strength of an audit nobody had classified yet.
+  //
+  // `> 0` rather than a classified flag because the list response carries no
+  // such flag: `classified_at` is not returned at all, and `score_band` is null
+  // on scored audits (AUD-000007 scored 50, AUD-000009 scored 83, both null).
+  // The blind spot is an audit that genuinely scored zero, which would be left
+  // out of the average rather than counted — it omits a result instead of
+  // inventing one, which is the right way round for this to be wrong.
+  const scores = audits
+    .map((a) => a.compliance_score)
+    .filter((s): s is number => typeof s === 'number' && s > 0);
   const avg = scores.length ? Math.round(scores.reduce((x, y) => x + y, 0) / scores.length) : 0;
   const overdueChecks = openFindings.filter(
     (f) => f.corrective_action_due && new Date(f.corrective_action_due) < new Date(),
@@ -122,9 +146,12 @@ export function AuditorDashboardScreen({ navigation }: any) {
 
           {/* The numbers */}
           <View style={styles.statsRow}>
-            <Stat label="In flight" value={inFlight.length} icon="walk" color="#1D4ED8" bg="#EFF6FF" />
-            <Stat label="To verify" value={openFindings.length} icon="shield-checkmark" color="#B45309" bg="#FEF3C7" />
-            <Stat label="Closed" value={audits.filter((a) => a.closed_at).length} icon="lock-closed" color="#047857" bg="#D1FAE5" />
+            <Stat label="Open" value={open.length} icon="walk" color="#1D4ED8" bg="#EFF6FF" />
+            {/* "Open findings", not "To verify". These are findings whose
+                corrective action is still outstanding — there is nothing to
+                verify until somebody has done the work. */}
+            <Stat label="Open findings" value={openFindings.length} icon="shield-checkmark" color="#B45309" bg="#FEF3C7" />
+            <Stat label="Closed" value={closed.length} icon="lock-closed" color="#047857" bg="#D1FAE5" />
           </View>
 
           {avg > 0 && (

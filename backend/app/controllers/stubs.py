@@ -1400,7 +1400,25 @@ def get_supervisor_kpis(
         text("SELECT COUNT(*) FROM near_misses WHERE organisation_id = :org_id"), {"org_id": org}
     ).scalar() or 0
 
-    zone_trir = round(injuries * 200000 / man_hours, 2) if man_hours else 0.0
+    # TRIR over the whole organisation, because `injuries` above is counted over
+    # the whole organisation. It used to divide that org-wide count by this one
+    # supervisor's team hours, which is not a rate of anything: for org 4 it put
+    # 40 org-wide injuries over 34,042 team hours and reported 235.0, against a
+    # consistent figure of 12.9 — eighteen times too high, on a number whose
+    # whole purpose is comparison.
+    #
+    # Scoping the injuries down to the supervisor instead would be the better
+    # metric but the data cannot support it: only 17 of those 40 injuries carry
+    # an assigned_supervisor_id at all, and that column records who investigated
+    # rather than whose team was hurt. Undercounting the numerator by more than
+    # half would trade a visibly wrong number for a quietly wrong one.
+    org_man_hours = float(db.execute(
+        text("""SELECT COALESCE(SUM(actual_hours_worked), 0) FROM shift_schedule
+                WHERE organisation_id = :org_id"""),
+        {"org_id": org},
+    ).scalar() or 0)
+
+    zone_trir = round(injuries * 200000 / org_man_hours, 2) if org_man_hours else 0.0
     near_miss_ratio = round(near_misses / injuries, 1) if injuries else 0.0
 
     open_permits = db.execute(

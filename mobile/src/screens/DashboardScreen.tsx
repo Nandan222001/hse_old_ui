@@ -148,7 +148,11 @@ export function DashboardScreen({ navigation }: Props) {
         {/* Zone KPIs — the supervisor's own area, not the whole org */}
         <Text style={styles.sectionTitle}>Your Zone</Text>
         <View style={styles.zoneGrid}>
-          <ZoneTile label="Zone TRIR" value={zoneKpis?.zone_trir} />
+          {/* "Site", not "Zone": the rate is computed over the whole site because
+              the injury count behind it is, and the data cannot attribute an
+              injury to one supervisor's team. Team Man-Hours below is genuinely
+              this supervisor's. */}
+          <ZoneTile label="Site TRIR" value={zoneKpis?.zone_trir} />
           <ZoneTile label="Near Miss Ratio" value={zoneKpis?.near_miss_ratio} />
           <ZoneTile label="Open Permits" value={zoneKpis?.open_permits} />
           <ZoneTile label="Pending CAPAs" value={zoneKpis?.pending_capa} />

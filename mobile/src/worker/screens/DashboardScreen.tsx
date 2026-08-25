@@ -109,9 +109,15 @@ export default function DashboardScreen({ navigation }: any) {
   // numbers — without this the dashboard keeps the figures it loaded at mount.
   useEffect(() => navigation.addListener('focus', onRefresh), [navigation, onRefresh]);
 
-  const total     = shiftSummary?.total_tasks     ?? 5;
-  const completed = shiftSummary?.completed_tasks ?? 0;
-  const pending   = total - completed;
+  // No fallback numbers. `total_tasks` defaulted to 5 and `active_permits` to
+  // 2, and fetchShiftSummary swallows its errors — so a worker whose phone
+  // could not reach the backend was shown "5 pending tasks" and "2 active
+  // permits" as though they were real, with nothing to say otherwise. The
+  // Safety Score tile in this same screen already renders an em dash when it
+  // has no value; these now do the same.
+  const total     = shiftSummary?.total_tasks ?? null;
+  const completed = shiftSummary?.completed_tasks ?? null;
+  const pending   = total != null && completed != null ? total - completed : null;
 
   // Real breakdown of the worker's own tasks.
   const now = Date.now();
@@ -287,7 +293,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.statCardLabel}>Pending Tasks</Text>
               <Icon name="clipboard" style={styles.cardHeaderIcon} />
             </View>
-            <Text style={styles.statCardValue}>{pending}</Text>
+            <Text style={styles.statCardValue}>{pending ?? '—'}</Text>
             <Text style={styles.statCardSubText}>{overdueCount} overdue, {todayCount} for today</Text>
           </TouchableOpacity>
 
@@ -297,7 +303,7 @@ export default function DashboardScreen({ navigation }: any) {
               <Text style={styles.statCardLabel}>Active Permits</Text>
               <Icon name="map-pin" style={styles.cardHeaderIcon} />
             </View>
-            <Text style={styles.statCardValue}>{shiftSummary?.active_permits ?? 2}</Text>
+            <Text style={styles.statCardValue}>{shiftSummary?.active_permits ?? '—'}</Text>
             <Text style={styles.statCardSubText}>Track active & pending safety permits</Text>
           </TouchableOpacity>
         </View>
