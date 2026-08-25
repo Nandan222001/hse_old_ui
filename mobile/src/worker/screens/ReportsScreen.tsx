@@ -35,6 +35,9 @@ import { formatDate } from '../utils/formatters';
  * Hazard Register moved to teal, which also suits it: a register is standing
  * reference data, not an event that just happened.
  */
+/** Rows per page in Recent Submissions. */
+const PAGE_SIZE = 15;
+
 const REPORT_TYPES = [
   { id: 'near_miss',  icon: 'alert-triangle', title: 'Near Miss',       desc: 'Report a near miss event',            ink: '#B45309', tint: '#FEF3C7', screen: 'ReportNearMiss'  },
   { id: 'incident',   icon: 'alert-octagon',  title: 'Incident',        desc: 'Report a safety incident',            ink: '#DC2626', tint: '#FEE2E2', screen: 'ReportIncident'  },
@@ -88,6 +91,26 @@ export default function ReportsScreen({ navigation }: any) {
 
   const onRefresh = useCallback(() => { setIsLoading(true); loadSubs(); }, [loadSubs]);
 
+  // ── Recent Submissions paging ──────────────────────────────────────────────
+  const [page, setPage] = useState(0);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const listTopY = React.useRef(0);
+
+  const pageCount = Math.max(1, Math.ceil(subs.length / PAGE_SIZE));
+  // Clamped rather than stored blindly: a refresh can return fewer rows than
+  // the page the worker is standing on — closing something out is enough — and
+  // an out-of-range page renders as an empty list with no way to tell why.
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * PAGE_SIZE;
+  const visible = subs.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    // Without this, paging while scrolled to the bottom lands the reader on the
+    // last rows of the new page rather than its first.
+    scrollRef.current?.scrollTo({ y: listTopY.current, animated: true });
+  };
+
   return (
     <ScreenLayout>
       <View style={styles.header}>
@@ -95,6 +118,7 @@ export default function ReportsScreen({ navigation }: any) {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -102,8 +126,8 @@ export default function ReportsScreen({ navigation }: any) {
         }
       >
         {/* Flow 5 · the standing register the worker can follow to closure.
-            Recent Submissions below lists incidents, so hazards need their
-            own way in rather than a filter on that list. */}
+            Recent Submissions below now carries every family, but it is a
+            history: this is the way in to the register itself. */}
         <TouchableOpacity
           style={styles.registerLink}
           onPress={() => navigation.navigate('MyHazards')}
@@ -119,10 +143,9 @@ export default function ReportsScreen({ navigation }: any) {
           <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
         </TouchableOpacity>
 
-        {/* Near misses run the same eight stages and, like hazards, are not in
-            Recent Submissions below — that list is incidents. A reporter who
-            never sees an outcome stops reporting, which is the one thing a near
-            miss programme cannot afford. */}
+        {/* Near misses run the same eight stages as the register above. A
+            reporter who never sees an outcome stops reporting, which is the one
+            thing a near miss programme cannot afford. */}
         <TouchableOpacity
           style={styles.registerLink}
           onPress={() => navigation.navigate('MyNearMisses')}
@@ -176,11 +199,16 @@ export default function ReportsScreen({ navigation }: any) {
           ))}
         </View>
 
-        {/* Recent Submissions — every family, newest first */}
-        <View style={styles.recentHeader}>
+        {/* Recent Submissions — every family, newest first, 15 to a page */}
+        <View
+          style={styles.recentHeader}
+          onLayout={(e) => { listTopY.current = e.nativeEvent.layout.y; }}
+        >
           <Text style={styles.sectionTitle}>Recent Submissions</Text>
           {subs.length > 0 && (
-            <Text style={styles.recentCount}>{subs.length} total</Text>
+            <Text style={styles.recentCount}>
+              {pageStart + 1}–{pageStart + visible.length} of {subs.length}
+            </Text>
           )}
         </View>
 
@@ -193,7 +221,7 @@ export default function ReportsScreen({ navigation }: any) {
             subtitle="Anything you report — incidents, near misses, unsafe acts, risks and hazards — appears here."
           />
         ) : (
-          subs.slice(0, 30).map(sub => {
+          visible.map(sub => {
             const fam = FAMILY_TINT[sub.family];
             return (
               <TouchableOpacity
@@ -221,6 +249,49 @@ export default function ReportsScreen({ navigation }: any) {
               </TouchableOpacity>
             );
           })
+        )}
+
+        {/* Only when there is somewhere to go. One page of results needs no
+            controls, and showing a dead "Page 1 of 1" invites a tap that does
+            nothing. */}
+        {pageCount > 1 && (
+          <View style={styles.pager}>
+            <TouchableOpacity
+              style={[styles.pagerBtn, safePage === 0 && styles.pagerBtnOff]}
+              onPress={() => goToPage(safePage - 1)}
+              disabled={safePage === 0}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Previous page"
+              accessibilityState={{ disabled: safePage === 0 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name="chevron-left"
+                style={styles.pagerIcon}
+                color={safePage === 0 ? Colors.textLight : Colors.textDark}
+              />
+            </TouchableOpacity>
+
+            <Text style={styles.pagerLabel}>Page {safePage + 1} of {pageCount}</Text>
+
+            <TouchableOpacity
+              style={[styles.pagerBtn, safePage >= pageCount - 1 && styles.pagerBtnOff]}
+              onPress={() => goToPage(safePage + 1)}
+              disabled={safePage >= pageCount - 1}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Next page"
+              accessibilityState={{ disabled: safePage >= pageCount - 1 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name="chevron-right"
+                style={styles.pagerIcon}
+                color={safePage >= pageCount - 1 ? Colors.textLight : Colors.textDark}
+              />
+            </TouchableOpacity>
+          </View>
         )}
 
         <View style={{ height: 24 }} />
@@ -273,7 +344,25 @@ const styles = StyleSheet.create({
   reportDesc: { fontSize: 12, color: Colors.textMuted, lineHeight: 16 },
 
   recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 4 },
-  recentCount: { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
+  recentCount: { fontSize: 13, color: Colors.textMuted, fontWeight: '500', fontVariant: ['tabular-nums'] },
+
+  pager: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 14, paddingHorizontal: 4,
+  },
+  pagerBtn: {
+    width: 40, height: 40, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+  },
+  // Faded rather than hidden: a control that vanishes at the ends makes the
+  // row jump and the remaining button move under the thumb.
+  pagerBtnOff: { backgroundColor: Colors.background, borderColor: '#EEF2F6' },
+  pagerIcon: { fontSize: 20 },
+  pagerLabel: {
+    fontSize: 13, fontWeight: '700', color: Colors.textMid,
+    fontVariant: ['tabular-nums'],
+  },
 
   recentCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   recentLeft: { flex: 1, marginRight: 10 },
