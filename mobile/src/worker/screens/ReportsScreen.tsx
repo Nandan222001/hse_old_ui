@@ -13,14 +13,34 @@ import { useIncidents } from '../hooks/useIncidents';
 import { Incident, IncidentType, SeverityLevel } from '../types';
 import { formatDate } from '../utils/formatters';
 
+/**
+ * The five things a worker can report.
+ *
+ * `tint` is the icon chip's background and `ink` the icon drawn on it. The card
+ * itself stays white — colour identifies the report type at a glance and does
+ * nothing else.
+ *
+ * It used to wash the whole card in the tint and set the title in `ink` to
+ * match, which put five saturated blocks side by side and made most of the text
+ * hard to read. Measured against the old values: the "Near Miss" title was
+ * amber #F59E0B on amber #FEF3C7, a contrast ratio of 1.93:1 where 4.5 is the
+ * minimum for text — and every description line failed too, because a muted
+ * grey that works on white does not work on a tint. Near Miss and Hazard
+ * Register also shared #FEF3C7 outright, so two of the five were the same
+ * colour.
+ *
+ * Every pair below clears 3.9:1 on its chip, and all five tints are distinct —
+ * Hazard Register moved to teal, which also suits it: a register is standing
+ * reference data, not an event that just happened.
+ */
 const REPORT_TYPES = [
-  { id: 'near_miss',  icon: '⚠️', title: 'Near Miss',       desc: 'Report a near miss event',      color: Colors.warning,  bg: Colors.warningBg,  screen: 'ReportNearMiss'  },
-  { id: 'incident',   icon: '🚨', title: 'Incident',         desc: 'Report a safety incident',      color: Colors.critical, bg: Colors.criticalBg, screen: 'ReportIncident'  },
-  { id: 'unsafe_act', icon: '👁️', title: 'Unsafe Act',       desc: 'Report an unsafe behaviour',   color: Colors.blue,     bg: '#E3F2FD',         screen: 'ReportUnsafeAct' },
-  { id: 'risk',       icon: '🛡️', title: 'Risk Observation', desc: 'One-off unsafe condition you saw', color: '#7C3AED',    bg: '#F3E8FF',         screen: 'ReportRisk'      },
+  { id: 'near_miss',  icon: 'alert-triangle', title: 'Near Miss',       desc: 'Report a near miss event',            ink: '#B45309', tint: '#FEF3C7', screen: 'ReportNearMiss'  },
+  { id: 'incident',   icon: 'alert-octagon',  title: 'Incident',        desc: 'Report a safety incident',            ink: '#DC2626', tint: '#FEE2E2', screen: 'ReportIncident'  },
+  { id: 'unsafe_act', icon: 'eye',            title: 'Unsafe Act',      desc: 'Report an unsafe behaviour',          ink: '#1D4ED8', tint: '#DBEAFE', screen: 'ReportUnsafeAct' },
+  { id: 'risk',       icon: 'shield',         title: 'Risk Observation', desc: 'One-off unsafe condition you saw',   ink: '#6D28D9', tint: '#EDE9FE', screen: 'ReportRisk'      },
   // Flow 5. Kept apart from the risk observation above: a register entry is a
   // standing condition that runs all eight stages, and the worker can follow it.
-  { id: 'hazard',     icon: '⛏️', title: 'Hazard Register',  desc: 'Log a hazard that needs controlling', color: '#B45309',    bg: '#FEF3C7',         screen: 'LogHazard'       },
+  { id: 'hazard',     icon: 'tool',           title: 'Hazard Register', desc: 'Log a hazard that needs controlling', ink: '#0F766E', tint: '#CCFBF1', screen: 'LogHazard'       },
 ];
 
 const INCIDENT_TYPE_LABEL: Record<IncidentType, string> = {
@@ -100,7 +120,9 @@ export default function ReportsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('MyHazards')}
           activeOpacity={0.8}
         >
-          <Icon name="list" style={styles.registerIcon} color="#B45309" />
+          <View style={[styles.registerChip, { backgroundColor: '#CCFBF1' }]}>
+            <Icon name="list" style={styles.registerIcon} color="#0F766E" />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Hazards</Text>
             <Text style={styles.registerDesc}>Track the hazards you logged through all eight stages</Text>
@@ -117,7 +139,9 @@ export default function ReportsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('MyNearMisses')}
           activeOpacity={0.8}
         >
-          <Icon name="alert-triangle" style={styles.registerIcon} color={Colors.warning} />
+          <View style={[styles.registerChip, { backgroundColor: '#FEF3C7' }]}>
+            <Icon name="alert-triangle" style={styles.registerIcon} color="#B45309" />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Near Misses</Text>
             <Text style={styles.registerDesc}>Follow what you reported from triage to closure</Text>
@@ -134,7 +158,9 @@ export default function ReportsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('MyRiskReports')}
           activeOpacity={0.8}
         >
-          <Icon name="shield" style={styles.registerIcon} color="#7C3AED" />
+          <View style={[styles.registerChip, { backgroundColor: '#EDE9FE' }]}>
+            <Icon name="shield" style={styles.registerIcon} color="#6D28D9" />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.registerTitle}>My Risk Reports</Text>
             <Text style={styles.registerDesc}>See how each risk you raised was rated and controlled</Text>
@@ -148,12 +174,14 @@ export default function ReportsScreen({ navigation }: any) {
           {REPORT_TYPES.map(rt => (
             <TouchableOpacity
               key={rt.id}
-              style={[styles.reportCard, { backgroundColor: rt.bg }]}
+              style={styles.reportCard}
               onPress={() => navigation.navigate(rt.screen)}
               activeOpacity={0.8}
             >
-              <Icon emoji={rt.icon} style={styles.reportIcon} color={rt.color} />
-              <Text style={[styles.reportTitle, { color: rt.color }]}>{rt.title}</Text>
+              <View style={[styles.reportChip, { backgroundColor: rt.tint }]}>
+                <Icon name={rt.icon} style={styles.reportIcon} color={rt.ink} />
+              </View>
+              <Text style={styles.reportTitle}>{rt.title}</Text>
               <Text style={styles.reportDesc}>{rt.desc}</Text>
             </TouchableOpacity>
           ))}
@@ -219,22 +247,40 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.textDark },
   scroll: { flex: 1, padding: 16 },
 
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.textDark, marginBottom: 12, marginTop: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.textDark, marginBottom: 12, marginTop: 14 },
 
+  // All three "My ..." rows used to be solid amber, whatever they linked to —
+  // three identical blocks stacked above a grid of five more. They are white
+  // cards now and the chip carries the colour, so the row that leads to hazards
+  // is recognisably the hazard one.
   registerLink: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FEF3C7', borderRadius: 16, padding: 16, marginBottom: 20,
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 14, padding: 14, marginBottom: 10,
   },
-  registerIcon: { fontSize: 22 },
-  registerTitle: { fontSize: 15, fontWeight: '700', color: '#B45309', marginBottom: 2 },
-  registerDesc: { fontSize: 12, color: Colors.textMuted },
+  registerChip: {
+    width: 38, height: 38, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  registerIcon: { fontSize: 19 },
+  registerTitle: { fontSize: 14.5, fontWeight: '700', color: Colors.textDark, marginBottom: 2 },
+  registerDesc: { fontSize: 12, color: Colors.textMuted, lineHeight: 16 },
   registerChevron: { fontSize: 18 },
 
   reportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  reportCard: { width: '47%', borderRadius: 16, padding: 18 },
-  reportIcon: { fontSize: 30, marginBottom: 10 },
-  reportTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  reportDesc: { fontSize: 12, color: Colors.textMuted },
+  // White card, hairline border, colour confined to the chip. Matches the
+  // register rows above so the whole screen reads as one surface.
+  reportCard: {
+    width: '47%', borderRadius: 14, padding: 16,
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+  },
+  reportChip: {
+    width: 40, height: 40, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+  },
+  reportIcon: { fontSize: 20 },
+  reportTitle: { fontSize: 14.5, fontWeight: '700', color: Colors.textDark, marginBottom: 4 },
+  reportDesc: { fontSize: 12, color: Colors.textMuted, lineHeight: 16 },
 
   recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 4 },
   recentCount: { fontSize: 13, color: Colors.textMuted, fontWeight: '500' },
