@@ -18,6 +18,9 @@ def _build_row(payload: NearMissReport, data: Dict[str, Any]) -> Dict[str, Any]:
         # Both are enum('Yes','No') in MySQL, so normalise before writing.
         "control_failure": _yes_no(data.get("control_failure")),
         "capa_escalation": _yes_no(data.get("capa_escalation")),
+        # Written only when the worker chose "Other"; the matching id is unset.
+        "location_other": data.get("location_other"),
+        "hazard_other": data.get("hazard_other"),
     }
 
 
@@ -35,6 +38,9 @@ router = build_workflow_router(
     detail_fields=[
         "potential_consequence", "underlying_cause", "hazard_id",
         "control_failure", "capa_escalation",
+        # Read back to the reporter on My Near Misses and to the supervisor on
+        # review — a field worth collecting is worth showing.
+        "location_other", "hazard_other",
     ],
     # near_misses names its timestamp column event_date_time
     observed_at_field="event_date_time",

@@ -13,6 +13,12 @@ class NearMiss(Base, ReportWorkflowMixin):
     description = Column(Text)
     potential_consequence = Column(String(255))
     hazard_id = Column(Integer, ForeignKey("hazards.id"), nullable=True)
+    # Where and which hazard, when the worker picks "Other" — both ids above
+    # are foreign keys and cannot hold free text. The id is left null and the
+    # worker's own words kept here rather than forced onto the nearest wrong
+    # option. See migration 069.
+    location_other = Column(String(255), nullable=True)
+    hazard_other = Column(String(255), nullable=True)
     underlying_cause = Column(String(255))
     control_failure = Column(String(10))
     reported_by = Column(Integer, ForeignKey("employees.id"), nullable=True)

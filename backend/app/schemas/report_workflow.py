@@ -28,9 +28,16 @@ class WorkerReportBase(BaseModel):
 
 
 class NearMissReport(WorkerReportBase):
+    # Each takes a listed option or whatever the worker typed under "Other" —
+    # one column holds both, so nothing is lost and no companion "…_is_other"
+    # flag has to be kept in step with it.
     potential_consequence: Optional[str] = None
     underlying_cause: Optional[str] = None
     hazard_id: Optional[int] = None
+    # Set only when the place or the hazard is not on the register, in which
+    # case location_station_id / hazard_id are left unset.
+    location_other: Optional[str] = None
+    hazard_other: Optional[str] = None
     control_failure: Optional[str] = None
     capa_escalation: Optional[str] = None
 

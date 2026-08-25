@@ -27,6 +27,9 @@ def _record_fields(row: dict) -> dict:
     return {
         "potential_consequence": row.get("potential_consequence"),
         "underlying_cause": row.get("underlying_cause"),
+        # Where and which hazard, when neither was on the register.
+        "location_other": row.get("location_other"),
+        "hazard_other": row.get("hazard_other"),
         # near_misses names its timestamp column event_date_time, where the other
         # families use observed_date_time or nothing at all.
         "event_date_time": event_at.isoformat() if event_at else None,
