@@ -7,7 +7,6 @@ import { SafeAreaScreen } from '../layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../theme/colors';
 import { EmptyState } from '../feedback/EmptyState';
-import { WorkflowStageBar } from './WorkflowStageBar';
 import { InvestigationFormModal } from './InvestigationFormModal';
 import { useReportWorkflow } from '../../hooks/useReportWorkflow';
 import type { ReportType } from '../../api/endpoints';
@@ -238,8 +237,6 @@ export function ReportWorkflowList({
             {item.is_mine && <Text style={[styles.meta, styles.metaMine]}>NEEDS YOU</Text>}
           </View>
 
-          <WorkflowStageBar stage={item} showCaption={false} />
-
           {/* The line that answers "what now" without opening the card. */}
           <Text style={styles.owed}>
             <Text style={styles.owedStage}>
@@ -340,7 +337,6 @@ export function ReportWorkflowList({
                   {r.assessed_priority ? ` · ${r.assessed_priority}` : ''}
                   {r.reported_at ? ` · reported ${timeAgo(r.reported_at)}` : ''}
                 </Text>
-                <WorkflowStageBar stage={r} showCaption={false} />
                 <Text style={styles.closedLine}>Closed — all eight stages complete.</Text>
               </View>
             ))

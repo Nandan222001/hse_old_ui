@@ -7,7 +7,6 @@ import { SafeAreaScreen } from '../components/layout/KeyboardAvoider';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { WorkflowStageBar } from '../components/workflow/WorkflowStageBar';
 import {
   CONTROL_HIERARCHY, HAZARD_STATUS_LABEL, HIERARCHY_LABEL,
   hazardRegisterService,
@@ -417,7 +416,6 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
             {isMine && <Text style={[styles.meta, styles.metaMine]}>NEEDS YOU</Text>}
           </View>
 
-          <WorkflowStageBar stage={hazard} />
         </TouchableOpacity>
 
         {isOpen && (

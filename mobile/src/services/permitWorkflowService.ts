@@ -45,7 +45,8 @@ export interface PermitTrackStage {
  * The stage tracker plus the one outstanding step for a single permit.
  *
  * Identical in shape to the incident, hazard and near-miss equivalents, so
- * `StageTracker` and `WorkflowStageBar` render a permit unchanged.
+ * The stage fields are still returned and still correct; no mobile screen
+ * currently draws them — see the note on WorkflowStageBar.
  */
 export interface PermitNextAction {
   family: string;

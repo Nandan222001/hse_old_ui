@@ -5,7 +5,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, CheckCircle2, ShieldCheck, X } from "lucide-react-native";
 import type { ScreenProps } from "./types";
-import { WorkflowStageBar } from "../../components/workflow/WorkflowStageBar";
 import { permitWorkflowService } from "../../services/permitWorkflowService";
 
 export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps) {
@@ -74,9 +73,6 @@ export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps
                   <Text style={styles.metaText}>👤 Emp {p.requested_by ?? "—"}</Text>
                   {exp && <Text style={styles.metaText}>📅 Valid till {exp}</Text>}
                 </View>
-                {/* Where the permit sits on the eight stages. The queue response
-                    has carried these fields all along; nothing drew them. */}
-                <WorkflowStageBar stage={p} />
                 <View style={styles.btnRow}>
                   <TouchableOpacity style={styles.rejectBtn} onPress={() => decide(p.id, false)} disabled={busy === p.id}>
                     <X size={15} color="#DC2626" /><Text style={styles.rejectText}>Reject</Text>

@@ -83,7 +83,8 @@ export interface InvestigatePayload {
  * The eight-stage tracker plus the one outstanding step, for a single record.
  *
  * Identical in shape to the incident and hazard-register equivalents, so
- * `StageTracker` and `WorkflowStageBar` render any of the three unchanged.
+ * The stage fields are still returned and still correct; no mobile screen
+ * currently draws them — see the note on WorkflowStageBar.
  */
 export interface TrackStage {
   number: number;

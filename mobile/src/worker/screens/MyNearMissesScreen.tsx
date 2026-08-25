@@ -5,21 +5,18 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { WorkflowStageBar } from '../../components/workflow/WorkflowStageBar';
 import { nearMissService, type MyNearMiss, type NearMissDetail } from '../services/nearMissService';
 import { Colors } from '../theme/colors';
 
 /**
- * The near misses this worker reported, each with its position on the eight stages.
+ * The near misses this worker reported, and what has happened to each since.
  *
  * A worker could report a near miss and then never hear anything again — the
  * app had a form and nothing behind it. That is worse than a gap in the UI: a
  * reporter who never sees an outcome stops reporting, and near misses are the
  * one event family whose whole value is volume.
  *
- * The same screen `MyHazardsScreen` gives the register, for the same reason and
- * off the same rail. Both read the backend's derived `stage` fields rather than
- * mapping a status themselves, so all four roles see one answer.
+ * The same screen `MyHazardsScreen` gives the register, for the same reason.
  */
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -155,8 +152,6 @@ export default function MyNearMissesScreen({ navigation }: any) {
                     HIGH POTENTIAL — this could have been serious
                   </Text>
                 ) : null}
-
-                <WorkflowStageBar stage={nm} showCaption={false} />
 
                 <Text style={styles.status}>
                   {STATUS_FOR_WORKER[status] ?? status}

@@ -5,12 +5,11 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { WorkflowStageBar } from '../../components/workflow/WorkflowStageBar';
 import { myIncidentsService, type MyIncident } from '../services/incidentService';
 import { Colors } from '../theme/colors';
 
 /**
- * The incidents this worker reported, each with its position on the eight stages.
+ * The incidents this worker reported, and what has happened to each since.
  *
  * The last family to get one of these screens, and only because it looked like
  * it already had one: Recent Submissions on the Reports screen used to be the
@@ -136,8 +135,6 @@ export default function MyIncidentsScreen({ navigation }: any) {
                     REPORTABLE TO THE REGULATOR — the safety team is handling the filing
                   </Text>
                 ) : null}
-
-                <WorkflowStageBar stage={inc.stage} showCaption={false} />
 
                 <Text style={styles.status}>{STATUS_FOR_WORKER[status] ?? status}</Text>
 

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { WorkflowStageBar } from '../components/workflow/WorkflowStageBar';
 import {
   permitWorkflowService,
   type PermitNextAction,
@@ -169,7 +168,6 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
         </View>
 
         <View style={styles.card}>
-          <WorkflowStageBar stage={next ?? permit} />
           {next?.next_action ? (
             <View style={styles.nextBox}>
               <Text style={styles.hereLabel}>

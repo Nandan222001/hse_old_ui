@@ -5,7 +5,6 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { WorkflowStageBar } from '../../components/workflow/WorkflowStageBar';
 import { hazardService, type MyHazard } from '../services/hazardService';
 import { Colors } from '../theme/colors';
 
@@ -17,7 +16,8 @@ import { Colors } from '../theme/colors';
  * rail the supervisor and manager see, rendered from the same backend-derived
  * `stage` fields, so all three roles are looking at one answer.
  *
- * The rail comes from `WorkflowStageBar`, shared with every other event family.
+ * The backend's derived stage fields are read rather than a status being
+ * mapped here, so every role sees one answer.
  * It reads the flat stage shape the register returns via `toStageInfo`, so this
  * screen never maps a status to a stage itself.
  */
@@ -109,8 +109,6 @@ export default function MyHazardsScreen({ navigation }: any) {
                   {h.station_name ? ` · ${h.station_name}` : ''}
                   {h.logged_at ? ` · ${timeAgo(h.logged_at)}` : ''}
                 </Text>
-
-                <WorkflowStageBar stage={h} showCaption={false} />
 
                 <Text style={styles.status}>
                   {STATUS_FOR_WORKER[h.register_status || ''] ?? h.register_status}

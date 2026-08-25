@@ -5,13 +5,12 @@ import {
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { WorkflowStageBar } from '../../components/workflow/WorkflowStageBar';
 import { riskService, type MyRisk, type RiskDetail } from '../services/riskService';
 import { Colors } from '../theme/colors';
 
 /**
- * The risk observations this worker reported, each with its position on the
- * eight stages.
+ * The risk observations this worker reported, and what has happened to each
+ * since.
  *
  * The same gap `MyNearMissesScreen` and `MyHazardsScreen` closed, for the last
  * family that still had a form and nothing behind it: a worker could report an
@@ -162,8 +161,6 @@ export default function MyRiskReportsScreen({ navigation }: any) {
                     HIGH POTENTIAL — this could have been serious
                   </Text>
                 ) : null}
-
-                <WorkflowStageBar stage={rk} showCaption={false} />
 
                 <Text style={styles.status}>
                   {STATUS_FOR_WORKER[status] ?? status}

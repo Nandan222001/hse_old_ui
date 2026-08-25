@@ -9,6 +9,12 @@
  *
  * RECORD is always shown complete. A report only exists once it has been
  * submitted, so capture is finished by the time there is anything to render.
+
+ * Currently rendered nowhere. The eight-stage rail was taken off every mobile
+ * screen on request — the stages themselves are unchanged and every endpoint
+ * still returns them, so restoring this is a matter of putting the element
+ * back. Kept rather than deleted for that reason, and because the stage
+ * vocabulary it draws is the client's own (WF workflow engine).
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';

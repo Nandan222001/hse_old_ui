@@ -84,9 +84,9 @@ export const incidentService = {
 /**
  * One of this worker's incidents, with its position on the eight stages.
  *
- * Incidents nest their stage block where the other families return it flat —
- * `WorkflowStageBar` accepts either, so it is passed through as it arrives
- * rather than reshaped here.
+ * Incidents nest their stage block where the other families return it flat.
+ * It is passed through as it arrives rather than reshaped here, so whatever
+ * reads it next gets the server's own shape.
  */
 export interface MyIncident {
   id: number;

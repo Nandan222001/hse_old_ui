@@ -5,7 +5,6 @@ import {
   RefreshControl, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { WorkflowStageBar } from '../../components/workflow/WorkflowStageBar';
 import { Colors } from '../theme/colors';
 import { usePermits } from '../hooks/usePermits';
 
@@ -131,7 +130,6 @@ export default function PermitsScreen({ navigation }: any) {
                 {/* How far the permit has got. A worker raises one and then has
                     no way to see whether it has been acknowledged, approved or
                     verified — the same gap My Near Misses closed for reports. */}
-                <WorkflowStageBar stage={permit} showCaption={false} />
                 <View style={styles.permitActionRow}>
                   <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge(permit.id)}>
                     <Text style={styles.ackBtnText}>Acknowledge</Text>
