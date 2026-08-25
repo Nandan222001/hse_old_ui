@@ -21,10 +21,33 @@
  * A block renders only once it has content, so a hazard logged this morning
  * shows one and grows a block per stage as the workflow fills it in.
  */
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { API_BASE_URL } from '../../constants/config';
+import { Icon } from '../../worker/components/display/Icon';
+import { VideoPlayer } from '../../worker/components/display/VideoPlayer';
 import type { HazardRegisterItem } from '../../services/hazardRegisterService';
+
+// Evidence is stored as a server path (/uploads/...), not a full URL, so it
+// survives the host changing. Files are mounted at the root, outside /api/v1.
+const MEDIA_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
+const absoluteUrl = (p: string) => `${MEDIA_ORIGIN}${p}`;
+
+const isVideoFile = (path: string): boolean => {
+  if (typeof path !== 'string') return false;
+  const p = path.toLowerCase();
+  return ['.mp4', '.mov', '.webm', '.3gp', '.mpeg', '.avi'].some(e => p.endsWith(e));
+};
+
+/** A JSON column: a string from some endpoints, an array from others. */
+const asArray = (raw: unknown): any[] => {
+  let v: unknown = raw;
+  if (typeof raw === 'string') {
+    try { v = JSON.parse(raw); } catch { return []; }
+  }
+  return Array.isArray(v) ? v : [];
+};
 
 const HIERARCHY_LABEL: Record<string, string> = {
   eliminate: 'Eliminate the hazard',
@@ -72,9 +95,11 @@ function Row({ label, value }: { label: string; value?: any }) {
 }
 
 export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any }) {
+  const [preview, setPreview] = useState<string | null>(null);
   if (!hazard) return null;
 
   const h = hazard;
+  const evidence = asArray(h.evidence);
   const hasAssessment = h.assessed_priority || h.assessed_label || h.risk_score != null;
   const hasResponse = h.interim_control || h.work_stopped;
   const hasReview = h.root_cause || h.review_notes || h.review_started_at;
@@ -122,6 +147,29 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
         <Row label="Still there now" value={yesNo(h.still_present)} />
         <Row label="Controls already in place" value={h.existing_controls} />
         <Row label="GPS" value={fmtGps(h.gps_latitude, h.gps_longitude)} />
+
+        {evidence.length > 0 && (
+          <>
+            <Text style={styles.subTitle}>Photos and video</Text>
+            <View style={styles.photoRow}>
+              {evidence.map((p: string, i: number) =>
+                typeof p === 'string' && p.startsWith('/uploads/') ? (
+                  <TouchableOpacity key={i} onPress={() => setPreview(absoluteUrl(p))}>
+                    {isVideoFile(p) ? (
+                      <View style={[styles.thumb, styles.videoThumb]}>
+                        <Icon name="video" size={24} color="#FFFFFF" />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: absoluteUrl(p) }} style={styles.thumb} />
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <Text key={i} style={styles.fileTag}>📎 {String(p)}</Text>
+                ),
+              )}
+            </View>
+          </>
+        )}
       </View>
 
       {/* ── 2. Assessment ───────────────────────────────────────────────── */}
@@ -225,6 +273,23 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
           <Row label="Auditor notes" value={h.verification_notes} />
         </View>
       )}
+
+      <Modal visible={!!preview} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setPreview(null)}>
+          {!!preview &&
+            (isVideoFile(preview) ? (
+              <View
+                style={styles.videoWrap}
+                onStartShouldSetResponder={() => true}
+                onTouchEnd={e => e.stopPropagation()}
+              >
+                <VideoPlayer uri={preview} />
+              </View>
+            ) : (
+              <Image source={{ uri: preview }} style={styles.previewImg} resizeMode="contain" />
+            ))}
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -251,6 +316,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', paddingVertical: 3, alignItems: 'flex-start' },
   rowLabel: { width: 132, fontSize: 12, color: '#64748B', fontWeight: '600' },
   rowValue: { flex: 1, fontSize: 12, color: '#0B1C30', fontWeight: '600' },
+  subTitle: { fontSize: 11, fontWeight: '800', color: '#475569', marginTop: 10, marginBottom: 4 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  thumb: { width: 84, height: 84, borderRadius: 8, backgroundColor: '#E2E8F0' },
+  videoThumb: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A' },
+  fileTag: {
+    backgroundColor: '#F1F5F9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4,
+    fontSize: 11, color: '#334155', fontWeight: '600',
+  },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  videoWrap: { width: '90%', height: '80%', justifyContent: 'center', alignSelf: 'center' },
+  previewImg: { width: '100%', height: '80%' },
   flag: { marginTop: 4, fontSize: 12, fontWeight: '800', color: '#C2410C' },
   alert: { marginTop: 4, fontSize: 12, fontWeight: '800', color: '#B91C1C' },
 });

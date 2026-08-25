@@ -42,6 +42,9 @@ class HazardLog(BaseModel):
     )
     gps_latitude: Optional[str] = None
     gps_longitude: Optional[str] = None
+    # Uploaded files arrive as multipart and are folded in here by
+    # report_media.merge_media, under the name every other form already uses.
+    photos: Optional[List[str]] = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -213,6 +216,8 @@ class HazardRegisterResponse(BaseModel):
     verification_notes: Optional[str] = None
     gps_latitude: Optional[str] = None
     gps_longitude: Optional[str] = None
+    # Photos and video of the condition, as /uploads/ paths.
+    evidence: List[Any] = Field(default_factory=list)
 
     # ── 02 ASSESS ────────────────────────────────────────────────────────────
     assessed_priority: Optional[str] = None

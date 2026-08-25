@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Integer, String, Text
 from app.models.base import Base
 
 
@@ -48,6 +48,9 @@ class Hazard(Base):
     verification_notes = Column(Text, nullable=True)
     gps_latitude = Column(String(32), nullable=True)
     gps_longitude = Column(String(32), nullable=True)
+    # Photos and video of the condition, as /uploads/ paths — the same column
+    # name and shape the other four families use (076).
+    evidence_json = Column(JSON, nullable=True)
 
     # ── Stage 02 ASSESS (migration 066) ──────────────────────────────────────
     # `severity` above is the reporter's impression and drives nothing.

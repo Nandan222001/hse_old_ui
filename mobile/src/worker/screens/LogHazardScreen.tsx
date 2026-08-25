@@ -8,6 +8,8 @@ import { Input } from '../components/form/Input';
 import { TextArea } from '../components/form/TextArea';
 import { ChipSelector } from '../components/form/ChipSelector';
 import { ToggleRow } from '../components/form/ToggleRow';
+import { MediaUploadBox } from '../components/form/PhotoUploadBox';
+import { useMediaCapture } from '../hooks/useMediaCapture';
 import { hazardService } from '../services/hazardService';
 import { Colors } from '../theme/colors';
 
@@ -34,6 +36,11 @@ export default function LogHazardScreen({ navigation }: any) {
   // Fetched, not hard-coded. The list used to be ids 1-10 in this file, which
   // are organisation 1's category rows — so a worker in any other org picked a
   // label here and the hazard was filed against a different org's category.
+  const {
+    items: mediaItems, attachments: mediaAttachments,
+    launch: launchMedia, remove: removeMedia,
+  } = useMediaCapture();
+
   const [categories, setCategories] = useState<Array<{ label: string; value: string }>>([]);
   const [category, setCategory] = useState('');
   const [hazardName, setHazardName] = useState('');
@@ -83,6 +90,7 @@ export default function LogHazardScreen({ navigation }: any) {
         controls: existingControls.trim() || undefined,
         persons_exposed: personsExposed ? Number(personsExposed) : undefined,
         still_present: stillPresent,
+        photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
       });
       Alert.alert(
         res.queued ? 'Saved — waiting to send' : 'Hazard Logged',
@@ -134,6 +142,15 @@ export default function LogHazardScreen({ navigation }: any) {
             placeholder="Where is it, and who could be hurt by it?"
             value={description}
             onChangeText={setDescription}
+          />
+        </FormSection>
+
+        <FormSection label="Photo / Video Evidence">
+          <MediaUploadBox
+            items={mediaItems}
+            onAdd={launchMedia}
+            onRemove={removeMedia}
+            subtitle="Tap to take a photo, record a video, or attach one you already have"
           />
         </FormSection>
 

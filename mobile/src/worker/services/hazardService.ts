@@ -1,6 +1,7 @@
 import apiClient from '../api/client';
 import { ENDPOINTS } from '../api/endpoints';
 import { submitOrQueue, type SubmitResult } from '../../services/offlineQueue';
+import type { PhotoAttachment } from '../types';
 
 /**
  * The standing hazard register (`hazards`) as the worker meets it: logging an
@@ -26,6 +27,8 @@ export interface LogHazardRequest {
   /** The "It is still there" toggle — collected by the form since it was
    *  written and, until now, never actually sent. */
   still_present?: boolean;
+  /** Photos and video of the condition. */
+  photos?: PhotoAttachment[];
   gps_latitude?: string;
   gps_longitude?: string;
 }
@@ -65,10 +68,22 @@ export const hazardService = {
    * eight stages — the same lifecycle an incident runs.
    */
   async logHazard(payload: LogHazardRequest): Promise<SubmitResult<MyHazard>> {
+    const { photos, ...body } = payload;
+    const media = photos ?? [];
+    const hasMedia = media.length > 0;
+
+    // Multipart only when there is something to attach, matching how the four
+    // report workflows post. Offline: the files stay on the device and the
+    // body is rebuilt on replay.
     return submitOrQueue<MyHazard>(
       ENDPOINTS.HAZARD_REGISTER.LOG,
-      payload,
-      { client: 'worker', label: 'Hazard register entry' },
+      body,
+      {
+        kind: hasMedia ? 'multipart' : 'json',
+        photos: hasMedia ? media.map(m => ({ uri: m.uri, name: m.name, type: m.type })) : undefined,
+        client: hasMedia ? 'workerUpload' : 'worker',
+        label: 'Hazard register entry',
+      },
     );
   },
 

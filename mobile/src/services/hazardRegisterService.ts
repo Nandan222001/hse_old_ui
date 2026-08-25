@@ -140,6 +140,8 @@ export interface HazardRegisterItem {
 
   created_at: string | null;
   updated_at: string | null;
+  /** Photos and video of the condition, as /uploads/ paths. */
+  evidence: string[];
 
   // Derived server-side from register_status — flat shape, never stored.
   stage: WorkflowStageKey | null;

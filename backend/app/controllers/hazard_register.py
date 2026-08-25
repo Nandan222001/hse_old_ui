@@ -47,7 +47,10 @@ what makes the trail on the web console reconstructable at all.
 from datetime import datetime
 from typing import Dict, List, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -62,6 +65,7 @@ from app.controllers.workflow_common import (
     station_id_for,
 )
 from app.models.hazard import Hazard
+from app.utils import report_media
 from app.services import risk_assessment as risk_assessment_svc
 from app.services import event_assessment, hazard_next_action, workflow_stages
 from app.schemas.hazard_register import (
@@ -220,6 +224,7 @@ def _respond(row: Hazard, maps: Optional[Dict[str, Dict[int, str]]] = None) -> H
         out.auditor_verified_by_name = people.get(row.auditor_verified_by or 0)
         out.station_name = maps.get("stations", {}).get(row.location_station_id or 0)
         out.category_name = maps.get("categories", {}).get(row.category_id or 0)
+    out.evidence = row.evidence_json or []
     return out
 
 
@@ -296,6 +301,32 @@ def _stamp_review(db: Session, row: Hazard, user: CurrentUser) -> int:
 # 01 RECORD — log (worker / supervisor)
 # ══════════════════════════════════════════════════════════════════════════════
 @router.post("/log", response_model=HazardRegisterResponse, status_code=201)
+async def log_hazard_http(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Log a hazard, with or without photos and video attached.
+
+    Takes the raw request rather than a declared `HazardLog` body so the
+    multipart shape is accepted — the app switches to multipart the moment a
+    file is attached, and against a declared model FastAPI answers 422, which
+    fails the whole submission rather than just losing the file. The four
+    report workflows already work this way; the register did not, which is why
+    its form had no camera button to begin with.
+
+    Validation is not lost, only moved: the same schema is applied here and a
+    bad body still comes back as a 422 with Pydantic's own errors.
+    """
+    data, media_urls = await report_media.read_report_body(request, subdir="hazards")
+    data = report_media.merge_media(data, media_urls)
+    try:
+        payload = HazardLog(**data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=json.loads(exc.json()))
+    return log_hazard(payload, db, current_user)
+
+
 def log_hazard(
     payload: HazardLog,
     db: Session = Depends(get_db),
@@ -336,6 +367,7 @@ def log_hazard(
         reported_persons_exposed=data.get("persons_exposed"),
         gps_latitude=data.get("gps_latitude"),
         gps_longitude=data.get("gps_longitude"),
+        evidence_json=data.get("photos"),
         register_status="open",
         logged_by=employee_id_for(db, current_user.user_id),
         logged_at=now,

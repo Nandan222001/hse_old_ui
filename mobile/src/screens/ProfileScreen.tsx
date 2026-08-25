@@ -108,7 +108,7 @@ export function ProfileScreen({ navigation }: Props) {
               <View style={[styles.menuIconWrap, { backgroundColor: '#FFF7ED' }]}>
                 <Ionicons name="shield-alert-outline" size={20} color="#F97316" />
               </View>
-              <Text style={styles.menuName}>Hazard Management Register</Text>
+              <Text style={styles.menuName}>Risk Observation</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.textLight} />
           </TouchableOpacity>

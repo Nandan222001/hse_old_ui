@@ -159,7 +159,7 @@ export function IncidentsScreen({ navigation }: Props) {
             <View style={[styles.gridIcon, { backgroundColor: '#FAF5FF' }]}>
               <Ionicons name="analytics-outline" size={22} color="#8B5CF6" />
             </View>
-            <Text style={styles.gridLabel}>Hazard Register</Text>
+            <Text style={styles.gridLabel}>Risk Observation</Text>
           </TouchableOpacity>
         </View>
 
