@@ -176,8 +176,24 @@ def generate_for_site(
 
     today = from_date or date.today()
     year = year or today.year
-    start = max(today, date(year, 1, 1))
     end = date(year + 1, 1, 1)
+
+    # The slots are a fixed grid anchored to 1 January, and past ones are
+    # skipped rather than moving the grid to start at today.
+    #
+    # Anchoring on today is what this used to do, and it made the calendar
+    # depend on the day the button was pressed. Quarterly from 21 August books
+    # 21 Aug and 19 Nov; the same press four days later books 25 Aug and 23 Nov,
+    # and because the duplicate check looks forward from each slot it cannot see
+    # the 21 Aug booking sitting four days behind it. So it books again. Pressing
+    # generate on Monday and again on Friday left the site with two "Nov 2026
+    # Site Inspection" entries four days apart — which is exactly what happened
+    # to org 4.
+    #
+    # A calendar is a schedule, not "ninety days from whenever somebody clicked".
+    # With the grid fixed, the same year generates the same dates no matter when
+    # or how often it is run, which is what made the idempotence claim true.
+    grid_start = date(year, 1, 1)
 
     # Inspections and full audits run on different cadences, and the frequency
     # table gives both — a critical site is a monthly inspection AND a quarterly
@@ -186,7 +202,12 @@ def generate_for_site(
         ("inspection", rule.inspection_days, INSPECTION_WINDOW_DAYS),
         ("full_audit", rule.audit_days, AUDIT_WINDOW_DAYS),
     ):
-        for when in _windows(start, end, every):
+        for when in _windows(grid_start, end, every):
+            # A slot whose whole period has already passed is history, not
+            # something to book. Slots still running are kept: the duplicate
+            # check below decides whether they already hold an event.
+            if when + timedelta(days=every) <= today:
+                continue
             window_end = when + timedelta(days=every)
             if _existing_in_window(db, row.organisation_id, row.site_id, scope, when, window_end):
                 result.skipped_existing += 1
