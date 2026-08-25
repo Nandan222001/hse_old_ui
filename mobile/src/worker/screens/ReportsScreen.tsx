@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, RefreshControl, ActivityIndicator, Alert,
@@ -9,8 +9,10 @@ import { Card } from '../components/cards/Card';
 import { StatusBadge } from '../components/display/Badge';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { Colors } from '../theme/colors';
-import { useIncidents } from '../hooks/useIncidents';
-import { Incident, IncidentType, SeverityLevel } from '../types';
+import {
+  submissionsService, FAMILY_LABEL, FAMILY_TINT,
+  type Submission,
+} from '../services/submissionsService';
 import { formatDate } from '../utils/formatters';
 
 /**
@@ -43,61 +45,48 @@ const REPORT_TYPES = [
   { id: 'hazard',     icon: 'tool',           title: 'Hazard Register', desc: 'Log a hazard that needs controlling', ink: '#0F766E', tint: '#CCFBF1', screen: 'LogHazard'       },
 ];
 
-const INCIDENT_TYPE_LABEL: Record<IncidentType, string> = {
-  'Injury':               'Injury',
-  'Dangerous Occurrence': 'Dangerous Occurrence',
-  'Property Damage':      'Property Damage',
-  'Environmental':        'Environmental',
-};
-
-const SEVERITY_ACCENT: Record<SeverityLevel, string> = {
-  'Fatal':     Colors.critical,
-  'Lost Time': Colors.critical,
-  'Severe':    Colors.warning,
-  'Moderate':  Colors.blue,
-  'Minor':     Colors.success,
-};
-
-function incidentStatusLabel(status: string): string {
+/** `under_investigation` -> `under investigation`. Every family stores its
+ *  status this way, so one helper serves all five. */
+function statusLabel(status: string): string {
   return status.replace(/_/g, ' ');
 }
 
-function showIncidentDetail(incident: Incident) {
-  const typeLabel = INCIDENT_TYPE_LABEL[incident.incident_type] ?? incident.incident_type;
+function showSubmissionDetail(sub: Submission) {
   const lines = [
-    `Ref: ${incident.incident_ref || incident.id.slice(0, 8)}`,
-    `Type: ${typeLabel}`,
-    `Severity: ${incident.severity?.toUpperCase() ?? '—'}`,
-    `Location: ${incident.location || '—'}`,
-    `Date: ${incident.date || (incident.created_at ? formatDate(incident.created_at) : '—')}`,
-    `Status: ${incidentStatusLabel(incident.status)}`,
-    incident.description ? `\n${incident.description}` : '',
+    `Ref: ${sub.reference}`,
+    `Type: ${FAMILY_LABEL[sub.family]}`,
+    sub.severity ? `Severity: ${String(sub.severity).toUpperCase()}` : '',
+    `Date: ${sub.at ? formatDate(sub.at) : '—'}`,
+    sub.status ? `Status: ${statusLabel(sub.status)}` : '',
+    sub.title ? `\n${sub.title}` : '',
   ].filter(Boolean).join('\n');
 
-  Alert.alert(typeLabel, lines);
+  Alert.alert(FAMILY_LABEL[sub.family], lines);
 }
 
 export default function ReportsScreen({ navigation }: any) {
-  const { incidents, isLoading, fetchIncidents } = useIncidents();
+  const [subs, setSubs] = useState<Submission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadSubs = useCallback(() => {
+    submissionsService
+      .mine()
+      .then(setSubs)
+      .catch(() => setSubs([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   useEffect(() => {
-    fetchIncidents({ mine: true });
+    loadSubs();
+    const unsubscribe = navigation.addListener('focus', loadSubs);
+    // Five endpoints rather than one now, so the old five-second poll would be
+    // twenty-five calls a minute for a list that changes when the worker
+    // submits something. Refetching on focus covers that, and pull-to-refresh
+    // covers the rest.
+    return unsubscribe;
+  }, [navigation, loadSubs]);
 
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchIncidents({ mine: true });
-    });
-
-    const interval = setInterval(() => {
-      fetchIncidents({ mine: true });
-    }, 5000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, [navigation]);
-
-  const onRefresh = useCallback(() => { fetchIncidents({ mine: true }); }, []);
+  const onRefresh = useCallback(() => { setIsLoading(true); loadSubs(); }, [loadSubs]);
 
   return (
     <ScreenLayout>
@@ -187,46 +176,47 @@ export default function ReportsScreen({ navigation }: any) {
           ))}
         </View>
 
-        {/* Recent Submissions — real data */}
+        {/* Recent Submissions — every family, newest first */}
         <View style={styles.recentHeader}>
           <Text style={styles.sectionTitle}>Recent Submissions</Text>
-          {incidents.length > 0 && (
-            <Text style={styles.recentCount}>{incidents.length} total</Text>
+          {subs.length > 0 && (
+            <Text style={styles.recentCount}>{subs.length} total</Text>
           )}
         </View>
 
-        {isLoading && incidents.length === 0 ? (
+        {isLoading && subs.length === 0 ? (
           <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
-        ) : incidents.length === 0 ? (
+        ) : subs.length === 0 ? (
           <EmptyState
             icon="📝"
             title="No Submissions Yet"
-            subtitle="Your reported incidents and observations will appear here."
+            subtitle="Anything you report — incidents, near misses, unsafe acts, risks and hazards — appears here."
           />
         ) : (
-          incidents.slice(0, 20).map(incident => {
-            const typeLabel  = INCIDENT_TYPE_LABEL[incident.incident_type] ?? incident.incident_type;
-            const accent     = SEVERITY_ACCENT[incident.severity] ?? Colors.textLight;
-            const dateStr    = incident.date || (incident.created_at ? formatDate(incident.created_at) : '—');
-            const statusStr  = incidentStatusLabel(incident.status);
-
+          subs.slice(0, 30).map(sub => {
+            const fam = FAMILY_TINT[sub.family];
             return (
               <TouchableOpacity
-                key={incident.id}
-                onPress={() => showIncidentDetail(incident)}
+                key={sub.key}
+                onPress={() => showSubmissionDetail(sub)}
                 activeOpacity={0.75}
               >
-                <Card style={styles.recentCard} accentColor={accent} elevation={1}>
+                <Card style={styles.recentCard} accentColor={fam.ink} elevation={1}>
                   <View style={styles.recentLeft}>
-                    <Text style={styles.recentType}>{typeLabel.toUpperCase()}</Text>
-                    <Text style={styles.recentTitle} numberOfLines={2}>
-                      {incident.description || `${typeLabel} — ${incident.location || 'No location'}`}
-                    </Text>
+                    {/* The family, not the incident sub-type. Five families share
+                        this list now and which one a row belongs to is the first
+                        thing a reader needs. */}
+                    <View style={[styles.recentFamily, { backgroundColor: fam.tint }]}>
+                      <Text style={[styles.recentFamilyText, { color: fam.ink }]}>
+                        {FAMILY_LABEL[sub.family].toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={styles.recentTitle} numberOfLines={2}>{sub.title}</Text>
                     <Text style={styles.recentDate}>
-                      {incident.incident_ref ? `${incident.incident_ref}  •  ` : ''}{dateStr}
+                      {sub.reference}{sub.at ? `  •  ${formatDate(sub.at)}` : ''}
                     </Text>
                   </View>
-                  <StatusBadge status={statusStr} />
+                  {!!sub.status && <StatusBadge status={statusLabel(sub.status)} />}
                 </Card>
               </TouchableOpacity>
             );
@@ -287,7 +277,8 @@ const styles = StyleSheet.create({
 
   recentCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   recentLeft: { flex: 1, marginRight: 10 },
-  recentType: { fontSize: 10, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.5, marginBottom: 3 },
+  recentFamily: { alignSelf: 'flex-start', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, marginBottom: 5 },
+  recentFamilyText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.5 },
   recentTitle: { fontSize: 14, fontWeight: '600', color: Colors.textDark, marginBottom: 3, lineHeight: 19 },
   recentDate: { fontSize: 12, color: Colors.textMuted },
 });
