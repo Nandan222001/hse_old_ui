@@ -124,14 +124,40 @@ def compute_domains(
         p,
     )
 
+    # WF-01: "heavy PPE reliance lowers the Control Integrity domain of the
+    # safety score." PPE leaves the hazard fully intact, so a site whose
+    # controls are mostly PPE has not controlled anything — it has issued
+    # equipment and hoped. A domain that scores that the same as a site which
+    # engineered its hazards out is not measuring control integrity.
+    #
+    # A third of the weight, alongside overdue CAPAs and gate blocks: it is a
+    # real signal about the quality of control, not the whole story.
+    ppe_only = _scalar(
+        db,
+        "SELECT COUNT(*) FROM hazards WHERE organisation_id=:org "
+        "AND LOWER(COALESCE(control_hierarchy,''))='ppe'",
+        p,
+    )
+    controlled_total = _scalar(
+        db,
+        "SELECT COUNT(*) FROM hazards WHERE organisation_id=:org "
+        "AND COALESCE(control_hierarchy,'') <> ''",
+        p,
+    )
+    ppe_reliance = _pct(ppe_only, max(controlled_total, 1))
+
     control_integrity = round(
-        0.5 * _pct(capa_overdue, max(capa_total, 1))
-        + 0.5 * _pct(gate_blocks, max(gate_total, 1)),
+        (_pct(capa_overdue, max(capa_total, 1))
+         + _pct(gate_blocks, max(gate_total, 1))
+         + ppe_reliance) / 3,
         2,
     )
     inputs["control_integrity"] = {
         "capa_total": capa_total,
         "capa_overdue": capa_overdue,
+        "ppe_only_controls": ppe_only,
+        "controls_with_a_hierarchy": controlled_total,
+        "ppe_reliance_pct": ppe_reliance,
         "gate_blocks": gate_blocks,
         "gate_evaluations": gate_total,
     }

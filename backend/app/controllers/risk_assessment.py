@@ -33,6 +33,7 @@ from app.schemas.risk_assessment import (
     CategoryControl, CategoryOut,
 )
 from app.services import risk_assessment as svc
+from app.services import control_hierarchy
 from app.services import risk_scoring
 from app.utils.logger import get_logger
 
@@ -269,6 +270,11 @@ def set_control(
         raise HTTPException(status_code=404, detail=f"'{key}' is not one of the ten categories")
     if cat.hazard_present != "Yes":
         raise HTTPException(status_code=400, detail="Only a category with a hazard present takes a control")
+    if control_hierarchy.normalise(payload.control_hierarchy) is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"control_hierarchy must be one of: {', '.join(control_hierarchy.HIERARCHY)}",
+        )
 
     cat.control_hierarchy = payload.control_hierarchy
     cat.control_description = payload.control_description
@@ -282,6 +288,17 @@ def set_control(
 
     if row.status == "scored":
         row.status = "controls_planned"
+
+    # WF-01 · "Flags PPE-only with a mandatory review notice." PPE leaves the
+    # hazard fully intact, so choosing it is a decision somebody senior should
+    # see rather than one the system accepts in silence.
+    if control_hierarchy.is_ppe_only(payload.control_hierarchy):
+        svc.flag_for_review(
+            db, row,
+            f"{cat.category_name} is controlled by PPE alone — mandatory review",
+            commit=False,
+        )
+
     db.commit()
     db.refresh(row)
     return _respond(db, row)

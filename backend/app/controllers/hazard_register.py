@@ -825,7 +825,12 @@ def close_hazard(
     failure this gate exists to prevent — the register would then claim a
     hazard is dealt with on the strength of a plan.
     """
-    require_role(current_user.role, ALL_ELEVATED_ROLES, "close hazards")
+    # WF-01 Flow A step 07: "CLOSES IT — Only this role can close a hazard on
+    # the register." The Safety Manager owns the register, and closing is the
+    # act of saying the site is no longer carrying that hazard. A supervisor
+    # can control one and confirm the control is holding; signing it off the
+    # register is somebody else's call, which is the whole point of the split.
+    require_role(current_user.role, MANAGER_ROLES, "close hazards on the register")
     row = _get(db, hazard_id, current_user.org_id)
 
     if row.register_status == "closed":
