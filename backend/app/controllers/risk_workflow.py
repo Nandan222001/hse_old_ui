@@ -67,6 +67,14 @@ def _build_row(payload: RiskReportCreate, data: Dict[str, Any]) -> Dict[str, Any
         "existing_controls": data.get("existing_controls"),
         "suggested_controls": data.get("suggested_controls"),
         "hazard_id": data.get("hazard_id"),
+        # Context from the form. `potential_consequence` is the kind of harm and
+        # is not the `consequence` above, which is the severity axis the score
+        # is computed from — see the model.
+        "potential_consequence": data.get("potential_consequence"),
+        "underlying_cause": data.get("underlying_cause"),
+        # Written only when the worker chose "Other"; the matching id is unset.
+        "location_other": data.get("location_other"),
+        "hazard_other": data.get("hazard_other"),
     }
 
 
@@ -80,6 +88,9 @@ router = build_workflow_router(
     detail_fields=[
         "risk_title", "risk_category", "likelihood", "consequence",
         "risk_score", "existing_controls", "suggested_controls", "hazard_id",
+        # Read back to the reporter on My Risk Reports, and to the supervisor
+        # on the review screen — a field worth collecting is worth showing.
+        "potential_consequence", "underlying_cause", "location_other", "hazard_other",
         # The scored outcome, not just the inputs. `risk_score` above is the raw
         # L x S; what actually decides how the risk is treated is the adjusted
         # score, the band it falls in and whether work is blocked — and that is

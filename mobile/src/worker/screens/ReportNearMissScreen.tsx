@@ -13,6 +13,7 @@ import { useMediaCapture } from '../hooks/useMediaCapture';
 import { PotentialConsequence, NearMissCause, YesNo } from '../types';
 import { useGeoTag } from '../hooks/useGeoTag';
 import { lookupService, WorkingStation, HazardOption } from '../services/lookupService';
+import { toLocalIso } from '../utils/formatters';
 
 const CONSEQUENCES = ['Minor Injury', 'Lost Time Injury', 'Property Damage', 'Environmental Impact'];
 const CONDITIONS    = ['Slippery Floor', 'Missing Guard', 'Distraction', 'Poor Lighting'];
@@ -106,7 +107,9 @@ export default function ReportNearMissScreen({ navigation }: any) {
       // human-readable labels so the register stays readable.
       underlying_cause:         causes.join(', ') || undefined,
       location_station_id:      stationId ?? undefined,
-      observed_date_time:       eventDateTime.toISOString(),
+      // Local wall-clock, not UTC — the backend starts the response SLA from
+      // this value. See toLocalIso.
+      observed_date_time:       toLocalIso(eventDateTime),
       hazard_id:                hazardId ?? undefined,
       control_failure:          controlFailure,
       hazard_still_present:     hazardStillPresent,

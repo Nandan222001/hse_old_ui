@@ -35,3 +35,20 @@ export function capitalise(s: string): string {
 export function initials(name: string): string {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
 }
+
+/**
+ * A Date as local wall-clock time for the API — deliberately not toISOString().
+ *
+ * The backend reads observation timestamps as the time on the worker's clock.
+ * `risk_workflow._is_night_shift` tests the hour directly against 22:00-06:00,
+ * `event_assessment._finish` starts the response SLA from it, and every other
+ * timestamp in that database is written with `datetime.now()` rather than
+ * `utcnow()`. toISOString() converts to UTC first, so a sighting at 23:40 in
+ * IST arrives as 18:10 — losing the night-shift uplift on a risk report, and
+ * moving a near miss's response deadline by the size of the offset.
+ */
+export function toLocalIso(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
