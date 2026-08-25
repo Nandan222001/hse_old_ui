@@ -34,6 +34,9 @@ from app.schemas.risk_assessment import (
 )
 from app.services import risk_assessment as svc
 from app.services import risk_scoring
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/risk-assessments", tags=["Risk Assessment (WF-01 Flow B)"])
 
@@ -125,12 +128,16 @@ def start_assessment(
     db.add(row)
     db.flush()
 
+    # Link each of the ten to this tenant's own category row where one exists,
+    # so a hazard promoted to the register lands in the right bucket.
+    local = svc.resolve_category_ids(db, current_user.org_id)
     for c in svc.CATEGORIES:
         db.add(RiskAssessmentHazard(
             assessment_id=row.id,
             organisation_id=current_user.org_id,
             category_key=c.key,
             category_name=c.name,
+            category_id=local.get(c.key),
         ))
     db.commit()
     db.refresh(row)
@@ -349,9 +356,25 @@ def approve(
     row.approval_notes = payload.notes
     row.status = "approved"
     row.review_due_at = svc.review_due(row.review_frequency)
+    # Approval clears any outstanding flag — somebody has now looked.
+    row.flagged_for_review = 0
+    row.review_due_by = None
+
+    # B -> A. Every hazard the checklist found joins the register, so it is
+    # tracked as a standing condition rather than living only inside this
+    # assessment. Idempotent, which matters because an assessment can be
+    # reopened and approved again.
+    created = svc.populate_register(db, row, _categories(db, row.id), commit=False)
+
     db.commit()
     db.refresh(row)
-    return _respond(db, row)
+    out = _respond(db, row)
+    if created:
+        logger.info(
+            "RA-%s approved; %s hazard(s) added to the register: %s",
+            row.id, len(created), created,
+        )
+    return out
 
 
 # ── 09-10 MONITOR / ARCHIVE ──────────────────────────────────────────────────

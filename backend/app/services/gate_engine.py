@@ -89,7 +89,76 @@ def _haversine_m(lat1, lon1, lat2, lon2) -> float:
 
 # ── Gate 1 · RAMS linked ──────────────────────────────────────────────────────
 def gate_rams_linked(db: Session, org_id: Optional[int], permit: PermitToWork) -> GateResult:
-    """The task must carry a current, approved risk assessment (WF-01)."""
+    """The task must carry a current, approved risk assessment (WF-01).
+
+    Two things can satisfy this, and they are not the same artefact.
+
+    A **Flow B risk assessment** is what the spec means: ten categories, a
+    residual score, a signature. It is checked first, and an approved one that
+    has not passed its review date passes the gate outright.
+
+    A **RAMS score** is the older path — a contractor's method statement scored
+    out of 120 by the six-criteria scorer. Every permit in this database
+    predates Flow B and is linked this way, so removing it would block every
+    existing permit overnight. It stays as a fallback.
+
+    With neither, the permit is blocked and the assessment's absence also feeds
+    the +2 `no_valid_rams` uplift on the risk side — the spec applies both, and
+    they are doing different jobs: the uplift makes the score honest, the block
+    stops the work.
+    """
+    from app.services import risk_assessment as ra_svc
+
+    assessment = None
+    if getattr(permit, "risk_assessment_id", None):
+        from app.models.risk_assessment import RiskAssessment
+        assessment = (
+            db.query(RiskAssessment)
+            .filter(
+                RiskAssessment.id == permit.risk_assessment_id,
+                RiskAssessment.organisation_id == org_id,
+            )
+            .first()
+        )
+    if assessment is None:
+        # Nothing linked by hand, so look for one covering where the work is.
+        assessment = ra_svc.covering_assessment(
+            db, org_id,
+            station_id=permit.location_station_id,
+            site_id=getattr(permit, "site_id", None),
+        )
+
+    if assessment is not None:
+        detail = {"risk_assessment_id": assessment.id, "residual_score": assessment.residual_score}
+        if assessment.status != "approved" or assessment.approved_at is None:
+            return GateResult(
+                GATE_RAMS, BLOCK,
+                f"RA-{assessment.id} covers this work but is not approved "
+                f"(currently {assessment.status}).",
+                detail,
+            )
+        if ra_svc.is_expired(assessment):
+            return GateResult(
+                GATE_RAMS, BLOCK,
+                f"RA-{assessment.id} passed its review date on "
+                f"{assessment.review_due_at:%d %b %Y} and is no longer current.",
+                detail,
+            )
+        if assessment.flagged_for_review:
+            # Still valid, but something in the field has contradicted it.
+            return GateResult(
+                GATE_RAMS, AMBER,
+                f"RA-{assessment.id} is approved but flagged for review: "
+                f"{assessment.flagged_reason}",
+                detail,
+            )
+        return GateResult(
+            GATE_RAMS, PASS,
+            f"RA-{assessment.id} approved, residual {assessment.residual_score} "
+            f"{assessment.residual_band}.",
+            detail,
+        )
+
     rams = (
         db.query(RamsScore)
         .filter(RamsScore.permit_id == permit.id)
@@ -99,8 +168,8 @@ def gate_rams_linked(db: Session, org_id: Optional[int], permit: PermitToWork) -
     if rams is None:
         return GateResult(
             GATE_RAMS, BLOCK,
-            "No risk assessment (RAMS) is linked to this permit.",
-            {"rams_score_id": None},
+            "No approved risk assessment covers this work. No assessment, no permit.",
+            {"rams_score_id": None, "risk_assessment_id": None},
         )
     if rams.verdict == "reject":
         return GateResult(

@@ -51,6 +51,15 @@ class RiskAssessment(Base):
     reopened_reason = Column(String(255), nullable=True)
     reopened_at = Column(DateTime, nullable=True)
 
+    # A -> B. A hazard reported in an area this assessment covers is evidence it
+    # missed something. Flagged rather than reopened: the assessment still
+    # stands until somebody looks, but it can no longer be assumed sound.
+    flagged_for_review = Column(Integer, default=0)
+    flagged_reason = Column(String(255), nullable=True)
+    flagged_at = Column(DateTime, nullable=True)
+    # INCIDENT -> B. The 48-hour deadline that makes "fast-tracked" sortable.
+    review_due_by = Column(DateTime, nullable=True)
+
     created_by = Column(Integer, nullable=True)
     archived_at = Column(DateTime, nullable=True)
 

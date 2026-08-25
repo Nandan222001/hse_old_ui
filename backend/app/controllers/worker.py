@@ -747,6 +747,26 @@ async def report_incident(
             days_away=data.get("days_away"),
         )
 
+    # ── INCIDENT -> B · WF-01 ────────────────────────────────────────────────
+    # Something happened, so the assessment covering this area was wrong. A
+    # hazard report says an assessment may have missed something; an incident
+    # says it did — so this reopens rather than flags, and carries the spec's
+    # 48-hour deadline. Any permit relying on that assessment now fails its
+    # gate, which is the point: work does not continue under an authorisation
+    # the event has just disproved.
+    from app.services import risk_assessment as risk_assessment_svc
+
+    covering = risk_assessment_svc.covering_assessment(
+        db, current_user.org_id,
+        station_id=incident_row.location_station_id if incident_row else None,
+    )
+    if covering is not None:
+        risk_assessment_svc.reopen_for_incident(
+            db, covering,
+            f"Incident INC-{new_id} occurred in this area — reassess within 48 hours",
+            commit=False,
+        )
+
     db.commit()
 
     return {

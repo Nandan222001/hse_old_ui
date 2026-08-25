@@ -62,6 +62,7 @@ from app.controllers.workflow_common import (
     station_id_for,
 )
 from app.models.hazard import Hazard
+from app.services import risk_assessment as risk_assessment_svc
 from app.services import event_assessment, hazard_next_action, workflow_stages
 from app.schemas.hazard_register import (
     HIERARCHY,
@@ -279,6 +280,20 @@ def log_hazard(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    # A -> B. A hazard reported where an approved assessment already covers the
+    # work is evidence that assessment missed something. Flagged rather than
+    # reopened: its controls are still in force and the permits under it still
+    # stand — what has changed is that somebody has to look.
+    covering = risk_assessment_svc.covering_assessment(
+        db, current_user.org_id, station_id=row.location_station_id
+    )
+    if covering is not None:
+        risk_assessment_svc.flag_for_review(
+            db, covering,
+            f"Hazard HAZ-{row.id} reported in this area: {row.hazard_name or 'unnamed'}",
+        )
+
     return _respond_one(db, row)
 
 

@@ -51,6 +51,10 @@ class PermitToWork(Base):
     gate_blocked_reason = Column(Text, nullable=True)
     contractor_company_id = Column(Integer, ForeignKey("contractor_companies.id"), nullable=True)
     rams_score_id = Column(Integer, nullable=True)
+    # B -> PERMIT. Which Flow B assessment authorises this work. The gate
+    # reads it rather than inferring one from the work description — see
+    # gate_engine.gate_rams_linked and migration 071.
+    risk_assessment_id = Column(Integer, nullable=True)
     zone = Column(String(120), nullable=True)
     is_high_energy = Column(Integer, nullable=False, default=0)
     gps_latitude = Column(Numeric(10, 7), nullable=True)
