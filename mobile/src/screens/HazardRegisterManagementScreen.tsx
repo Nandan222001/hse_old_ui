@@ -52,6 +52,17 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+/** One reported value. Rendered as a pair so the grid stays readable when a
+ *  field is missing — an absent value drops its label with it. */
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldKey}>{label}</Text>
+      <Text style={styles.fieldVal}>{value}</Text>
+    </View>
+  );
+}
+
 export function HazardRegisterManagementScreen({ navigation }: any) {
   const [tab, setTab] = useState<Tab>('mine');
   const [rows, setRows] = useState<HazardRegisterItem[]>([]);
@@ -420,12 +431,56 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
 
         {isOpen && (
           <View style={styles.formBox}>
+            {/* Everything the worker filled in, before anything the supervisor
+                is being asked to add. The card used to show the description
+                and nothing else, so the person deciding the control could not
+                see the category, who reported it, how many people are exposed,
+                or — most usefully — what the reporter said is already in place.
+                All of it was in the response the whole time. */}
+            <Text style={styles.reportedHeading}>WHAT THE WORKER REPORTED</Text>
+
+            <View style={styles.reportedGrid}>
+              {!!hazard.logged_by_name && (
+                <Field label="Reported by" value={hazard.logged_by_name} />
+              )}
+              {!!hazard.category_name && <Field label="Category" value={hazard.category_name} />}
+              {!!hazard.severity && <Field label="How bad" value={hazard.severity} />}
+              {!!hazard.probability && <Field label="How likely" value={hazard.probability} />}
+              {hazard.risk_score != null && (
+                <Field label="Score" value={String(hazard.risk_score)} />
+              )}
+              {hazard.persons_exposed != null && (
+                <Field label="People exposed" value={String(hazard.persons_exposed)} />
+              )}
+              {!!hazard.station_name && <Field label="Where" value={hazard.station_name} />}
+              {!!hazard.logged_at && (
+                <Field label="Logged" value={new Date(hazard.logged_at).toLocaleString()} />
+              )}
+            </View>
+
             {!!hazard.description && (
               <>
-                <Text style={styles.readonlyLabel}>REPORTED</Text>
+                <Text style={styles.readonlyLabel}>DESCRIPTION</Text>
                 <Text style={styles.readonlyValue}>{hazard.description}</Text>
               </>
             )}
+
+            {/* The one a supervisor most needs before choosing a control: what
+                the reporter says is already protecting people. */}
+            {!!hazard.controls && (
+              <>
+                <Text style={styles.readonlyLabel}>CONTROLS ALREADY IN PLACE</Text>
+                <Text style={styles.readonlyValue}>{hazard.controls}</Text>
+              </>
+            )}
+
+            {!!(hazard.gps_latitude && hazard.gps_longitude) && (
+              <Text style={styles.gpsLine}>
+                <Ionicons name="navigate-outline" size={11} color={Colors.textMuted} />
+                {' '}Captured at {hazard.gps_latitude}, {hazard.gps_longitude}
+              </Text>
+            )}
+
             {!!nextAction?.next_action && (
               <Text style={styles.actionHeading}>{nextAction.next_action.detail}</Text>
             )}
@@ -585,6 +640,18 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '800', color: Colors.textMuted,
     letterSpacing: 0.5, marginTop: 12, marginBottom: 6,
   },
+  reportedHeading: {
+    fontSize: 10.5, fontWeight: '800', color: Colors.primary,
+    letterSpacing: 0.6, marginBottom: 8,
+  },
+  reportedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  field: {
+    minWidth: '45%', backgroundColor: Colors.background,
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  fieldKey: { fontSize: 9.5, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.4 },
+  fieldVal: { fontSize: 13, fontWeight: '600', color: Colors.textDark, marginTop: 2 },
+  gpsLine: { fontSize: 11, color: Colors.textMuted, marginTop: 6, marginBottom: 4 },
   readonlyLabel: {
     fontSize: 11, fontWeight: '800', color: Colors.textMuted,
     letterSpacing: 0.5, marginBottom: 4,
