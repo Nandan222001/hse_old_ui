@@ -101,6 +101,7 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.dateLabel}>
             <Text style={styles.dateText}>Today</Text>

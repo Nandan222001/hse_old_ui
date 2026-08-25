@@ -103,6 +103,7 @@ export default function ActionDetailScreen({ route, navigation }: any) {
       <ScrollView
         contentContainerStyle={styles.body}
         refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
+        keyboardShouldPersistTaps="handled"
       >
         {!!capa.next_action && (
           <View style={styles.nextBox}>

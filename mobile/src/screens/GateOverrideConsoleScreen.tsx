@@ -124,6 +124,7 @@ export default function GateOverrideConsoleScreen({ navigation }: any) {
           <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
         }
         contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>Gate Override Console</Text>
         <Text style={styles.subtitle}>

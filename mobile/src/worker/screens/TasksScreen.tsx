@@ -104,6 +104,7 @@ export default function TasksScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
         }
+        keyboardShouldPersistTaps="handled"
       >
         {/* Search Bar */}
         <View style={styles.searchRow}>

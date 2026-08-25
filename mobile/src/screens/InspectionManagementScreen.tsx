@@ -122,6 +122,7 @@ export function InspectionManagementScreen({ navigation }: any) {
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
+        keyboardShouldPersistTaps="handled"
       >
         {loading && list.length === 0 ? (
           <ActivityIndicator color="#004AC6" style={{ marginTop: 30 }} />
@@ -155,7 +156,7 @@ export function InspectionManagementScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.sheetScroll}>
+            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
               <Text style={styles.fieldLabel}>STATION</Text>
               <View style={styles.pillWrap}>
                 {stations.map(st => (

@@ -120,6 +120,7 @@ export function PolicyManagementScreen({ setCurrentScreen, showToast }: ScreenPr
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={["#0B3D91"]} />}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.sectionTitle}>Policies ({rows.length})</Text>
 
@@ -159,7 +160,7 @@ export function PolicyManagementScreen({ setCurrentScreen, showToast }: ScreenPr
         <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>{editingId != null ? "Edit Policy" : "New Policy"}</Text>
-            <ScrollView style={styles.sheetScroll}>
+            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
               <Text style={styles.fieldLabel}>POLICY NAME *</Text>
               <TextInput
                 style={styles.input}

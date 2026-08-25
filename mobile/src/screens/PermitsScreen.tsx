@@ -99,7 +99,7 @@ export function PermitsScreen({ navigation }: Props) {
         <Text style={styles.headerSubtitle}>Validate and audit real-time work permits</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* Today's Activity Stats */}
         <View style={styles.statsRow}>
           <TouchableOpacity

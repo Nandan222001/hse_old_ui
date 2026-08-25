@@ -99,6 +99,7 @@ export default function ShiftCheckInScreen({ navigation }: any) {
       <ScrollView
         style={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={loadShifts} />}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.intro}>
           Log the hours you actually worked. These hours are the basis for every site

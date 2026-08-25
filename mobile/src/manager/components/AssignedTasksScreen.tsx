@@ -89,7 +89,7 @@ export function AssignedTasksScreenView({ setCurrentScreen }: ScreenProps) {
         ) : tasks.length === 0 ? (
           <Text style={styles.empty}>No tasks have been assigned yet.</Text>
         ) : (
-          <ScrollView contentContainerStyle={styles.scroll}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             {tasks.map((t) => {
               const pColor = PRIORITY_COLORS[t.priority] || '#64748B';
               const allDone = t.worker_count > 0 && t.filled_count === t.worker_count;
@@ -138,7 +138,7 @@ export function AssignedTasksScreenView({ setCurrentScreen }: ScreenProps) {
       {loadingDetail || !detail ? (
         <ActivityIndicator color="#2563EB" style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Summary */}
           <View style={styles.card}>
             <Text style={styles.detailTitle}>{detail.title}</Text>

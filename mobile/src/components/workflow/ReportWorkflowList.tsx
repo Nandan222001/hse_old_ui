@@ -318,6 +318,7 @@ export function ReportWorkflowList({
       <ScrollView
         contentContainerStyle={[styles.scroll, visible.length === 0 && styles.scrollEmpty]}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+        keyboardShouldPersistTaps="handled"
       >
         {error && <Text style={styles.error}>{error}</Text>}
 

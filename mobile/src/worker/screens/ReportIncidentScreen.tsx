@@ -331,7 +331,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionTitle}>Incident Details</Text>
         <Text style={styles.sectionSub}>Provide the initial classification and description.</Text>
 
@@ -713,7 +713,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.pickerScroll}>
+            <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
               {stations.length === 0 && (
                 <Text style={styles.pickerEmpty}>No working stations configured.</Text>
               )}
@@ -759,7 +759,7 @@ export default function ReportIncidentScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.pickerScroll}>
+            <ScrollView style={styles.pickerScroll} keyboardShouldPersistTaps="handled">
               {hazards.map((hz) => (
                 <TouchableOpacity
                   key={hz.id}

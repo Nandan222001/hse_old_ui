@@ -135,7 +135,7 @@ export default function ReportNearMissScreen({ navigation }: any) {
     <ScreenLayout>
       <AppHeader title="Report Near Miss" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <FormSection label="What Happened?">
           <TextArea
             placeholder="Briefly describe the sequence of events..."

@@ -411,7 +411,7 @@ export function AuditChecklistScreen({ route, navigation }: any) {
                 </View>
 
                 {ev.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} keyboardShouldPersistTaps="handled">
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       {ev.map((e) => (
                         <View key={e.id} style={styles.evCard}>

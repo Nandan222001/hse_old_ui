@@ -80,6 +80,7 @@ export default function ContractorAuditScreen({ navigation }: any) {
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>Contractor Audit</Text>
         <Text style={styles.subtitle}>Independently re-score RAMS against the same rubric.</Text>

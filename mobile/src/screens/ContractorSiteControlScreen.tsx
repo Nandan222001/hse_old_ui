@@ -81,6 +81,7 @@ export default function ContractorSiteControlScreen({ navigation }: any) {
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>Contractor Site Control</Text>
         <Text style={styles.subtitle}>Induction, certificates and site-access roll-call.</Text>

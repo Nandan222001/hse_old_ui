@@ -93,6 +93,7 @@ export function VerificationsScreen({ navigation }: any) {
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
+        keyboardShouldPersistTaps="handled"
       >
         {loading && permits.length === 0 && hazards.length === 0 ? (
           <ActivityIndicator color="#004AC6" style={{ marginTop: 30 }} />

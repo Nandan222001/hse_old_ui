@@ -66,7 +66,7 @@ export default function ReportUnsafeActScreen({ navigation }: any) {
     <ScreenLayout>
       <AppHeader title="Report Unsafe Act" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <FormSection label="Category" required>
           <Dropdown
             options={CATEGORIES}

@@ -80,6 +80,7 @@ export function ToolboxTalkManagementScreen({ navigation }: any) {
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#004AC6']} />}
+        keyboardShouldPersistTaps="handled"
       >
         {delivered.length > 0 ? (
           <View style={styles.deliveredBanner}>

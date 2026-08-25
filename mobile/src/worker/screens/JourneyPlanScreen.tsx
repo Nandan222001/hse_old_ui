@@ -123,7 +123,7 @@ export default function JourneyPlanScreen({ navigation }: any) {
   return (
     <ScreenLayout>
       <AppHeader title="Journey Management" onBack={() => navigation.goBack()} light />
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <Card title="Plan a journey">
           <Text style={styles.label}>From</Text>
           <TextInput style={styles.input} value={origin} onChangeText={setOrigin} placeholder="Origin" placeholderTextColor="#94A3B8" />

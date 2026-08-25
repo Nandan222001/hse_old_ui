@@ -249,7 +249,7 @@ export function CAPAManagementScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Corrective Actions (CAPA)</Text>
         </View>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {capaLoading ? (
             <ActivityIndicator color={Colors.primary} style={{ marginTop: 30 }} />
           ) : capaActions.length === 0 ? (

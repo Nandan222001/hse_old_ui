@@ -232,7 +232,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
     }
 
     return (
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.pageTitle}>Safety Checklists</Text>
         <Text style={styles.pageSub}>Select a checklist to begin</Text>
 
@@ -281,7 +281,7 @@ export default function SafetyChecklistScreen({ navigation }: any) {
     const totalCount = activeTemplate.items.length;
 
     return (
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Back button + Title */}
         <TouchableOpacity style={styles.backRow} onPress={goBackToList}>
           <Icon emoji="←" style={styles.backArrow} />

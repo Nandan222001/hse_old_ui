@@ -97,7 +97,7 @@ export default function LogHazardScreen({ navigation }: any) {
     <ScreenLayout>
       <AppHeader title="Log a Hazard" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.introBox}>
           <Text style={styles.introText}>
             A hazard is a standing condition that could hurt someone — not an event that

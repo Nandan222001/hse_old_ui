@@ -100,6 +100,7 @@ export default function MgrHumanReadiness({ setCurrentScreen }: any) {
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentScreen('app')}>

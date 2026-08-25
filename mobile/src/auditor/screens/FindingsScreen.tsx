@@ -73,6 +73,7 @@ export function FindingsScreen({ navigation }: any) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={18} color="#94A3B8" />

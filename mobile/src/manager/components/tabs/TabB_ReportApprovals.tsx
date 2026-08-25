@@ -316,6 +316,7 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.sectionHeader}>Waiting on you</Text>
 

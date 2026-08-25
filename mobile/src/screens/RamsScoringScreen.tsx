@@ -69,7 +69,7 @@ export default function RamsScoringScreen({ navigation }: any) {
 
   return (
     <KeyboardAvoider style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>RAMS Scoring</Text>
         <Text style={styles.subtitle}>
           Six criteria, 0–20 each. Under 60 rejects the method statement.

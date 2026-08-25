@@ -34,7 +34,7 @@ export function TabA_Complaints({
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionHeader}>Employee Feedback Register</Text>
 
         {filtered.map((item) => (

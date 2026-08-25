@@ -107,7 +107,7 @@ export default function ReportRiskScreen({ navigation }: any) {
     <ScreenLayout>
       <AppHeader title="Report a Hazard" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <FormSection label="Hazard Category" required>
           <Dropdown
             options={CATEGORIES}

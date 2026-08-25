@@ -96,6 +96,7 @@ export default function TrainingAssessmentScreen({ navigation }: any) {
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
       >
         {loading ? (
           <Loading text="Loading your training record…" />

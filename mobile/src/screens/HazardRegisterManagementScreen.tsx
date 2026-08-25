@@ -464,6 +464,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
       <ScrollView
         contentContainerStyle={[styles.scroll, visible.length === 0 && styles.scrollEmpty]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        keyboardShouldPersistTaps="handled"
       >
         {error && <Text style={styles.error}>{error}</Text>}
 

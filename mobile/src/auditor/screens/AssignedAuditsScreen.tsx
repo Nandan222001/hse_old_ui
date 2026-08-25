@@ -104,7 +104,7 @@ export function AssignedAuditsScreen({ navigation }: any) {
         )}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
         {FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -125,6 +125,7 @@ export function AssignedAuditsScreen({ navigation }: any) {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+          keyboardShouldPersistTaps="handled"
         >
           {!!error && <Banner tone="danger" title="Could not load" text={error} />}
 

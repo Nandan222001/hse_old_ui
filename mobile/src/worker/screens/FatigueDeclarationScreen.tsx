@@ -90,7 +90,7 @@ export default function FatigueDeclarationScreen({ navigation }: any) {
   return (
     <ScreenLayout>
       <AppHeader title="Fatigue Declaration" onBack={() => navigation.goBack()} light />
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={styles.privacy}>
           <Text style={styles.privacyText}>
             Non-medical only. This records shift pattern, not health information.

@@ -45,6 +45,7 @@ export function MgrComplaints({ showToast }: ScreenProps) {
     <ScrollView
       contentContainerStyle={styles.scroll}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#0B3D91']} />}
+      keyboardShouldPersistTaps="handled"
     >
       {/* Search */}
       <View style={styles.searchBox}>

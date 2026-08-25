@@ -125,7 +125,7 @@ export default function RaisePermitScreen({ navigation }: any) {
     <ScreenLayout>
       <AppHeader title="Request Permit" onBack={() => navigation.goBack()} />
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.pageTitle}>Request Permit</Text>
         <Text style={styles.pageSub}>Submit a new digital work permit for approval.</Text>
 

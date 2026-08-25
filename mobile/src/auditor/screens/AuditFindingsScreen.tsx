@@ -153,6 +153,7 @@ export function AuditFindingsScreen({ route, navigation }: any) {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+          keyboardShouldPersistTaps="handled"
         >
           <Banner
             tone={open.length ? 'warn' : 'ok'}

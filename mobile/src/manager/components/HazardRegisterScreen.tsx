@@ -487,6 +487,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
         showsHorizontalScrollIndicator={false}
         style={styles.filterBar}
         contentContainerStyle={styles.filterContent}
+        keyboardShouldPersistTaps="handled"
       >
         {FILTER_STAGES.map(f => {
           const active = stageFilter === f.key;
@@ -510,6 +511,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={["#0B3D91"]} />}
+        keyboardShouldPersistTaps="handled"
       >
         {loading && rows.length === 0 ? (
           <ActivityIndicator color="#0B3D91" style={{ marginTop: 30 }} />
@@ -595,7 +597,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
               {selected?.category_name ? ` · ${selected.category_name}` : ""}
             </Text>
 
-            <ScrollView style={styles.sheetScroll}>
+            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
               {nextAction ? (
                 <StageTracker info={nextAction} />
               ) : (
@@ -631,7 +633,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
               Logging records the hazard at stage 02 ASSESS. Scoring and control happen from
               the hazard itself.
             </Text>
-            <ScrollView style={styles.sheetScroll}>
+            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
               <Text style={styles.fieldLabel}>HAZARD NAME *</Text>
               <TextInput
                 style={styles.input}
