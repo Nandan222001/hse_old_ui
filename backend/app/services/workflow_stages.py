@@ -133,7 +133,17 @@ PERMIT_STATUS_STAGE: Dict[str, str] = {
     # auditor's on-site check actually passing.
     "active": IMPROVE,
     "verified": VERIFY,              # auditor confirmed the controls on site
-    "expired": LEARN,
+    # Work finished, permit spent, lesson owed before close-out. This is what
+    # /complete-work writes, and until migration 067 it was written as `expired`
+    # — the same word this table then had to map for the entirely different case
+    # below. See that migration for why the two were separated.
+    "work_complete": LEARN,
+    # The validity window closed while the permit was still live. Not stage 07:
+    # nothing has been completed and there is no lesson owed yet. What is owed is
+    # containment — confirm nobody is still working under a lapsed authorisation,
+    # then close it out — which is stage 03 for the same reason `gate_blocked` is.
+    # Moving backwards from 05 is intended; `suspended` already does it.
+    "expired": RESPOND,
     "closed": CLOSE,
     "cancelled": CLOSE,
     "rejected": CLOSE,               # terminal — the work never proceeded

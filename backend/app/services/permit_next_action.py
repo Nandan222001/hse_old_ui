@@ -176,8 +176,24 @@ _NEXT: Dict[str, NextAction] = {
         cta="Complete work",
         unblocks="Stage 07 LEARN",
     ),
-    # ── 07 LEARN ──────────────────────────────────────────────────────────────
+    # ── 03 RESPOND · the window closed while the permit was still live ────────
+    # Not a lesson yet. Nothing was completed, and the outstanding step is to
+    # make sure nobody is still working under an authorisation that has lapsed.
+    # Only reachable once the expiry sweep writes workflow_status — see
+    # migration 067 and the note in scheduler.py.
     "expired": NextAction(
+        action="Confirm work has stopped, then close the permit",
+        detail=(
+            "The validity window closed while this permit was still live. Check nobody is "
+            "working under it, then close it out. New work needs a new permit."
+        ),
+        owner=SUPERVISOR,
+        route="permit-workflow",
+        cta="Close permit",
+        unblocks="Closed",
+    ),
+    # ── 07 LEARN ──────────────────────────────────────────────────────────────
+    "work_complete": NextAction(
         action="Capture the lesson and close the permit",
         detail="The work is finished and the permit is spent. Closing records what it taught.",
         owner=SUPERVISOR,

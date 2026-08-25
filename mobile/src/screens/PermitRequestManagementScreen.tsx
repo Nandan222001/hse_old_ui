@@ -252,7 +252,11 @@ export function PermitRequestManagementScreen({ navigation, route }: any) {
               </TouchableOpacity>
             )}
 
-            {ws === 'expired' && (
+            {/* Both states owe a close-out: `work_complete` is a permit whose
+                work is done, `expired` one whose window lapsed while still live.
+                They reached the same button through one overloaded status until
+                backend migration 067 separated them. */}
+            {(ws === 'work_complete' || ws === 'expired') && (
               <TouchableOpacity style={[styles.ackBtn, styles.successBtn]} onPress={closePermit} activeOpacity={0.85}>
                 <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
                 <Text style={styles.ackBtnText}>Close Out Permit</Text>

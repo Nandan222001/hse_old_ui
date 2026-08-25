@@ -506,9 +506,11 @@ def complete_permit_work(
 ):
     """Stage 05/06 -> 07. Work is finished; the permit is spent and owes its lesson.
 
-    Named for what the holder does. The status is `expired` because that is what
-    a permit becomes once its work is done — it is no longer an authorisation
-    anyone can rely on, but it is not closed out either.
+    Writes `work_complete`. It used to write `expired`, which read naturally
+    enough — a spent permit is no longer an authorisation anyone can rely on —
+    but that word was simultaneously the mapped status for a permit whose
+    validity window ran out, which is a different situation with a different
+    owed step. Migration 067 separated them.
 
     Verification is not required to finish work: auditors sample live permits,
     they do not check every one. A permit completed without ever being verified
@@ -519,7 +521,7 @@ def complete_permit_work(
         raise HTTPException(
             status_code=400, detail="Only a live permit can be completed"
         )
-    row.workflow_status = "expired"
+    row.workflow_status = "work_complete"
     db.commit()
     db.refresh(row)
     return _respond(row)
@@ -662,7 +664,10 @@ def supervisor_close(
     # Stage 08 is the end of the ring. A permit still being worked under has not
     # reached LEARN, and closing it out would record a close-out for work that is
     # still happening. Rejected permits are already terminal and skip this.
-    if row.workflow_status not in ("expired", "rejected", "cancelled"):
+    # `expired` is included alongside the completed state on purpose: a permit
+    # that lapsed while still live must have a route to close-out, or it stays
+    # live forever. See migration 067 for how the two came to be separate.
+    if row.workflow_status not in ("work_complete", "expired", "rejected", "cancelled"):
         st = workflow_stages.describe("permit", row.workflow_status)
         raise HTTPException(
             status_code=400,
