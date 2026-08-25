@@ -29,25 +29,6 @@ export interface ReportRiskRequest {
   severity?: string;
   /** Likelihood: Rare | Unlikely | Possible | Likely */
   probability?: string;
-
-  /** When the worker saw it. Drives the WF-01 night-shift uplift (22:00-06:00),
-   *  so it is the observation time and not the submission time. */
-  observed_date_time?: string;
-
-  // ── Context. Each is either a listed option or whatever the worker typed
-  // under "Other"; the backend column takes both, so nothing is lost.
-  potential_consequence?: string;
-  underlying_cause?: string;
-
-  /** A registered station, when one was chosen. */
-  location_station_id?: number;
-  /** Where it was, when it is not a registered station. */
-  location_other?: string;
-  /** A hazard on the register, when one was chosen. */
-  hazard_id?: number;
-  /** The hazard in the worker's words, when it is not on the register. */
-  hazard_other?: string;
-
   /** Photos and videos of the condition. */
   photos?: PhotoAttachment[];
 }
@@ -145,17 +126,8 @@ export const riskService = {
       risk_title: payload.hazard_name,
       risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
       likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
-      // The 5x5 severity axis the score is computed from. Distinct from
-      // `potential_consequence` below, which describes the kind of harm.
       consequence: CONSEQUENCE[key],
       severity: WORKFLOW_SEVERITY[key] ?? 'medium',
-      observed_date_time: payload.observed_date_time,
-      potential_consequence: payload.potential_consequence,
-      underlying_cause: payload.underlying_cause,
-      location_station_id: payload.location_station_id,
-      location_other: payload.location_other,
-      hazard_id: payload.hazard_id,
-      hazard_other: payload.hazard_other,
     };
 
     // Multipart only when there is something to attach, matching how near

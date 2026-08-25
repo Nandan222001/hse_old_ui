@@ -48,18 +48,6 @@ class RiskReportCreate(WorkerReportBase):
     likelihood: Optional[str] = None
     consequence: Optional[str] = None
     risk_score: Optional[int] = None
-
-    # Context the supervisor needs before acting. Each is free text because the
-    # form offers a fixed list plus "Other": a known option arrives as its own
-    # label, and "Other" arrives as whatever the worker typed. One column holds
-    # both, so nothing is lost and no second "…_is_other" flag has to be kept
-    # in step with it.
-    potential_consequence: Optional[str] = None
-    underlying_cause: Optional[str] = None
-    # Set only when the place or the hazard is not one on the register, in which
-    # case location_station_id / hazard_id are left unset.
-    location_other: Optional[str] = None
-    hazard_other: Optional[str] = None
     existing_controls: Optional[str] = None
     suggested_controls: Optional[str] = None
     hazard_id: Optional[int] = None

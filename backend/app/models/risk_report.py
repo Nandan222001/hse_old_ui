@@ -19,11 +19,6 @@ class RiskReport(Base, ReportWorkflowMixin):
     location_station_id = Column(Integer, ForeignKey("working_stations.id"), nullable=True)
 
     hazard_id = Column(Integer, ForeignKey("hazards.id"), nullable=True)
-    # Where and which hazard, when the worker picks "Other" — the two ids above
-    # are foreign keys and cannot hold free text. The id is left null and the
-    # worker's own words kept here rather than thrown away. See migration 068.
-    location_other = Column(String(255), nullable=True)
-    hazard_other = Column(String(255), nullable=True)
     risk_title = Column(String(255))
     risk_category = Column(String(100))
     description = Column(Text)
@@ -31,16 +26,6 @@ class RiskReport(Base, ReportWorkflowMixin):
     likelihood = Column(String(50))
     consequence = Column(String(50))
     risk_score = Column(Integer)  # raw likelihood x consequence, 1-25
-
-    # What kind of harm this could cause, and the condition behind it. Named to
-    # match `near_misses`, which has carried both since it was built — the same
-    # supervisor reads both tables. `potential_consequence` is deliberately not
-    # `consequence` above: that one is the 5x5 severity axis the score is
-    # computed from, this one is a description of the harm.
-    potential_consequence = Column(String(255), nullable=True)
-    # Not `root_cause`, which the supervisor establishes at stage 04. This is
-    # what the reporter observed at the time.
-    underlying_cause = Column(String(255), nullable=True)
 
     # ── WF-01 · mandatory uplifts (migration 045) ─────────────────────────────
     # risk_score above stays the raw L x S so existing readers are unaffected.

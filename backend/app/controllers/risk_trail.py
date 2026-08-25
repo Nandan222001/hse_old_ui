@@ -75,10 +75,6 @@ def _record_fields(row: dict) -> dict:
         "existing_controls": row.get("existing_controls"),
         "suggested_controls": row.get("suggested_controls"),
         "hazard_id": row.get("hazard_id"),
-        "potential_consequence": row.get("potential_consequence"),
-        "underlying_cause": row.get("underlying_cause"),
-        "location_other": row.get("location_other"),
-        "hazard_other": row.get("hazard_other"),
         "observed_date_time": _iso(row.get("observed_date_time")),
         "uplifts": [
             {"key": "no_valid_rams", "label": "No valid RAMS", "points": 2,

@@ -7,4 +7,3 @@ export { ChipSelector } from './ChipSelector';
 export type { ChipOption } from './ChipSelector';
 export { ToggleRow } from './ToggleRow';
 export { MediaUploadBox, PhotoUploadBox, AttachBox } from './PhotoUploadBox';
-export { DropdownWithOther, OTHER_VALUE } from './DropdownWithOther';
