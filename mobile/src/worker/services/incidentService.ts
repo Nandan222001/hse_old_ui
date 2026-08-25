@@ -80,3 +80,47 @@ export const incidentService = {
     );
   },
 };
+
+/**
+ * One of this worker's incidents, with its position on the eight stages.
+ *
+ * Incidents nest their stage block where the other families return it flat —
+ * `WorkflowStageBar` accepts either, so it is passed through as it arrives
+ * rather than reshaped here.
+ */
+export interface MyIncident {
+  id: number;
+  description: string | null;
+  incident_type: string | null;
+  severity: string | null;
+  workflow_status: string | null;
+  reported_at: string | null;
+  created_at: string | null;
+  incident_date_time: string | null;
+  /** P1..P5 from the deterministic assessor, and its human label. */
+  severity_priority: string | null;
+  severity_label: string | null;
+  is_hipo: boolean | null;
+  is_recurring_pattern: boolean | null;
+  anyone_injured: string | null;
+  /** Reportable to the regulator. The worker who raised it should know. */
+  statutory_reportable: boolean | null;
+  statutory_due_at: string | null;
+  investigation_due_at: string | null;
+  stage: {
+    stage: string | null;
+    stage_number: number | null;
+    stage_label: string | null;
+    completed_stages: string[];
+    total_stages: number | null;
+    is_closed: boolean;
+  } | null;
+}
+
+export const myIncidentsService = {
+  /** Every incident this worker reported, newest first, each with its stage. */
+  async mine(): Promise<MyIncident[]> {
+    const { data } = await apiClient.get<MyIncident[]>(ENDPOINTS.INCIDENTS.MY_REPORTS);
+    return data ?? [];
+  },
+};

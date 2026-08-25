@@ -125,6 +125,25 @@ export default function ReportsScreen({ navigation }: any) {
           <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.primary} />
         }
       >
+        {/* Incidents lead: the most serious thing a worker can raise, and the
+            one they are most likely to come back to. It had no row here for
+            longer than the others only because Recent Submissions used to be
+            the incident list. */}
+        <TouchableOpacity
+          style={styles.registerLink}
+          onPress={() => navigation.navigate('MyIncidents')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.registerChip, { backgroundColor: '#FEE2E2' }]}>
+            <Icon name="alert-octagon" style={styles.registerIcon} color="#DC2626" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.registerTitle}>My Incidents</Text>
+            <Text style={styles.registerDesc}>Follow what you reported through the investigation</Text>
+          </View>
+          <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
+        </TouchableOpacity>
+
         {/* Flow 5 · the standing register the worker can follow to closure.
             Recent Submissions below now carries every family, but it is a
             history: this is the way in to the register itself. */}

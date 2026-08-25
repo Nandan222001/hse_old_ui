@@ -77,6 +77,7 @@ import LogHazardScreen from '../worker/screens/LogHazardScreen';
 import MyHazardsScreen from '../worker/screens/MyHazardsScreen';
 import MyNearMissesScreen from '../worker/screens/MyNearMissesScreen';
 import MyRiskReportsScreen from '../worker/screens/MyRiskReportsScreen';
+import MyIncidentsScreen from '../worker/screens/MyIncidentsScreen';
 import SafetyChecklistScreen from '../worker/screens/SafetyChecklistScreen';
 import SafetyTrainingScreen from '../worker/screens/SafetyTrainingScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
@@ -354,6 +355,9 @@ export function AppNavigator() {
                   is stages 02-08 as the reporter sees them. Distinct from
                   MyHazards, which is the register. */}
               <Stack.Screen name="MyRiskReports" component={MyRiskReportsScreen} options={{ presentation: 'card' }} />
+              {/* The last family to get a follow-it screen. Recent Submissions
+                  used to be the incident list, which made it look covered. */}
+              <Stack.Screen name="MyIncidents" component={MyIncidentsScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyChecklist" component={SafetyChecklistScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="SafetyTraining" component={SafetyTrainingScreen} options={{ presentation: 'card' }} />
               <Stack.Screen name="Permits" component={WorkerPermitsScreen} options={{ presentation: 'card' }} />
