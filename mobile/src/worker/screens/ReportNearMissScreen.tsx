@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Text, TextInput } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Text } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
 import { FormSection } from '../components/layout/FormSection';
@@ -11,10 +11,19 @@ import { useIncidents } from '../hooks/useIncidents';
 import { useMediaCapture } from '../hooks/useMediaCapture';
 import { YesNo } from '../types';
 import { useGeoTag } from '../hooks/useGeoTag';
-import { lookupService, WorkingStation, HazardOption } from '../services/lookupService';
+import { lookupService, WorkingStation, HazardOption, EmployeeOption } from '../services/lookupService';
+import { EmployeePickerModal } from '../components/inputs/EmployeePickerModal';
+import { Icon } from '../components/display/Icon';
 import { DropdownWithOther, OTHER_VALUE } from '../components/form/DropdownWithOther';
 import { DateTimePickerModal } from '../components/inputs/DateTimePickerModal';
 import { toLocalIso } from '../utils/formatters';
+
+/**
+ * One witness. `employee_id` is present when they were picked from the register
+ * and absent when the name was typed — a contractor or a visitor has no staff
+ * number, and inventing one would be worse than leaving it out.
+ */
+type Witness = { name: string; employee_id?: number };
 
 /** The picker speaks "YYYY-MM-DD HH:MM"; the form holds a Date. */
 function toPickerValue(d: Date): string {
@@ -63,12 +72,16 @@ export default function ReportNearMissScreen({ navigation }: any) {
   const [controlFailure, setControlFailure] = useState<YesNo>('No');
   const [hazardStillPresent, setHazardStillPresent] = useState<YesNo>('No');
   const [capaEscalation, setCapaEscalation] = useState<YesNo>('No');
-  const [witnessDraft, setWitnessDraft] = useState('');
-  const [witnesses,   setWitnesses]   = useState<string[]>([]);
+  // A witness is either somebody from the employee register, carrying their id,
+  // or a name typed in for a contractor or visitor who has none. Both shapes go
+  // to the API as-is so the link survives where one exists.
+  const [witnesses, setWitnesses] = useState<Witness[]>([]);
+  const [witnessPickerOpen, setWitnessPickerOpen] = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
 
   const [stations, setStations] = useState<WorkingStation[]>([]);
   const [hazards, setHazards] = useState<HazardOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
   useEffect(() => {
     // Failing softly: a lookup that will not load leaves the list empty, and
@@ -76,6 +89,9 @@ export default function ReportNearMissScreen({ navigation }: any) {
     // station list is unreachable would be the wrong trade on a site.
     lookupService.workingStations().then(setStations).catch(() => setStations([]));
     lookupService.hazards().then(setHazards).catch(() => setHazards([]));
+    // The picker still works with an empty list — it offers to add the typed
+    // name instead — so a lookup failure costs the ids, not the witnesses.
+    lookupService.employees().then(setEmployees).catch(() => setEmployees([]));
   }, []);
 
   const stationOptions = useMemo(
@@ -94,12 +110,11 @@ export default function ReportNearMissScreen({ navigation }: any) {
     return value || undefined;
   };
 
-  const addWitness = () => {
-    const name = witnessDraft.trim();
-    if (!name) return;
-    setWitnesses(prev => [...prev, name]);
-    setWitnessDraft('');
+  const addWitness = (w: Witness) => {
+    setWitnesses(prev => [...prev, w]);
+    setWitnessPickerOpen(false);
   };
+
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -272,32 +287,35 @@ export default function ReportNearMissScreen({ navigation }: any) {
         </FormSection>
 
         <FormSection label="Witnesses">
-          <View style={styles.witnessRow}>
-            <View style={[styles.inputBox, { flex: 1 }]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Add a witness name..."
-                placeholderTextColor={Colors.textMuted}
-                value={witnessDraft}
-                onChangeText={setWitnessDraft}
-                onSubmitEditing={addWitness}
-                returnKeyType="done"
-              />
-            </View>
-            <TouchableOpacity style={styles.addBtn} onPress={addWitness}>
-              <Text style={styles.addBtnText}>+</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.addWitnessBtn}
+            onPress={() => setWitnessPickerOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Icon name="user-plus" style={styles.addWitnessIcon} color={Colors.blue} />
+            <Text style={styles.addWitnessLabel}>Add a witness</Text>
+          </TouchableOpacity>
+
           {witnesses.length > 0 && (
-            <View style={styles.chipWrap}>
-              {witnesses.map((name, idx) => (
-                <TouchableOpacity
-                  key={`${name}-${idx}`}
-                  style={styles.pill}
-                  onPress={() => setWitnesses(prev => prev.filter((_, i) => i !== idx))}
-                >
-                  <Text style={styles.pillText}>{name}  ✕</Text>
-                </TouchableOpacity>
+            <View style={styles.witnessList}>
+              {witnesses.map((w, idx) => (
+                <View key={`${w.name}-${w.employee_id ?? 'x'}-${idx}`} style={styles.witnessItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.witnessName}>{w.name}</Text>
+                    {/* The staff code where there is one, so two people with the
+                        same name are still two people. */}
+                    <Text style={styles.witnessCode}>
+                      {w.employee_id ? `EMP-${w.employee_id}` : 'Not an employee'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setWitnesses(prev => prev.filter((_, i) => i !== idx))}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityLabel={`Remove ${w.name}`}
+                  >
+                    <Icon name="x" style={styles.witnessRemove} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
@@ -325,6 +343,15 @@ export default function ReportNearMissScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <EmployeePickerModal
+        visible={witnessPickerOpen}
+        employees={employees}
+        chosenIds={witnesses.map(w => w.employee_id).filter((n): n is number => n != null)}
+        onPick={(e) => addWitness({ name: e.full_name, employee_id: e.id })}
+        onAddFreeText={(name) => addWitness({ name })}
+        onClose={() => setWitnessPickerOpen(false)}
+      />
 
       <DateTimePickerModal
         visible={pickerOpen}
@@ -380,13 +407,22 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: '700', color: Colors.textDark },
   pillTextActive: { color: Colors.white },
   mutedText: { fontSize: 13, color: Colors.textMuted, fontWeight: '600' },
-  witnessRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  addBtn: {
-    width: 48, height: 48, borderRadius: 12,
-    borderWidth: 1.5, borderColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center',
+  addWitnessBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 48, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    borderStyle: 'dashed', backgroundColor: Colors.background,
   },
-  addBtnText: { fontSize: 22, fontWeight: '800', color: Colors.primary, lineHeight: 26 },
+  addWitnessIcon: { fontSize: 17 },
+  addWitnessLabel: { fontSize: 14, fontWeight: '700', color: Colors.blue },
+  witnessList: { marginTop: 10, gap: 8 },
+  witnessItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  witnessName: { fontSize: 14, fontWeight: '600', color: Colors.textDark },
+  witnessCode: { fontSize: 11.5, color: Colors.textMuted, marginTop: 1, fontVariant: ['tabular-nums'] },
+  witnessRemove: { fontSize: 17 },
   submitBtn: {
     backgroundColor: Colors.primary, borderRadius: 12,
     paddingVertical: 18, alignItems: 'center', marginTop: 8, marginBottom: 16,

@@ -4,7 +4,7 @@ Mirrors app/schemas/incident_workflow.py. Kept separate from it so that changing
 report type's contract can never alter the incident contract the website depends on.
 """
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field
 # ══════════════════════════════════════════════════════════════════════════════
 # WORKER — submission
 # ══════════════════════════════════════════════════════════════════════════════
+class WitnessRef(BaseModel):
+    """A witness picked from the employee register rather than typed."""
+
+    name: str
+    employee_id: Optional[int] = None
+
+
 class WorkerReportBase(BaseModel):
     """Fields every worker report form sends, whatever the type."""
 
@@ -21,7 +28,12 @@ class WorkerReportBase(BaseModel):
     location_station_id: Optional[int] = None
     observed_date_time: Optional[datetime] = None
     hazard_still_present: Optional[str] = None
-    witnesses: Optional[List[str]] = None
+    # A witness is either a name typed in — a contractor, a visitor, someone
+    # not on the payroll — or a real employee picked from the register, in
+    # which case their id comes with it. Accepting both keeps the link where
+    # one exists instead of flattening everybody to a string, which is what
+    # made the admin trail say witnesses "carry no employee ID".
+    witnesses: Optional[List[Union[str, WitnessRef]]] = None
     photos: Optional[List[str]] = None
     gps_latitude: Optional[str] = None
     gps_longitude: Optional[str] = None

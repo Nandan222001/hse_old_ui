@@ -146,8 +146,25 @@ def _fetch_people(db: Session, employee_ids: set) -> Dict[int, dict]:
     }
 
 
+def _witness_label(w) -> str:
+    """One witness, as the admin reads them.
+
+    A witness chosen from the employee register arrives as a dict and is shown
+    with the staff code the rest of the console prints — "Henry Jackson
+    (EMP-21)". One typed by hand is a bare string and stays one: there is no id
+    to show, because a contractor or a visitor does not have one.
+    """
+    if not isinstance(w, dict):
+        return str(w)
+    name = w.get("name") or w.get("full_name") or ""
+    emp_id = w.get("employee_id")
+    if name and emp_id:
+        return f"{name} (EMP-{emp_id})"
+    return str(name or w)
+
+
 def _witnesses(row: dict) -> List[str]:
-    """Witness names the worker typed. Free text — never linked to an employee."""
+    """Witnesses on the report, employee-linked where the reporter picked one."""
     raw = row.get("witnesses_json")
     if not raw:
         return []
@@ -156,10 +173,7 @@ def _witnesses(row: dict) -> List[str]:
     except (ValueError, TypeError):
         return [str(raw)]
     if isinstance(parsed, list):
-        names = [
-            (w.get("name") or w.get("full_name") or str(w)) if isinstance(w, dict) else str(w)
-            for w in parsed
-        ]
+        names = [_witness_label(w) for w in parsed]
     elif parsed:
         names = [str(parsed)]
     else:
