@@ -10,7 +10,7 @@ from app.models.near_miss import NearMiss
 from app.schemas.report_workflow import NearMissReport
 
 
-def _build_row(payload: NearMissReport, data: Dict[str, Any]) -> Dict[str, Any]:
+def _build_row(payload: NearMissReport, data: Dict[str, Any], ctx) -> Dict[str, Any]:
     return {
         "potential_consequence": data.get("potential_consequence"),
         "underlying_cause": data.get("underlying_cause"),

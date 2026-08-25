@@ -50,6 +50,28 @@ export interface ReportDetail extends ReportListItem {
   observed_at: string | null;
   gps_latitude: number | null;
   gps_longitude: number | null;
+  /** Photos and videos the reporter attached, as /uploads/ paths. */
+  evidence: string[];
+  hazard_still_present: string | null;
+  report_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+
+  /** The reviewers' own work, beyond root_cause and closure_notes. */
+  /** Dict from the investigate form, bare list on older rows. */
+  five_why_analysis: any;
+  lessons_learned: string | null;
+  supervisor_signature: string | null;
+  manager_signature: string | null;
+  investigation_started_at: string | null;
+  assessed_at: string | null;
+  capa_verified_at: string | null;
+  capa_verification_notes: string | null;
+  capa_verification_failures: number | null;
+  assigned_supervisor_name: string | null;
+  escalated_to_manager_name: string | null;
+  capa_verified_by_name: string | null;
+  auditor_verified_by_name: string | null;
   root_cause: string | null;
   immediate_actions_taken: string | null;
   escalation_reason: string | null;

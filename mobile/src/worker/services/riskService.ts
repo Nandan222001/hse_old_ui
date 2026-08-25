@@ -21,14 +21,23 @@ import type { PhotoAttachment } from '../types';
 
 /** What the risk form collects. The 5×5 matrix words, before translation. */
 export interface ReportRiskRequest {
-  /** Hazard category id (see hazard_categories) */
-  category_id?: number;
+  /** The org's own category name, from the fetched list. Sent as a name
+   *  because `risk_reports.risk_category` is a name column — the screen used
+   *  to send a hard-coded id and this stored the digit. */
+  category?: string;
   /** Short risk / hazard description */
   hazard_name: string;
   /** Consequence: Minor | Significant | Serious | Fatal */
   severity?: string;
   /** Likelihood: Rare | Unlikely | Possible | Likely */
   probability?: string;
+  /** Where the worker says it is. Resolved to a station when the text matches
+   *  one, kept as typed when it does not. */
+  location?: string;
+  /** The "It is still there" toggle. */
+  still_present?: boolean;
+  /** What the worker suggests should be done about it. */
+  suggested_controls?: string;
   /** Photos and videos of the condition. */
   photos?: PhotoAttachment[];
 }
@@ -124,7 +133,12 @@ export const riskService = {
     const body = {
       description: payload.hazard_name,
       risk_title: payload.hazard_name,
-      risk_category: payload.category_id != null ? String(payload.category_id) : undefined,
+      risk_category: payload.category || undefined,
+      // Three answers the screen has always collected and this body never
+      // carried: they were typed, validated, rendered — and dropped here.
+      location: payload.location || undefined,
+      hazard_still_present: payload.still_present ? 'Yes' : 'No',
+      suggested_controls: payload.suggested_controls || undefined,
       likelihood: (payload.probability ?? '').trim().toLowerCase() || undefined,
       consequence: CONSEQUENCE[key],
       severity: WORKFLOW_SEVERITY[key] ?? 'medium',

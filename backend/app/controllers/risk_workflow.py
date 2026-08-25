@@ -6,6 +6,9 @@ NOT the `hazards` catalog, which the website reads as organisation-wide referenc
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.controllers.report_workflow_factory import build_workflow_router
 from app.models.risk_report import RiskReport
 from app.schemas.report_workflow import RiskReportCreate
@@ -24,7 +27,45 @@ def _is_night_shift(observed_at: Optional[datetime]) -> bool:
     return observed_at.hour >= 22 or observed_at.hour < 6
 
 
-def _build_row(payload: RiskReportCreate, data: Dict[str, Any]) -> Dict[str, Any]:
+def _category_name(db: Session, given: Optional[str], org_id: Optional[int]) -> Optional[str]:
+    """`risk_category` is a name, but the form used to send a category id.
+
+    ReportRiskScreen carried the hazard-category list hard-coded as ids 1-10 —
+    organisation 1's rows — and riskService stringified the chosen id into this
+    column. So a worker picking "Electrical" stored the literal "2": not a
+    category name, and not even this organisation's row. Every risk report in
+    the system reads back a bare digit where a category belongs.
+
+    A digit is resolved to the category name, scoped to the caller's own
+    organisation by matching the foreign row's name against theirs. Anything
+    already a name is passed through untouched, which is what the fixed form
+    sends and what the website has always sent.
+    """
+    text_value = (given or "").strip()
+    if not text_value or not text_value.isdigit():
+        return text_value or None
+    row = db.execute(
+        text("SELECT category_name, organisation_id FROM hazard_categories WHERE id = :id"),
+        {"id": int(text_value)},
+    ).mappings().first()
+    if row is None:
+        return None
+    name = row["category_name"]
+    if row["organisation_id"] in (None, org_id):
+        return name
+    # The id belonged to another tenant. The name is the part worth keeping, and
+    # only if this org has a category of the same name.
+    mine = db.execute(
+        text(
+            "SELECT category_name FROM hazard_categories "
+            "WHERE category_name = :name AND organisation_id = :org LIMIT 1"
+        ),
+        {"name": name, "org": org_id},
+    ).mappings().first()
+    return mine["category_name"] if mine else None
+
+
+def _build_row(payload: RiskReportCreate, data: Dict[str, Any], ctx) -> Dict[str, Any]:
     # The client may send an explicit night_shift flag. If it does not, infer it
     # from when the risk was observed.
     night_shift = data.get("night_shift")
@@ -45,7 +86,7 @@ def _build_row(payload: RiskReportCreate, data: Dict[str, Any]) -> Dict[str, Any
 
     return {
         "risk_title": data.get("risk_title"),
-        "risk_category": data.get("risk_category"),
+        "risk_category": _category_name(ctx.db, data.get("risk_category"), ctx.org_id),
         "likelihood": data.get("likelihood"),
         "consequence": data.get("consequence"),
         # risk_score stays the raw L x S — the website and the analytics queries
@@ -67,6 +108,13 @@ def _build_row(payload: RiskReportCreate, data: Dict[str, Any]) -> Dict[str, Any
         "existing_controls": data.get("existing_controls"),
         "suggested_controls": data.get("suggested_controls"),
         "hazard_id": data.get("hazard_id"),
+        # Both asked by the risk form and, until now, in neither the request
+        # type nor this builder — collected on the screen and dropped before
+        # the network call.
+        "potential_consequence": data.get("potential_consequence"),
+        "underlying_cause": data.get("underlying_cause"),
+        "location_other": data.get("location_other"),
+        "hazard_other": data.get("hazard_other"),
     }
 
 
@@ -88,6 +136,14 @@ router = build_workflow_router(
         # verdict those numbers produced.
         "adjusted_risk_score", "uplift_total", "risk_band", "risk_colour",
         "blocks_work", "approval_route", "review_frequency", "risk_explanation",
+        # The four uplifts individually, not just their total. "+3" tells a
+        # reviewer the score moved; which three tell them why, and whether the
+        # reason still holds — a night-shift uplift means something different
+        # at the next review than a missing-RAMS one.
+        "raw_risk_score", "uplift_no_valid_rams", "uplift_new_worker",
+        "uplift_night_shift", "uplift_temporary_control",
+        # Context the worker gave, previously stored and never read back.
+        "potential_consequence", "underlying_cause", "location_other", "hazard_other",
     ],
     noun="risk report",
 )

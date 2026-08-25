@@ -24,6 +24,7 @@ the website's behaviour is unchanged.
 """
 import json
 from datetime import date, datetime
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -143,6 +144,19 @@ def _station_id_for(db: Session, name: Optional[str], org_id: Optional[int]) -> 
     return row["id"] if row else None
 
 
+@dataclass(frozen=True)
+class RowContext:
+    """What a family's build_row needs beyond the payload.
+
+    Risk has to turn the category the form sent into this organisation's own
+    category name, which is a lookup — so the builders get the session and the
+    caller's org rather than each family reaching for a global one.
+    """
+
+    db: Session
+    org_id: Optional[int]
+
+
 def _person_name(db: Session, employee_id: Optional[int]) -> Optional[str]:
     """employees.id -> full_name, for the one record being opened."""
     if not employee_id:
@@ -171,7 +185,7 @@ def build_workflow_router(
     prefix: str,
     tag: str,
     create_schema: Type,
-    build_row: Callable[[Any, Dict[str, Any]], Dict[str, Any]],
+    build_row: Callable[[Any, Dict[str, Any], "RowContext"], Dict[str, Any]],
     detail_fields: List[str],
     observed_at_field: str = "observed_date_time",
     noun: Optional[str] = None,
@@ -263,6 +277,42 @@ def build_workflow_router(
             # the supervisor deciding whether to investigate could not see who
             # had witnessed the event.
             witnesses=getattr(row, "witnesses_json", None) or [],
+            # The photos and videos the reporter attached. Collected by every
+            # report form, uploaded, stored — and never sent back, so the
+            # supervisor deciding what happened next could not look at them.
+            evidence=getattr(row, "evidence_json", None) or [],
+            hazard_still_present=getattr(row, "hazard_still_present", None),
+            report_date=getattr(row, "report_date", None),
+            created_at=getattr(row, "created_at", None),
+            updated_at=getattr(row, "updated_at", None),
+            # The rest of the supervisor's and manager's own work: the 5 Whys,
+            # the lesson, the two signatures and the CAPA verification. All
+            # written by the workflow verbs, none of it readable afterwards.
+            five_why_analysis=getattr(row, "five_why_analysis", None),
+            lessons_learned=getattr(row, "lessons_learned", None),
+            supervisor_signature=getattr(row, "supervisor_signature", None),
+            manager_signature=getattr(row, "manager_signature", None),
+            investigation_started_at=getattr(row, "investigation_started_at", None),
+            assessed_at=getattr(row, "assessed_at", None),
+            capa_verified_at=getattr(row, "capa_verified_at", None),
+            capa_verification_notes=getattr(row, "capa_verification_notes", None),
+            capa_verification_failures=getattr(row, "capa_verification_failures", None),
+            assigned_supervisor_name=(
+                _person_name(db, getattr(row, "assigned_supervisor_id", None))
+                if db is not None else None
+            ),
+            escalated_to_manager_name=(
+                _person_name(db, getattr(row, "escalated_to_manager_id", None))
+                if db is not None else None
+            ),
+            capa_verified_by_name=(
+                _person_name(db, getattr(row, "capa_verified_by", None))
+                if db is not None else None
+            ),
+            auditor_verified_by_name=(
+                _person_name(db, getattr(row, "auditor_verified_by", None))
+                if db is not None else None
+            ),
             details={f: getattr(row, f, None) for f in detail_fields},
         )
 
@@ -366,26 +416,47 @@ def build_workflow_router(
         now = datetime.now()
         data = payload.model_dump()
 
-        row = model(
-            organisation_id=current_user.org_id,
-            report_date=date.today(),
-            **{observed_at_field: data.get("observed_date_time") or now},
-            location_station_id=(
-                data.get("location_station_id")
-                or _station_id_for(db, data.get("location"), current_user.org_id)
-            ),
-            description=data.get("description"),
-            severity=(data.get("severity") or "medium").lower(),
-            reported_by=_employee_id_for(db, current_user.user_id),
-            hazard_still_present=data.get("hazard_still_present"),
-            witnesses_json=data.get("witnesses"),
-            evidence_json=data.get("photos"),
-            gps_latitude=data.get("gps_latitude"),
-            gps_longitude=data.get("gps_longitude"),
-            workflow_status="reported",
-            reported_at=now,
-            **build_row(payload, data),
+        typed_location = (data.get("location") or "").strip()
+        station_id = data.get("location_station_id") or _station_id_for(
+            db, typed_location, current_user.org_id
         )
+
+        fields = {
+            "organisation_id": current_user.org_id,
+            "report_date": date.today(),
+            observed_at_field: data.get("observed_date_time") or now,
+            "location_station_id": station_id,
+            "description": data.get("description"),
+            "severity": (data.get("severity") or "medium").lower(),
+            "reported_by": _employee_id_for(db, current_user.user_id),
+            "hazard_still_present": data.get("hazard_still_present"),
+            "witnesses_json": data.get("witnesses"),
+            "evidence_json": data.get("photos"),
+            "gps_latitude": data.get("gps_latitude"),
+            "gps_longitude": data.get("gps_longitude"),
+            "workflow_status": "reported",
+            "reported_at": now,
+        }
+        # A family's own builder wins: near misses collect location_other from
+        # an explicit "Other" box on the form, and that answer is better than
+        # anything inferred here.
+        fields.update(build_row(payload, data, RowContext(db=db, org_id=current_user.org_id)))
+
+        # Fallback for the forms with a plain text box rather than an "Other"
+        # option. _station_id_for matches on exact station_name, so a worker who
+        # typed "Bay 4, Loading Dock" had their answer resolve to nothing and
+        # then dropped — the reviewer opened a report with no location at all.
+        # Kept only when no station matched, so the place is never in two
+        # columns at once.
+        if (
+            typed_location
+            and not station_id
+            and not fields.get("location_other")
+            and hasattr(model, "location_other")
+        ):
+            fields["location_other"] = typed_location
+
+        row = model(**fields)
         db.add(row)
         # Flush rather than commit so the record has an id: the recurrence check
         # excludes the record itself, and without an id it would match nothing.

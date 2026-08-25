@@ -17,11 +17,20 @@ class RiskReport(Base, ReportWorkflowMixin):
     report_date = Column(Date)
     observed_date_time = Column(DateTime)
     location_station_id = Column(Integer, ForeignKey("working_stations.id"), nullable=True)
+    # Added by migration 068 and never mapped, so nothing could read or write
+    # them. The risk form's free-text location had nowhere to land as a result.
+    location_other = Column(String(255), nullable=True)
 
     hazard_id = Column(Integer, ForeignKey("hazards.id"), nullable=True)
+    hazard_other = Column(String(255), nullable=True)
     risk_title = Column(String(255))
     risk_category = Column(String(100))
     description = Column(Text)
+
+    # Also from 068, also unmapped until now. Near misses carry the same pair
+    # and the risk form asks the same two questions.
+    potential_consequence = Column(String(255), nullable=True)
+    underlying_cause = Column(String(255), nullable=True)
 
     likelihood = Column(String(50))
     consequence = Column(String(50))

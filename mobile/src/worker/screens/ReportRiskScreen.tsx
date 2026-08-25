@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Text } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { AppHeader } from '../components/layout/AppHeader';
@@ -10,22 +10,10 @@ import { ChipSelector } from '../components/form/ChipSelector';
 import { ToggleRow } from '../components/form/ToggleRow';
 import { MediaUploadBox } from '../components/form/PhotoUploadBox';
 import { riskService } from '../services/riskService';
+import { hazardService } from '../services/hazardService';
 import { useMediaCapture } from '../hooks/useMediaCapture';
 import { Colors } from '../theme/colors';
 
-// ── Hazard categories (ids match backend hazard_categories seed order 1-10) ──
-const CATEGORIES = [
-  { label: 'Mechanical',          value: '1' },
-  { label: 'Electrical',          value: '2' },
-  { label: 'Chemical',            value: '3' },
-  { label: 'Ergonomic',           value: '4' },
-  { label: 'Fall / Height',       value: '5' },
-  { label: 'Noise / Environmental', value: '6' },
-  { label: 'Biological',          value: '7' },
-  { label: 'Psychosocial',        value: '8' },
-  { label: 'Fire / Explosion',    value: '9' },
-  { label: 'Confined Space',      value: '10' },
-];
 
 const SEVERITIES    = ['Minor', 'Significant', 'Serious', 'Fatal'];
 const PROBABILITIES = ['Rare', 'Unlikely', 'Possible', 'Likely'];
@@ -66,6 +54,10 @@ export default function ReportRiskScreen({ navigation }: any) {
     launch: launchMedia, remove: removeMedia,
   } = useMediaCapture();
 
+  // Fetched per-org. This list used to be hard-coded as ids 1-10 — another
+  // organisation's category rows — and riskService stringified the chosen id
+  // into risk_category, so the column held "2" rather than a category name.
+  const [categories,  setCategories]  = useState<Array<{ label: string; value: string }>>([]);
   const [category,    setCategory]    = useState('');
   const [description, setDescription] = useState('');
   const [location,    setLocation]    = useState('');
@@ -75,6 +67,14 @@ export default function ReportRiskScreen({ navigation }: any) {
   const [mitigation,  setMitigation]  = useState('');
   const [isLoading,   setIsLoading]   = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    hazardService
+      .categories()
+      // The value is the name, not the id: risk_category is a name column.
+      .then(rows => setCategories(rows.map(r => ({ label: r.category_name, value: r.category_name }))))
+      .catch(() => setCategories([]));
+  }, []);
 
   const rating: Rating | null = useMemo(() => {
     if (severity && probability) return RISK_MATRIX[severity]?.[probability] ?? null;
@@ -96,10 +96,15 @@ export default function ReportRiskScreen({ navigation }: any) {
     setIsLoading(true);
     try {
       const res = await riskService.reportRisk({
-        category_id: Number(category),
+        category,
         hazard_name: description.trim(),
         severity,
         probability,
+        // Collected by this screen since it was written, and dropped by the
+        // service before the request until now.
+        location: location.trim() || undefined,
+        still_present: stillPresent,
+        suggested_controls: mitigation.trim() || undefined,
         photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
       });
       Alert.alert(
@@ -123,10 +128,10 @@ export default function ReportRiskScreen({ navigation }: any) {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <FormSection label="Category" required>
           <Dropdown
-            options={CATEGORIES}
+            options={categories}
             value={category}
             onChange={v => { setCategory(v); setErrors(e => ({ ...e, category: '' })); }}
-            placeholder="What kind of risk is it?"
+            placeholder={categories.length ? 'What kind of risk is it?' : 'Loading categories...'}
           />
           {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
         </FormSection>
@@ -212,7 +217,7 @@ export default function ReportRiskScreen({ navigation }: any) {
         >
           {isLoading
             ? <ActivityIndicator color={Colors.white} />
-            : <Text style={styles.submitText}>SUBMIT HAZARD REPORT</Text>
+            : <Text style={styles.submitText}>SUBMIT RISK REPORT</Text>
           }
         </TouchableOpacity>
         <View style={{ height: 32 }} />

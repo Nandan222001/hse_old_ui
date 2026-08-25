@@ -20,7 +20,11 @@ import {
   useManagerReportQueue,
   type ManagerQueueItem,
 } from "../../../hooks/useManagerReportQueue";
-import { reportWorkflowService } from "../../../services/reportWorkflowService";
+import {
+  reportWorkflowService,
+  type ReportDetail,
+} from "../../../services/reportWorkflowService";
+import { ReportRecordCard } from "../../../components/workflow/ReportRecordCard";
 import { ReportClosureModal, type ClosureFormValues } from "../ReportClosureModal";
 import { KeyboardAvoider } from "../../../components/layout/KeyboardAvoider";
 
@@ -70,6 +74,11 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
   // The eight-stage track for the open card only. Fetched on expand rather than
   // for every row: it is one request per record and the list can be long.
   const [track, setTrack] = useState<StageTrackerInfo | null>(null);
+  // The record itself, alongside the track. The manager was being asked to
+  // approve an investigation while seeing only its description and the stage
+  // it had reached — not the root cause, the reporter's photos, or anything
+  // the supervisor had written.
+  const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [verifyNotes, setVerifyNotes] = useState("");
 
   useEffect(() => {
@@ -83,16 +92,23 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
     if (expanded === key) {
       setExpanded(null);
       setTrack(null);
+      setDetail(null);
       return;
     }
     setExpanded(key);
     setTrack(null);
+    setDetail(null);
     setVerifyNotes("");
-    try {
-      setTrack(await reportWorkflowService(item.report_type).getNextAction(item.id));
-    } catch {
-      setTrack(null);
-    }
+    const api = reportWorkflowService(item.report_type);
+    // Settled rather than raced: the track and the record are independent, and
+    // a card that can still be acted on is better than one that renders
+    // nothing because one of the two requests failed.
+    const [nextAction, record] = await Promise.allSettled([
+      api.getNextAction(item.id),
+      api.getDetail(item.id),
+    ]);
+    setTrack(nextAction.status === "fulfilled" ? nextAction.value : null);
+    setDetail(record.status === "fulfilled" ? record.value : null);
   }, [expanded]);
 
   const confirmSendBack = (item: ManagerQueueItem) => {
@@ -299,6 +315,7 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
             ) : (
               <ActivityIndicator color="#0B3D91" style={{ marginVertical: 10 }} />
             )}
+            {detail && <ReportRecordCard report={detail} />}
             <Text style={styles.detail}>{item.detail}</Text>
             {isBusy ? (
               <ActivityIndicator style={styles.busy} color="#0B3D91" />

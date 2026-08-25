@@ -70,6 +70,13 @@ class RiskReportCreate(WorkerReportBase):
     existing_controls: Optional[str] = None
     suggested_controls: Optional[str] = None
     hazard_id: Optional[int] = None
+    # The same "Other" pair near misses carry, and the same two context
+    # questions. The columns have existed on risk_reports since 068; nothing
+    # could reach them because the schema had no field for them.
+    potential_consequence: Optional[str] = None
+    underlying_cause: Optional[str] = None
+    location_other: Optional[str] = None
+    hazard_other: Optional[str] = None
 
     # ── WF-01 mandatory uplift flags ──────────────────────────────────────────
     # All four default to False, so a client that does not send them scores
@@ -164,6 +171,31 @@ class ReportWorkflowResponse(BaseModel):
     # Whoever the reporter named as having seen it. Stored since the report
     # forms grew a witness picker, never sent back until now.
     witnesses: List[Any] = []
+    # Photos and videos the reporter attached, as /uploads/ paths.
+    evidence: List[Any] = []
+    hazard_still_present: Optional[str] = None
+    report_date: Optional[date] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    # The reviewers' own work, beyond root_cause and closure_notes.
+    # A JSON column, and the two writers disagree about its shape: the
+    # investigate payload types it as a dict ({"whys": [...]}) while older rows
+    # hold a bare list. Typed loosely so neither shape 500s on the way out; the
+    # card normalises both to five lines.
+    five_why_analysis: Optional[Any] = None
+    lessons_learned: Optional[str] = None
+    supervisor_signature: Optional[str] = None
+    manager_signature: Optional[str] = None
+    investigation_started_at: Optional[datetime] = None
+    assessed_at: Optional[datetime] = None
+    capa_verified_at: Optional[datetime] = None
+    capa_verification_notes: Optional[str] = None
+    capa_verification_failures: Optional[int] = None
+    assigned_supervisor_name: Optional[str] = None
+    escalated_to_manager_name: Optional[str] = None
+    capa_verified_by_name: Optional[str] = None
+    auditor_verified_by_name: Optional[str] = None
     observed_at: Optional[datetime] = None
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None

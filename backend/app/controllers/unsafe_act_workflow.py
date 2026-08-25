@@ -9,7 +9,7 @@ from app.models.unsafe_act import UnsafeAct
 from app.schemas.report_workflow import UnsafeActReport
 
 
-def _build_row(payload: UnsafeActReport, data: Dict[str, Any]) -> Dict[str, Any]:
+def _build_row(payload: UnsafeActReport, data: Dict[str, Any], ctx) -> Dict[str, Any]:
     return {
         "act_type": data.get("act_type"),
         "person_observed": data.get("person_observed"),
