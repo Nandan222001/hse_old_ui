@@ -82,6 +82,57 @@ MANAGER_QUEUE = ["requested", "acknowledged"]
 LIVE_STATUSES = list(workflow_stages.PERMIT_LIVE_STATUSES)
 
 
+def _require_within_validity(row: PermitToWork, verb: str) -> None:
+    """Refuse to start or restart work outside the permit's validity window.
+
+    A permit authorises work *for a stated period*. That period was recorded and
+    reported everywhere — the trail shows it, the next-action list flags it — and
+    enforced nowhere: `/activate` checked only that the status was `issued`, so a
+    permit whose window closed yesterday activated with a 200 and the system then
+    reported work as authorised under it. The gate engine hard-blocks issuance on
+    six separate checks, which made this the open side door next to a very solid
+    front one.
+
+    Deliberately not applied to /verify or /close. An auditor finding an expired
+    permit still live is exactly the sort of thing they are on site to record,
+    and closing one out is how it stops being live — blocking either would leave
+    a dead permit with no route to being dealt with.
+
+    A permit carrying no window cannot be checked and is allowed through. That is
+    a data problem worth its own fix rather than something to refuse here; six
+    permits in this database have no `validity_end` at all.
+    """
+    now = datetime.now()
+
+    if row.validity_end and now > row.validity_end:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"This permit expired on {row.validity_end:%d %b %Y at %H:%M} "
+                    f"and cannot be {verb}. Raise a new permit for this work."
+                ),
+                "reason": "permit_expired",
+                "validity_start": row.validity_start.isoformat() if row.validity_start else None,
+                "validity_end": row.validity_end.isoformat(),
+            },
+        )
+
+    if row.validity_start and now < row.validity_start:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"This permit is not valid until {row.validity_start:%d %b %Y at %H:%M} "
+                    f"and cannot be {verb} yet."
+                ),
+                "reason": "permit_not_yet_valid",
+                "validity_start": row.validity_start.isoformat(),
+                "validity_end": row.validity_end.isoformat() if row.validity_end else None,
+            },
+        )
+
+
 def _station_names(db: Session, rows) -> dict:
     """Station id -> name for a page of permits, in one query."""
     ids = {r.location_station_id for r in rows if r.location_station_id}
@@ -383,6 +434,7 @@ def activate_permit(
         raise HTTPException(
             status_code=400, detail="Only an issued permit can be activated"
         )
+    _require_within_validity(row, "activated")
     row.workflow_status = "active"
     row.status = "Active"
     db.commit()
@@ -436,6 +488,9 @@ def resume_permit(
     row = _get(db, permit_id, current_user.org_id)
     if row.workflow_status != "suspended":
         raise HTTPException(status_code=400, detail="Permit is not suspended")
+    # A suspension can outlast the window it was suspended within. Restarting
+    # then is starting work on an expired permit by a slower route.
+    _require_within_validity(row, "resumed")
     row.workflow_status = "active"
     row.status = "Active"
     db.commit()
