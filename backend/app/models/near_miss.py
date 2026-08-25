@@ -20,6 +20,9 @@ class NearMiss(Base, ReportWorkflowMixin):
     location_other = Column(String(255), nullable=True)
     hazard_other = Column(String(255), nullable=True)
     underlying_cause = Column(String(255))
+    # The worker's own answer to "how can we prevent this in the future?".
+    # Named as risk_reports names the same thing (075).
+    suggested_controls = Column(Text, nullable=True)
     control_failure = Column(String(10))
     reported_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     capa_escalation = Column(String(10))

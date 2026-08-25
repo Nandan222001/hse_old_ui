@@ -21,6 +21,9 @@ def _build_row(payload: NearMissReport, data: Dict[str, Any], ctx) -> Dict[str, 
         # Written only when the worker chose "Other"; the matching id is unset.
         "location_other": data.get("location_other"),
         "hazard_other": data.get("hazard_other"),
+        # Sent by the screen since it was written and dropped on the floor
+        # until 075: the field was in neither the schema nor the table.
+        "suggested_controls": data.get("preventative_suggestion"),
     }
 
 
@@ -41,6 +44,8 @@ router = build_workflow_router(
         # Read back to the reporter on My Near Misses and to the supervisor on
         # review — a field worth collecting is worth showing.
         "location_other", "hazard_other",
+        # The worker's own suggestion for preventing it next time.
+        "suggested_controls",
     ],
     # near_misses names its timestamp column event_date_time
     observed_at_field="event_date_time",

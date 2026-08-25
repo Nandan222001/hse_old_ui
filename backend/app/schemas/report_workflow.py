@@ -52,6 +52,10 @@ class NearMissReport(WorkerReportBase):
     hazard_other: Optional[str] = None
     control_failure: Optional[str] = None
     capa_escalation: Optional[str] = None
+    # The form's own field name. Kept as the client sends it rather than
+    # renamed to match the column, because the offline queue has stored bodies
+    # using this key and a rename would strand them.
+    preventative_suggestion: Optional[str] = None
 
 
 class UnsafeActReport(WorkerReportBase):
