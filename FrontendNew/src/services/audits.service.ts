@@ -359,6 +359,8 @@ export interface AuditReference {
   escalations: Array<{ key: string; label: string; detail: string }>;
   notice_days: number;
   brief_pack_days: number;
+  /** Types that work with no maintained template — the scheduling form's fallback. */
+  checklist_types?: Array<{ key: string; label: string }>;
 }
 
 // ── Display metadata ─────────────────────────────────────────────────────────

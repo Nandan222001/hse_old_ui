@@ -20,8 +20,8 @@ import {
 import { AuditsTabBar } from "../components/audits/AuditsTabBar";
 import {
   assignTeam, currentStep, formatDate, getAuditReference, getAuditorRegister, getAudits,
-  scheduleAudit, humanise,
-  type Audit, type AuditReference, type AuditorRegisterRow,
+  getTemplates, scheduleAudit, humanise,
+  type Audit, type AuditReference, type AuditorRegisterRow, type Template,
 } from "../../services/audits.service";
 import {
   Banner, EmptyState, FindingCounts, RatingChip, RiskBandChip, ScoreBadge, StepStrip,
@@ -45,6 +45,7 @@ export function AuditRegisterPage() {
   const [audits, setAudits] = useState<Audit[]>([]);
   const [auditors, setAuditors] = useState<AuditorRegisterRow[]>([]);
   const [reference, setReference] = useState<AuditReference | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -56,14 +57,19 @@ export function AuditRegisterPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [a, r, ref] = await Promise.all([
+      const [a, r, ref, t] = await Promise.all([
         getAudits(),
         getAuditorRegister().catch(() => [] as AuditorRegisterRow[]),
         getAuditReference().catch(() => null),
+        // Only the Admin maintains templates, so a role that cannot read them
+        // still gets the built-in types from the reference above rather than an
+        // empty dropdown.
+        getTemplates().catch(() => [] as Template[]),
       ]);
       setAudits(a);
       setAuditors(r);
       setReference(ref);
+      setTemplates(t);
     } catch (e) {
       setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Could not load audits.");
     } finally {
@@ -262,6 +268,7 @@ export function AuditRegisterPage() {
         <ScheduleDialog
           reference={reference}
           auditors={auditors}
+          templates={templates}
           busy={busy}
           onClose={() => setScheduling(false)}
           onSchedule={async (payload) => {
@@ -389,17 +396,67 @@ function AssignDialog({
   );
 }
 
+/** The literal the "type it in" option carries — never a real checklist type. */
+const CUSTOM_TYPE = "__custom__";
+
+/**
+ * What the checklist-type dropdown offers, best source first.
+ *
+ * The type is not a label: `audit_templates.resolve` matches it against the
+ * organisation's templates to decide which questions seed the audit, so a typo
+ * in a free-text box silently fell through to the generic six-item fallback and
+ * the auditor arrived on site with the wrong checklist. The maintained
+ * templates lead; the built-ins fill in behind them for an organisation that has
+ * not seeded any yet; free text stays available because resolve() matches on a
+ * substring and a bespoke type is still a legitimate thing to schedule.
+ */
+function checklistTypeOptions(
+  templates: Template[],
+  reference: AuditReference | null,
+): Array<{ value: string; label: string; hint?: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ value: string; label: string; hint?: string }> = [];
+
+  for (const t of templates) {
+    const type = (t.checklist_type ?? "").trim();
+    if (!type) continue;
+    const key = type.toLowerCase();
+    // getTemplates returns each type's versions newest-first, so the first one
+    // seen is the version an audit scheduled today would actually run.
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      value: type,
+      label: type,
+      hint: `${t.items.length} question${t.items.length === 1 ? "" : "s"} · v${t.version}${t.is_default ? " · default" : ""}`,
+    });
+  }
+
+  for (const b of reference?.checklist_types ?? []) {
+    if (seen.has(b.key.toLowerCase())) continue;
+    seen.add(b.key.toLowerCase());
+    out.push({ value: b.key, label: b.label, hint: "built-in checklist" });
+  }
+
+  return out;
+}
+
 function ScheduleDialog({
-  reference, auditors, busy, onClose, onSchedule,
+  reference, auditors, templates, busy, onClose, onSchedule,
 }: {
   reference: AuditReference | null;
   auditors: AuditorRegisterRow[];
+  templates: Template[];
   busy: boolean;
   onClose: () => void;
   onSchedule: (p: Parameters<typeof scheduleAudit>[0]) => void;
 }) {
   const [title, setTitle] = useState("");
   const [checklistType, setChecklistType] = useState("");
+  const [customType, setCustomType] = useState("");
+  const options = useMemo(() => checklistTypeOptions(templates, reference), [templates, reference]);
+  const chosenType = checklistType === CUSTOM_TYPE ? customType.trim() : checklistType;
+  const chosenOption = options.find((o) => o.value === checklistType);
   const [siteName, setSiteName] = useState("");
   const [siteId, setSiteId] = useState("");
   const [trigger, setTrigger] = useState("scheduled_programme");
@@ -446,9 +503,37 @@ function ScheduleDialog({
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Checklist type">
-            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
-                   value={checklistType} onChange={(e) => setChecklistType(e.target.value)}
-                   placeholder="Fire Safety" />
+            <select
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
+              value={checklistType}
+              onChange={(e) => setChecklistType(e.target.value)}
+            >
+              <option value="">Default checklist</option>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.hint ? `${o.label} — ${o.hint}` : o.label}
+                </option>
+              ))}
+              <option value={CUSTOM_TYPE}>Other — type it in</option>
+            </select>
+            {checklistType === CUSTOM_TYPE && (
+              <input
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
+                value={customType}
+                onChange={(e) => setCustomType(e.target.value)}
+                placeholder="e.g. Working at Height"
+                autoFocus
+              />
+            )}
+            <p className="mt-1 text-[10.5px] leading-snug text-slate-500">
+              {checklistType === CUSTOM_TYPE
+                ? "Matched against the maintained templates; the closest one seeds the questions, or the built-in list does."
+                : chosenOption?.hint === "built-in checklist"
+                  ? "No maintained template covers this type yet — the built-in questions will be used."
+                  : chosenOption
+                    ? "The auditor gets this template's questions."
+                    : "The organisation's default template, or the generic site inspection where none is set."}
+            </p>
           </Field>
           <Field label="Scheduled date">
             <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
@@ -481,10 +566,10 @@ function ScheduleDialog({
         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
         <Button
           size="sm"
-          disabled={!title.trim() || busy}
+          disabled={!title.trim() || busy || (checklistType === CUSTOM_TYPE && !customType.trim())}
           onClick={() => onSchedule({
             title: title.trim(),
-            checklist_type: checklistType.trim() || undefined,
+            checklist_type: chosenType || undefined,
             site_name: siteName.trim() || undefined,
             site_id: siteId ? Number(siteId) : undefined,
             trigger_type: trigger,

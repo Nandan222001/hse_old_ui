@@ -88,6 +88,25 @@ BUILTIN_BY_TYPE = {
 }
 
 
+# The type name the generic fallback answers to. `seed_builtins` writes it as
+# the default template, so the two must agree.
+BUILTIN_GENERIC_TYPE = "General"
+
+
+def builtin_types() -> List[dict]:
+    """The checklist types that work with no maintained template behind them.
+
+    Shipped to the console so the scheduling form can offer a choice before an
+    organisation has seeded any template. Hard-coding the same four names in the
+    frontend would have them disagree the day a built-in is added here — and the
+    list is what `resolve` actually falls back to, so it should come from the
+    same module.
+    """
+    return [{"key": BUILTIN_GENERIC_TYPE, "label": BUILTIN_GENERIC_TYPE}] + [
+        {"key": k.title(), "label": k.title()} for k in BUILTIN_BY_TYPE
+    ]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Reading
 # ══════════════════════════════════════════════════════════════════════════════
