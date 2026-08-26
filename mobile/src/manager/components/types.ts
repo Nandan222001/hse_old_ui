@@ -1,5 +1,8 @@
 import type { Incident, Permit, Complaint, Capa, Audit } from "../data/mockData";
 
+/** The three families the manager's report approvals screen covers. */
+export type ReportFamily = "near_miss" | "unsafe_act" | "risk";
+
 /** Every screen the manager shell can render. Keep in sync with ManagerAppRoot's switch. */
 export type ManagerScreen =
   | "login"
@@ -7,6 +10,7 @@ export type ManagerScreen =
   | "investigation"
   | "assign_actions"
   | "unassigned_capa"
+  | "incident_queue"
   | "compliance_approvals"
   | "permit_approvals"
   | "assigned_tasks"
@@ -47,6 +51,14 @@ export interface ScreenProps {
   setComplaintFilter: (filter: string) => void;
   selectedIncident: Incident;
   setSelectedIncident: (incident: Incident) => void;
+  /**
+   * Which report family the approvals screen opens on, set by the Tasks card
+   * that navigated there. `null` means all three — the screen still offers the
+   * other families as pills, so nothing becomes unreachable by arriving from a
+   * card.
+   */
+  reportFamily: ReportFamily | null;
+  setReportFamily: (family: ReportFamily | null) => void;
   whys: { why1: string; why2: string; why3: string; why4: string; why5: string };
   setWhys: React.Dispatch<React.SetStateAction<{ why1: string; why2: string; why3: string; why4: string; why5: string }>>;
   rcaDone: boolean;

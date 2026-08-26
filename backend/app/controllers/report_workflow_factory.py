@@ -1102,6 +1102,12 @@ def build_workflow_router(
                 func.min(CapaAction.id).label("first_id"),
                 func.min(CapaAction.description).label("first_description"),
                 func.min(CapaAction.due_date).label("first_due"),
+                # Who holds it, so the manager's card can say so and offer to
+                # change it. Without this the only thing a card at IMPROVE could
+                # do was sign the action off — a manager looking at an action
+                # sitting unowned, or owned by the wrong person, had no way to
+                # see either fact, let alone fix it.
+                func.min(CapaAction.responsible_person_id).label("first_owner"),
             )
             .filter(CapaAction.subject_family == report_type)
             .filter(CapaAction.subject_id.in_([r.id for r in rows]))
@@ -1113,6 +1119,19 @@ def build_workflow_router(
             .all()
         )
         capa_by_record = {c.subject_id: c for c in capa_rows}
+
+        # One lookup for every owner across the whole queue, rather than a query
+        # per card.
+        owner_ids = [c.first_owner for c in capa_rows if c.first_owner]
+        owner_names: dict = {}
+        if owner_ids:
+            owner_names = {
+                r[0]: r[1]
+                for r in db.execute(
+                    text("SELECT id, full_name FROM employees WHERE id IN :ids"),
+                    {"ids": tuple(set(owner_ids))},
+                ).all()
+            }
 
         station_names = _station_names(db, rows)
         now = datetime.now()
@@ -1147,6 +1166,8 @@ def build_workflow_router(
                     "description": (capa.first_description or "")[:120],
                     "due_date": capa.first_due.isoformat() if capa.first_due else None,
                     "open_count": int(capa.open_count),
+                    "responsible_person_id": capa.first_owner,
+                    "responsible_person_name": owner_names.get(capa.first_owner),
                 }
                 detail = (
                     f"{capa.open_count} corrective action"

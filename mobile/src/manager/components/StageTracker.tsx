@@ -45,55 +45,19 @@ interface Props {
   info: StageTrackerInfo;
 }
 
-function Dot({ stage }: { stage: TrackStage }) {
-  const done = stage.state === 'done';
-  const current = stage.state === 'current';
-  return (
-    <View style={styles.dotWrap}>
-      <View
-        style={[
-          styles.dot,
-          done && styles.dotDone,
-          current && styles.dotCurrent,
-        ]}
-      >
-        {done ? (
-          <Check size={11} color="#FFFFFF" strokeWidth={3} />
-        ) : (
-          <Text style={[styles.dotNum, current && styles.dotNumCurrent]}>{stage.number}</Text>
-        )}
-      </View>
-      <Text
-        style={[styles.dotLabel, current && styles.dotLabelCurrent]}
-        numberOfLines={1}
-      >
-        {stage.short}
-      </Text>
-    </View>
-  );
-}
-
 export function StageTracker({ info }: Props) {
   const { track, next_action: next, is_closed: isClosed, is_mine: isMine } = info;
 
+  // The eight-dot rail this used to draw is deliberately gone. It was taken off
+  // the supervisor screens on request and then left standing here, which is the
+  // worse of the two outcomes: the same record showed a progress bar to one
+  // role and not to the other. What is useful survives it — which stage the
+  // record is on, what step is outstanding, and who is holding it — and that is
+  // what the rail was wrapped around rather than what it added.
+  const done = track.filter((t) => t.state === 'done').length;
+
   return (
     <View style={styles.card}>
-      <View style={styles.track}>
-        {track.map((stage, i) => (
-          <View key={stage.key} style={styles.segment}>
-            {i > 0 && (
-              <View
-                style={[
-                  styles.connector,
-                  (stage.state === 'done' || stage.state === 'current') && styles.connectorDone,
-                ]}
-              />
-            )}
-            <Dot stage={stage} />
-          </View>
-        ))}
-      </View>
-
       {isClosed ? (
         <View style={styles.closedRow}>
           <Check size={14} color="#15803D" strokeWidth={3} />
@@ -102,7 +66,8 @@ export function StageTracker({ info }: Props) {
       ) : next ? (
         <View style={styles.nextBox}>
           <Text style={styles.hereLabel}>
-            YOU ARE HERE · {String(info.stage_number ?? '').padStart(2, '0')} {info.stage}
+            {String(info.stage_number ?? '').padStart(2, '0')} {info.stage}
+            {track.length ? ` · ${done} of ${track.length} done` : ''}
           </Text>
           <Text style={styles.nextAction}>{next.action}</Text>
           <Text style={styles.nextDetail}>{next.detail}</Text>
@@ -130,21 +95,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 14,
     borderWidth: 1, borderColor: '#E3E9F6',
   },
-  track: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  segment: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  connector: { flex: 1, height: 2, backgroundColor: '#E2E8F0', marginTop: -14 },
-  connectorDone: { backgroundColor: '#0B3D91' },
-  dotWrap: { alignItems: 'center', width: 30 },
-  dot: {
-    width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#E2E8F0', backgroundColor: '#FFFFFF',
-  },
-  dotDone: { backgroundColor: '#0B3D91', borderColor: '#0B3D91' },
-  dotCurrent: { borderColor: '#0B3D91', borderWidth: 3, backgroundColor: '#EEF2FB' },
-  dotNum: { fontSize: 10, fontWeight: '800', color: '#94A3B8' },
-  dotNumCurrent: { color: '#0B3D91' },
-  dotLabel: { fontSize: 8, fontWeight: '700', color: '#94A3B8', marginTop: 4 },
-  dotLabelCurrent: { color: '#0B3D91' },
 
   nextBox: { backgroundColor: '#F7F9FE', borderRadius: 10, padding: 12 },
   hereLabel: { fontSize: 10, fontWeight: '800', color: '#0B3D91', letterSpacing: 0.6, marginBottom: 4 },

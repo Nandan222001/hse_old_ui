@@ -2,9 +2,33 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity,
 } from 'react-native';
-import { MapPin, AlertTriangle, Zap, Wrench, ShieldAlert, FileText, ChevronRight, TriangleAlert } from 'lucide-react-native';
-import type { ScreenProps } from '../types';
+import {
+  MapPin, AlertTriangle, Zap, Wrench, ShieldAlert, FileText, ChevronRight, TriangleAlert,
+  Flame, AlertCircle,
+} from 'lucide-react-native';
+import type { ReportFamily, ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
+import { reportWorkflowService } from '../../../services/reportWorkflowService';
+import { hazardRegisterService } from '../../../services/hazardRegisterService';
+import { incidentWorkflowService } from '../../../services/incidentWorkflowService';
+
+/**
+ * The manager's Tasks tab — what has reached them, one card per family.
+ *
+ * This was the Risk tab: a heatmap, three plain nav links, and a critical-
+ * activities list. The links carried no counts, so the only way to find out
+ * whether a family had anything owed was to open it, and near misses, unsafe
+ * acts and risk observations were bundled behind one link named after none of
+ * them. Each family now leads with the number waiting on this manager, and the
+ * entries live behind its own card — the same shape the supervisor's Tasks tab
+ * uses, so the two roles read the estate the same way.
+ *
+ * The heatmap and the critical activities stay below. They answer "how bad is
+ * the site", which is a manager question nothing else on the app shows, and
+ * they are not entries.
+ */
+
+type FamilyKey = 'incident' | 'near_miss' | 'unsafe_act' | 'risk' | 'hazard';
 
 function cellColor(v: number, max: number) {
   if (max <= 0) return '#DBEAFE';
@@ -15,9 +39,12 @@ function cellColor(v: number, max: number) {
   return '#E2E8F0';
 }
 
-export function MgrRisk({ setCurrentScreen }: ScreenProps) {
+export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
   const [zones, setZones] = useState<{ zone: string; value: number }[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [counts, setCounts] = useState<Record<FamilyKey, number>>({
+    incident: 0, near_miss: 0, unsafe_act: 0, risk: 0, hazard: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -26,8 +53,67 @@ export function MgrRisk({ setCurrentScreen }: ScreenProps) {
       .then((r: any) => { setZones(r.data?.zone_risk ?? []); setTasks(r.data?.task_rows ?? []); })
       .catch(() => { setZones([]); setTasks([]); })
       .finally(() => setLoading(false));
+
+    // "Waiting on you", from each family's own next-actions resolver — the same
+    // number the screen behind the card will show, because it is the same
+    // query. mine_count is the manager's own steps, not everything open.
+    const zero = { count: 0, items: [], mine_count: 0 };
+    Promise.all([
+      incidentWorkflowService.getNextActions(true).catch(() => zero),
+      reportWorkflowService('near_miss').getNextActions(true, 100).catch(() => zero),
+      reportWorkflowService('unsafe_act').getNextActions(true, 100).catch(() => zero),
+      reportWorkflowService('risk').getNextActions(true, 100).catch(() => zero),
+      hazardRegisterService.getNextActions(true).catch(() => zero),
+    ]).then(([inc, nm, ua, rk, hz]) => setCounts({
+      incident: inc.mine_count ?? 0,
+      near_miss: nm.mine_count ?? 0,
+      unsafe_act: ua.mine_count ?? 0,
+      risk: rk.mine_count ?? 0,
+      hazard: hz.mine_count ?? 0,
+    }));
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  const openReports = (family: ReportFamily) => {
+    setReportFamily(family);
+    setCurrentScreen('report_approvals');
+  };
+
+  const FAMILIES: Array<{
+    key: FamilyKey; label: string; blurb: string;
+    icon: typeof AlertCircle; color: string; bg: string; go: () => void;
+  }> = [
+    {
+      key: 'incident', label: 'Incidents', blurb: 'Investigations to approve and close',
+      icon: Flame, color: '#EF4444', bg: '#FEF2F2',
+      // Its own list, like every other card here. The rows are the same
+      // component the Monitoring dashboard renders, so the two cannot disagree
+      // about what is outstanding — only about how much of it they show.
+      go: () => setCurrentScreen('incident_queue'),
+    },
+    {
+      key: 'near_miss', label: 'Near Misses', blurb: 'The warning before the injury',
+      icon: TriangleAlert, color: '#F97316', bg: '#FFF7ED',
+      go: () => openReports('near_miss'),
+    },
+    {
+      key: 'unsafe_act', label: 'Unsafe Acts', blurb: 'A behaviour seen before anything went wrong',
+      icon: AlertCircle, color: '#8B5CF6', bg: '#FAF5FF',
+      go: () => openReports('unsafe_act'),
+    },
+    {
+      key: 'risk', label: 'Risk Observations', blurb: 'A risk a worker saw in the field',
+      icon: AlertTriangle, color: '#DC2626', bg: '#FEF2F2',
+      go: () => openReports('risk'),
+    },
+    {
+      key: 'hazard', label: 'Hazard Register', blurb: 'Hazards logged against the register',
+      icon: ShieldAlert, color: '#0891B2', bg: '#ECFEFF',
+      go: () => setCurrentScreen('hazard_register'),
+    },
+  ];
+
+  const waiting = Object.values(counts).reduce((a, b) => a + b, 0);
 
   const max = Math.max(1, ...zones.map((z) => z.value));
   // Cell width adapts to how many zones exist so it never looks like a broken grid.
@@ -38,31 +124,48 @@ export function MgrRisk({ setCurrentScreen }: ScreenProps) {
       contentContainerStyle={styles.scroll}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={['#0B3D91']} />}
     >
-      <Text style={styles.title}>Risk Heatmap</Text>
+      <Text style={styles.title}>Tasks</Text>
+      <Text style={styles.sub}>
+        {waiting === 0
+          ? 'Nothing is waiting on you right now'
+          : `${waiting} item${waiting === 1 ? '' : 's'} waiting on you`}
+      </Text>
+
+      {/* One card per family, each carrying its own count. */}
+      <View style={styles.familyCards}>
+        {FAMILIES.map((f) => {
+          const Icon = f.icon;
+          const n = counts[f.key];
+          return (
+            <TouchableOpacity key={f.key} style={styles.familyCard} onPress={f.go} activeOpacity={0.85}>
+              <View style={[styles.familyIcon, { backgroundColor: f.bg }]}>
+                <Icon size={22} color={f.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.familyLabel}>{f.label}</Text>
+                <Text style={styles.familyBlurb} numberOfLines={2}>{f.blurb}</Text>
+                <View style={[styles.countPill, { backgroundColor: n > 0 ? f.bg : '#F0FDF4' }]}>
+                  <Text style={[styles.countPillText, { color: n > 0 ? f.color : '#16A34A' }]}>
+                    {n > 0 ? `${n} waiting on you` : 'Clear'}
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#94A3B8" />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('policy_management')}>
+        <FileText size={18} color="#0B3D91" />
+        <Text style={styles.navText}>Policies</Text>
+        <ChevronRight size={16} color="#94A3B8" />
+      </TouchableOpacity>
+
+      <Text style={styles.section}>Risk Heatmap</Text>
       <View style={styles.subRow}>
         <Text style={styles.sub}>Live Site Overview</Text>
         <View style={styles.locRow}><MapPin size={13} color="#0B3D91" /><Text style={styles.loc}>Site Zones</Text></View>
-      </View>
-
-      {/* Manager-owned registers */}
-      <View style={styles.navRow}>
-        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('hazard_register')}>
-          <ShieldAlert size={18} color="#0B3D91" />
-          <Text style={styles.navText}>Hazard Register</Text>
-          <ChevronRight size={16} color="#94A3B8" />
-        </TouchableOpacity>
-        {/* Near misses, unsafe acts and risk reports run the same eight stages
-            as the register next to it, and are read together. */}
-        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('report_approvals')}>
-          <TriangleAlert size={18} color="#0B3D91" />
-          <Text style={styles.navText}>Near Misses & Observations</Text>
-          <ChevronRight size={16} color="#94A3B8" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navCard} onPress={() => setCurrentScreen('policy_management')}>
-          <FileText size={18} color="#0B3D91" />
-          <Text style={styles.navText}>Policies</Text>
-          <ChevronRight size={16} color="#94A3B8" />
-        </TouchableOpacity>
       </View>
 
       {/* Heatmap grid */}
@@ -129,6 +232,24 @@ export function MgrRisk({ setCurrentScreen }: ScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  familyCards: { gap: 10, marginTop: 14, marginBottom: 14 },
+  familyCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 13,
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  familyIcon: {
+    width: 44, height: 44, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  familyLabel: { fontSize: 14.5, fontWeight: '700', color: '#0B1C30' },
+  familyBlurb: { fontSize: 11.5, color: '#737686', marginTop: 2, lineHeight: 16 },
+  countPill: {
+    alignSelf: 'flex-start', borderRadius: 999,
+    paddingHorizontal: 9, paddingVertical: 3, marginTop: 7,
+  },
+  countPillText: { fontSize: 10.5, fontWeight: '800' },
+
   navRow: { gap: 10, marginBottom: 18 },
   navCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

@@ -31,9 +31,21 @@ interface Props {
   onOpen: (item: NextActionItem) => void;
   /** Bumped by the parent after any workflow write, to force a refetch. */
   refreshKey?: number;
+  /**
+   * Only this manager's own steps (the dashboard preview) or every open
+   * incident (the Tasks tab's list, where they came to look at the family).
+   * Steps sitting with a supervisor still render, saying whose they are.
+   */
+  mineOnly?: boolean;
+  /** How many rows before "show N more". `false` renders the lot. */
+  preview?: number | false;
+  /** The dashboard's caption. The full-screen list has its own header. */
+  heading?: string | null;
 }
 
-export function NeedsYourAction({ onOpen, refreshKey = 0 }: Props) {
+export function NeedsYourAction({
+  onOpen, refreshKey = 0, mineOnly = true, preview = 3, heading = 'NEEDS YOUR ACTION',
+}: Props) {
   const [items, setItems] = useState<NextActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -41,18 +53,18 @@ export function NeedsYourAction({ onOpen, refreshKey = 0 }: Props) {
   const load = useCallback(() => {
     setLoading(true);
     incidentWorkflowService
-      .getNextActions(true)
+      .getNextActions(mineOnly)
       .then((r) => setItems(r.items))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [mineOnly]);
 
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load, refreshKey, mineOnly]);
 
   if (loading && items.length === 0) {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.heading}>NEEDS YOUR ACTION</Text>
+        {!!heading && <Text style={styles.heading}>{heading}</Text>}
         <ActivityIndicator color="#0B3D91" style={{ marginVertical: 16 }} />
       </View>
     );
@@ -63,7 +75,7 @@ export function NeedsYourAction({ onOpen, refreshKey = 0 }: Props) {
   if (items.length === 0) {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.heading}>NEEDS YOUR ACTION</Text>
+        {!!heading && <Text style={styles.heading}>{heading}</Text>}
         <View style={styles.clearCard}>
           <CheckCircle2 size={18} color="#15803D" />
           <Text style={styles.clearText}>Nothing is waiting on you right now.</Text>
@@ -72,14 +84,16 @@ export function NeedsYourAction({ onOpen, refreshKey = 0 }: Props) {
     );
   }
 
-  const shown = expanded ? items : items.slice(0, 3);
+  const shown = preview === false || expanded ? items : items.slice(0, preview);
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.headRow}>
-        <Text style={styles.heading}>NEEDS YOUR ACTION</Text>
-        <View style={styles.countPill}><Text style={styles.countText}>{items.length}</Text></View>
-      </View>
+      {!!heading && (
+        <View style={styles.headRow}>
+          <Text style={styles.heading}>{heading}</Text>
+          <View style={styles.countPill}><Text style={styles.countText}>{items.length}</Text></View>
+        </View>
+      )}
 
       {shown.map((item) => {
         const tint = STAGE_TINT[item.stage ?? ''] ?? STAGE_TINT.CLOSE;
@@ -148,10 +162,10 @@ export function NeedsYourAction({ onOpen, refreshKey = 0 }: Props) {
         );
       })}
 
-      {items.length > 3 && (
+      {preview !== false && items.length > preview && (
         <TouchableOpacity onPress={() => setExpanded((v) => !v)} style={styles.moreBtn}>
           <Text style={styles.moreText}>
-            {expanded ? 'Show fewer' : `Show ${items.length - 3} more`}
+            {expanded ? 'Show fewer' : `Show ${items.length - preview} more`}
           </Text>
         </TouchableOpacity>
       )}

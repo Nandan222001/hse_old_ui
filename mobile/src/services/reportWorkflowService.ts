@@ -186,6 +186,9 @@ export interface ReportNextActionItem {
     description: string;
     due_date: string | null;
     open_count: number;
+    /** Who holds the action. Null means nobody has been named yet. */
+    responsible_person_id: number | null;
+    responsible_person_name: string | null;
   } | null;
   is_hipo: boolean;
   is_recurring: boolean;
@@ -299,9 +302,28 @@ export function reportWorkflowService(type: ReportType) {
      * investigation form: an action raised with no owner reaches nobody's task
      * list, so IMPROVE has nobody accountable for it.
      */
-    async getCapaOwners(): Promise<CapaOwner[]> {
-      const { data } = await apiClient.get(E.CAPA_ASSIGNABLE_OWNERS);
+    /**
+     * Who a corrective action can be handed to.
+     *
+     * `includeWorkers` widens past the supervisors and safety managers to the
+     * whole workforce. A manager looking at a risk observation often knows the
+     * fitter who is going to change the guard, and the lifecycle has always
+     * allowed a worker to own an action — only the picker was narrow.
+     */
+    async getCapaOwners(includeWorkers = false): Promise<CapaOwner[]> {
+      // The WF-04 route, not the family's own: this is the one that takes the
+      // parameter, and it is the same query underneath either way.
+      const { data } = await apiClient.get('/capa/assignable-owners', {
+        params: includeWorkers ? { include_workers: true } : undefined,
+      });
       return data ?? [];
+    },
+
+    /** Step 05 · name the person who will do it. */
+    async assignCapa(capaId: number, responsiblePersonId: number): Promise<void> {
+      await apiClient.post(`/capa/${capaId}/assign`, {
+        responsible_person_id: responsiblePersonId,
+      });
     },
 
     /**

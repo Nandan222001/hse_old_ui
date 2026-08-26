@@ -6,6 +6,9 @@ import { CheckCircle2, Clock, User as UserIcon, Zap } from 'lucide-react-native'
 import type { ScreenProps } from '../types';
 import { apiClient } from '../../../api/client';
 import { permitWorkflowService } from '../../../services/permitWorkflowService';
+import {
+  PermitGateSheets, gateDetailOf, type BlockedApproval,
+} from '../PermitGateSheets';
 
 const STATUS = {
   active:   { label: 'Active', color: '#16A34A', bg: '#DCFCE7' },
@@ -44,6 +47,11 @@ export function MgrPermits({ showToast }: ScreenProps) {
     return diff > 0 && diff < 2 * 3600 * 1000;
   }).length;
 
+  // What the gates refused, when they did. Held so the sheet can say which one
+  // and why — `Alert.alert('Failed', detail)` was being handed the gate engine's
+  // response object, which renders as nothing a manager can act on.
+  const [blocked, setBlocked] = useState<BlockedApproval | null>(null);
+
   const approve = async (id: number) => {
     try {
       setBusy(id);
@@ -51,7 +59,13 @@ export function MgrPermits({ showToast }: ScreenProps) {
       showToast?.('Permit approved');
       load();
     } catch (e: any) {
-      Alert.alert('Failed', e?.response?.data?.detail || 'Could not approve.');
+      const gates = gateDetailOf(e);
+      if (gates) {
+        setBlocked({ id, gates });
+      } else {
+        const detail = e?.response?.data?.detail;
+        Alert.alert('Failed', typeof detail === 'string' ? detail : 'Could not approve.');
+      }
     } finally {
       setBusy(null);
     }
@@ -134,6 +148,13 @@ export function MgrPermits({ showToast }: ScreenProps) {
         })
       )}
       <View style={{ height: 24 }} />
+
+      <PermitGateSheets
+        blocked={blocked}
+        onDismiss={() => setBlocked(null)}
+        onRetryApprove={(permitId) => approve(permitId)}
+        showToast={showToast}
+      />
     </ScrollView>
   );
 }

@@ -1438,6 +1438,9 @@ def stage_queue(
 
 @router.get("/assignable-owners")
 def assignable_owners(
+    include_workers: bool = Query(
+        False, description="Widen past the accountable line to the whole workforce",
+    ),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -1452,7 +1455,7 @@ def assignable_owners(
     payroll.
     """
     require_role(current_user.role, ALL_READ_ROLES, "list assignable owners")
-    return capa_owners.assignable_owners(db, current_user.org_id)
+    return capa_owners.assignable_owners(db, current_user.org_id, include_workers)
 
 
 @router.get("/all")
