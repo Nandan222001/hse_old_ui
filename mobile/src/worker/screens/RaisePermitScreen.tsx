@@ -11,11 +11,12 @@ import { Input } from '../components/form/Input';
 import { CheckboxGroup } from '../components/form/Checkbox';
 import { TextArea } from '../components/form/TextArea';
 import { AttachBox } from '../components/form/PhotoUploadBox';
-import { StepProgressBar } from '../components/display/StepDots';
 import { DateTimePickerModal } from '../components/inputs/DateTimePickerModal';
 import { Colors } from '../theme/colors';
 import { usePermits } from '../hooks/usePermits';
 import { PermitType, SafetyGear } from '../types';
+import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
+import { ensureCameraPermission, reportPickerError } from '../../utils/cameraPermission';
 
 const PERMIT_TYPES: { id: PermitType; icon: string; title: string; desc: string }[] = [
   { id: 'hot_work',          icon: '🔥', title: 'Hot Work Permit',       desc: 'Welding, grinding, open flame' },
@@ -26,7 +27,6 @@ const PERMIT_TYPES: { id: PermitType; icon: string; title: string; desc: string 
 ];
 
 const SAFETY_GEAR_OPTIONS = ['Hard Hat', 'Gloves', 'Eye Pro', 'Respirator', 'Safety Harness', 'Hearing Protection'];
-const STEPS = ['Classification', 'Site & Schedule', 'Safety Gear', 'Risk Assessment'];
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** "2026-06-11 08:00" → "11 Jun 2026, 08:00" for display. */
@@ -58,19 +58,11 @@ export default function RaisePermitScreen({ navigation }: any) {
   const [endDate, setEndDate]       = useState('');
   const [gear, setGear]             = useState<string[]>(['Hard Hat', 'Gloves']);
   const [riskText, setRiskText]     = useState('');
+  /** The JSA the worker attached. One file — a permit has one assessment. */
+  const [jsa, setJsa] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [errors, setErrors]         = useState<Record<string, string>>({});
   // Which date-time picker is open, if any.
   const [picker, setPicker]         = useState<null | 'start' | 'end'>(null);
-
-  // Live progress: how many of the 4 sections are filled in. Drives the bar so it
-  // advances as the worker completes the form (single-page form, not a wizard).
-  const stepDone = [
-    !!selectedPermit && workDescription.trim().length > 0, // 1. Classification
-    location.trim().length > 0 && startDate.trim().length > 0 && endDate.trim().length > 0, // 2. Site & Schedule
-    gear.length > 0,                                       // 3. Safety Gear
-    riskText.trim().length > 0,                            // 4. Risk Assessment
-  ];
-  const completedSteps = stepDone.filter(Boolean).length;
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -81,6 +73,56 @@ export default function RaisePermitScreen({ navigation }: any) {
     if (!riskText.trim())         e.riskText        = 'Risk assessment summary is required';
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  /**
+   * Attach the risk assessment.
+   *
+   * The box rendered with no `onPress` at all, so tapping it did nothing —
+   * there was no picker, no upload, and no column on the permit to put one in.
+   * All three are wired now.
+   */
+  const attachJsa = () => {
+    Alert.alert('Attach Risk Assessment', 'Where is the JSA?', [
+      {
+        text: 'Photograph it',
+        onPress: async () => {
+          if (!(await ensureCameraPermission('photograph the risk assessment'))) return;
+          const res = await launchCamera({
+            mediaType: 'photo', quality: 0.8, maxWidth: 2000, maxHeight: 2000, saveToPhotos: false,
+          });
+          takeAsset(res.assets?.[0], res.didCancel, res.errorCode, res.errorMessage, 'Camera');
+        },
+      },
+      {
+        text: 'Choose from gallery',
+        onPress: async () => {
+          const res = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, selectionLimit: 1 });
+          takeAsset(res.assets?.[0], res.didCancel, res.errorCode, res.errorMessage, 'Gallery');
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const takeAsset = (
+    asset: Asset | undefined, cancelled?: boolean,
+    code?: string, message?: string, label = 'Camera',
+  ) => {
+    if (cancelled) return;
+    if (code) return reportPickerError(label, code, message);
+    if (!asset?.uri) return;
+    // Mirrors media_storage.MAX_BYTES, so the worker learns it is too big
+    // before spending the upload rather than after.
+    if (asset.fileSize && asset.fileSize > 100 * 1024 * 1024) {
+      Alert.alert('File too large', 'The attachment has to be under 100 MB.');
+      return;
+    }
+    setJsa({
+      uri: asset.uri,
+      name: asset.fileName || `jsa_${Date.now()}.jpg`,
+      type: asset.type || 'image/jpeg',
+    });
   };
 
   const handleSubmit = async () => {
@@ -97,7 +139,7 @@ export default function RaisePermitScreen({ navigation }: any) {
       work_description:     workDescription.trim(),
       safety_gear:          gearArrayToObject(gear),
       risk_assessment_text: riskText.trim(),
-    });
+    }, jsa ?? undefined);
 
     if (result) {
       Alert.alert(
@@ -128,9 +170,6 @@ export default function RaisePermitScreen({ navigation }: any) {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.pageTitle}>Request Permit</Text>
         <Text style={styles.pageSub}>Submit a new digital work permit for approval.</Text>
-
-        <StepProgressBar total={STEPS.length} current={completedSteps - 1} style={styles.stepBar} />
-        <Text style={styles.progressLabel}>{completedSteps} of {STEPS.length} sections completed</Text>
 
         {/* Step 1 — Classification */}
         <SectionCard label="Permit Classification" stepNum={1} style={styles.card}>
@@ -223,7 +262,16 @@ export default function RaisePermitScreen({ navigation }: any) {
             minHeight={100}
           />
           {errors.riskText ? <Text style={styles.errorText}>{errors.riskText}</Text> : null}
-          <AttachBox title="Attach Risk Assessment (JSA)" subtitle="PDF, JPG, or PNG (Max 5MB)" />
+          {/* Photographs, not PDFs. The box promised "PDF, JPG, or PNG" and
+              delivered none of them — and no document picker is installed in
+              this project, so offering PDF would be the same promise again.
+              A photographed JSA is what a worker at the job actually has. */}
+          <AttachBox
+            icon={jsa ? '📄' : '☁️'}
+            title={jsa ? `Attached: ${jsa.name}` : 'Attach Risk Assessment (JSA)'}
+            subtitle={jsa ? 'Tap to replace' : 'Photograph the JSA, or pick it from your gallery'}
+            onPress={attachJsa}
+          />
         </SectionCard>
 
         {/* Actions */}
@@ -278,8 +326,6 @@ const styles = StyleSheet.create({
   scroll:    { flex: 1, padding: 16 },
   pageTitle: { fontSize: 22, fontWeight: '800', color: Colors.textDark, marginBottom: 4, marginTop: 8 },
   pageSub:   { fontSize: 13, color: Colors.textMuted, marginBottom: 16 },
-  stepBar:   { marginBottom: 8 },
-  progressLabel: { fontSize: 12, color: Colors.textMuted, fontWeight: '600', marginBottom: 20 },
   card:      { marginBottom: 14 },
 
   permitRow: {

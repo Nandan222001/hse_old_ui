@@ -20,11 +20,14 @@ export function usePermits() {
     }
   }, []);
 
-  const createPermit = useCallback(async (payload: PermitRequest): Promise<Permit | null> => {
+  const createPermit = useCallback(async (
+    payload: PermitRequest,
+    riskAssessmentFile?: { uri: string; name: string; type: string },
+  ): Promise<Permit | null> => {
     setLoading(true);
     setError(null);
     try {
-      const permit = await permitService.createPermit(payload);
+      const permit = await permitService.createPermitWithFile(payload, riskAssessmentFile);
       setPermits(prev => [permit, ...prev]);
       return permit;
     } catch (err: any) {

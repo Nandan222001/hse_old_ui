@@ -18,13 +18,25 @@ export const permitService = {
     return data;
   },
 
-  async createPermitWithFile(payload: PermitRequest, riskAssessmentFile?: { uri: string; name: string; type: string }): Promise<Permit> {
+  /**
+   * Raise a permit with the risk assessment attached.
+   *
+   * The file part is named `media_0`, which is what `app/utils/report_media`
+   * reads — it was `risk_assessment_file`, a name nothing on the server has
+   * ever looked for, posted at an endpoint that only accepted JSON. Both ends
+   * of that were broken and neither could be noticed, because the attach box on
+   * the form had no handler and so nothing ever called this.
+   */
+  async createPermitWithFile(
+    payload: PermitRequest,
+    riskAssessmentFile?: { uri: string; name: string; type: string },
+  ): Promise<Permit> {
     if (!riskAssessmentFile) {
       return this.createPermit(payload);
     }
     const form = new FormData();
     form.append('data', JSON.stringify(payload));
-    form.append('risk_assessment_file', {
+    form.append('media_0', {
       uri: riskAssessmentFile.uri,
       name: riskAssessmentFile.name,
       type: riskAssessmentFile.type,

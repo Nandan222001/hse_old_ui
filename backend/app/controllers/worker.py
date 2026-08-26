@@ -259,6 +259,9 @@ def list_permits(
             # person who does not exist in this database.
             "requested_by": r["requested_by_name"] or "Unknown",
             "created_at": r["date_issued"].isoformat() if r["date_issued"] else date.today().isoformat(),
+            # What the worker attached when they raised it. Read back so the
+            # permit they can see is the one they actually sent.
+            "evidence": json.loads(r["evidence_json"]) if r["evidence_json"] else [],
             "safety_gear": {
                 "hard_hat": True,
                 "gloves": True,
@@ -281,12 +284,22 @@ def _dt(value) -> Optional[datetime]:
 
 
 @router.post("/permits")
-def create_permit(
-    payload: dict,
+async def create_permit(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    data = payload.get("data", payload)
+    """Raise a permit, with or without the risk assessment attached.
+
+    Declared as `payload: dict` until now, which is JSON-only: the moment the
+    app attached a file and switched to multipart, FastAPI saw a multipart body
+    where it expected a model and answered 422 — the same failure
+    `report_media` was written to end for near miss, unsafe act and risk. The
+    attach box on the permit form never got as far as finding out, because it
+    had no handler wired to it at all.
+    """
+    data, media_urls = await report_media.read_report_body(request, subdir="permits")
+    data = report_media.merge_media(data, media_urls)
     
     # Look up permit type id or default
     pt_name = data.get("permit_type", "hot_work").replace("_", " ")
@@ -316,12 +329,14 @@ def create_permit(
                 organisation_id, permit_type_id, date_issued, time_issued,
                 location_station_id, work_description, duration_requested_hours,
                 validity_start, validity_end, status,
-                workflow_status, requested_by, requested_at, issued_by
+                workflow_status, requested_by, requested_at, issued_by,
+                evidence_json
             ) VALUES (
                 :org_id, :permit_type_id, :date_issued, :time_issued,
                 :location_station_id, :work_description, :duration,
                 :validity_start, :validity_end, :status,
-                'requested', :requested_by, :requested_at, :requested_by
+                'requested', :requested_by, :requested_at, :requested_by,
+                :evidence
             )
         """),
         {
@@ -351,6 +366,7 @@ def create_permit(
             "status": "Pending",
             "requested_by": requester_emp_id,
             "requested_at": datetime.now(),
+            "evidence": json.dumps(data.get("photos") or []) if data.get("photos") else None,
         }
     )
 
@@ -372,6 +388,7 @@ def create_permit(
         "work_description": data.get("work_description", ""),
         "status": "pending",
         "workflow_status": "requested",
+        "evidence": data.get("photos") or [],
         "requested_by": "Alex Safety",
         "created_at": date.today().isoformat(),
         "safety_gear": data.get("safety_gear", {
