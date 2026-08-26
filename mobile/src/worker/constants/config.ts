@@ -1,9 +1,9 @@
-// Debug build → local dev server; Release build → production Azure server.
-// See src/constants/config.ts for why this is localhost and not 10.0.2.2:
-// a physical device needs `adb reverse tcp:8000 tcp:8000`.
+// Local backend for both build types, matching src/constants/config.ts — the
+// two must agree or the worker screens would talk to a different host from the
+// rest of the app. See that file for how to put the production release target
+// back, and for why this is localhost rather than 10.0.2.2.
 export const API_BASE_URL =
-  process.env.API_BASE_URL ??
-  (__DEV__ ? 'http://localhost:8000/api/v1' : 'https://api.ehsera.com/api/v1');
+  process.env.API_BASE_URL ?? 'http://localhost:8000/api/v1';
 
 export const API_TIMEOUT = 15000;
 
