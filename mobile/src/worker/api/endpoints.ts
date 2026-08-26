@@ -26,6 +26,14 @@ export const ENDPOINTS = {
     CREATE: '/worker/permits',
     DETAIL: (id: string) => `/worker/permits/${id}`,
     ACKNOWLEDGE: (id: string) => `/worker/permits/${id}/acknowledge`,
+    // The holder's own two steps, on the permit workflow rather than the
+    // `/worker/*` shim: starting work under an issued permit and finishing it.
+    // The flow gives both to the worker, and until now neither had a button —
+    // they were reachable only from the supervisor's screen, so a worker held a
+    // permit they could not start and could not hand back. The endpoints allow
+    // the permit holder through by name, which is what this app is.
+    START_WORK: (id: string | number) => `/permit-workflow/${id}/activate`,
+    COMPLETE_WORK: (id: string | number) => `/permit-workflow/${id}/complete-work`,
   },
 
   // Incidents

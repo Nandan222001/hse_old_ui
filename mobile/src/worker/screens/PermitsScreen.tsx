@@ -8,12 +8,43 @@ import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
 import { usePermits } from '../hooks/usePermits';
 
-export default function PermitsScreen({ navigation }: any) {
-  const { permits, isLoading, fetchPermits, acknowledgePermit } = usePermits();
-  const [signed, setSigned] = useState(false);
+/** Issued but not yet being worked under — the states "start work" applies to. */
+const ISSUED = ['issued', 'approved'];
 
-  const activeList = permits.filter(p => p.status === 'active');
-  const pendingList = permits.filter(p => p.status === 'pending_approval' || p.status === 'draft');
+const STATUS_WORDS: Record<string, string> = {
+  requested: 'Waiting for your supervisor',
+  acknowledged: 'With the manager for approval',
+  gate_blocked: 'Blocked — a safety check failed',
+  issued: 'Issued — ready for you to start',
+  approved: 'Issued — ready for you to start',
+  active: 'You are working under this permit',
+  verified: 'Checked on site by the auditor',
+  work_complete: 'Finished — with your supervisor to close out',
+  expired: 'Expired',
+  rejected: 'Rejected',
+  closed: 'Closed',
+};
+
+function humanStatus(workflowStatus?: string | null): string {
+  return STATUS_WORDS[workflowStatus ?? ''] ?? (workflowStatus ?? 'In progress');
+}
+
+export default function PermitsScreen({ navigation }: any) {
+  const { permits, isLoading, fetchPermits, startWork, completeWork } = usePermits();
+  const [signed, setSigned] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Split on `workflow_status`, not on `status`. `status` is the website's
+  // business field and its vocabulary has never been uniform — the worker
+  // endpoint wrote 'pending_approval' while the permit workflow writes
+  // 'Pending', and the list lowercases whatever it finds, so this filter
+  // matched only the rows this one screen had created. `workflow_status` is the
+  // state machine's own column and every permit carries it.
+  const LIVE = ['issued', 'approved', 'active', 'verified'];
+  const AWAITING = ['requested', 'acknowledged', 'gate_blocked'];
+
+  const activeList = permits.filter(p => LIVE.includes(p.workflow_status ?? ''));
+  const pendingList = permits.filter(p => AWAITING.includes(p.workflow_status ?? ''));
 
   useEffect(() => {
     fetchPermits();
@@ -23,11 +54,28 @@ export default function PermitsScreen({ navigation }: any) {
     fetchPermits();
   }, []);
 
-  const handleAcknowledge = async (id: string) => {
-    const ok = await acknowledgePermit(id);
-    if (ok) {
-      fetchPermits();
+  /**
+   * Start or finish work under a permit.
+   *
+   * The failure is shown verbatim. Every refusal the backend raises here is one
+   * the worker can act on — the window has not opened, the permit expired, it
+   * is not issued yet — and each one names what to do instead. Replacing them
+   * with "Failed" is what sends someone to find a supervisor to explain it.
+   */
+  const handleStep = async (id: string, step: 'start' | 'complete') => {
+    setBusyId(id);
+    const failure = step === 'start' ? await startWork(id) : await completeWork(id);
+    setBusyId(null);
+    if (failure) {
+      Alert.alert(step === 'start' ? 'Cannot start work' : 'Cannot finish work', failure);
+      return;
     }
+    Alert.alert(
+      step === 'start' ? 'Work started' : 'Work finished',
+      step === 'start'
+        ? 'You are now working under this permit. Hand it back when the job is done.'
+        : 'The permit has gone to your supervisor for close-out.',
+    );
   };
 
   const handleSign = () => {
@@ -127,13 +175,38 @@ export default function PermitsScreen({ navigation }: any) {
                   <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
                   <Text style={styles.permitLoc}>{permit.work_location}</Text>
                 </View>
-                {/* How far the permit has got. A worker raises one and then has
-                    no way to see whether it has been acknowledged, approved or
-                    verified — the same gap My Near Misses closed for reports. */}
+                {/* The holder's own two steps. Which one is offered comes from
+                    the permit's workflow state, never from a guess: an issued
+                    permit is one to start, a live one is one to hand back. The
+                    backend refuses either outside the validity window and its
+                    reason is what gets shown. */}
+                <Text style={styles.permitStage}>
+                  {permit.stage_label
+                    ? `${permit.stage_label} · ${humanStatus(permit.workflow_status)}`
+                    : humanStatus(permit.workflow_status)}
+                </Text>
                 <View style={styles.permitActionRow}>
-                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge(permit.id)}>
-                    <Text style={styles.ackBtnText}>Acknowledge</Text>
-                  </TouchableOpacity>
+                  {ISSUED.includes(permit.workflow_status ?? '') ? (
+                    <TouchableOpacity
+                      style={[styles.ackBtn, busyId === permit.id && styles.btnBusy]}
+                      disabled={busyId === permit.id}
+                      onPress={() => handleStep(permit.id, 'start')}
+                    >
+                      <Text style={styles.ackBtnText}>
+                        {busyId === permit.id ? 'Starting…' : 'Accept & start work'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.doneBtn, busyId === permit.id && styles.btnBusy]}
+                      disabled={busyId === permit.id}
+                      onPress={() => handleStep(permit.id, 'complete')}
+                    >
+                      <Text style={styles.doneBtnText}>
+                        {busyId === permit.id ? 'Finishing…' : 'Work finished'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={styles.eyeBtn}>
                     <Icon emoji="👁️" style={styles.eyeIcon} />
                   </TouchableOpacity>
@@ -141,59 +214,18 @@ export default function PermitsScreen({ navigation }: any) {
               </View>
             ))
           ) : (
-            <>
-              {/* Card 1 */}
-              <View style={styles.permitCard}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={[styles.badge, { backgroundColor: '#FEE2E2' }]}>
-                    <Text style={[styles.badgeText, { color: '#EF4444' }]}>Hot Work</Text>
-                  </View>
-                  <View style={styles.timerRow}>
-                    <Icon name="clock" size={12} color="#EF4444" style={styles.timerIcon} />
-                    <Text style={styles.timerText}>01:24:05</Text>
-                  </View>
-                </View>
-                <Text style={styles.permitTitle}>Welding - Zone B</Text>
-                <View style={styles.permitLocRow}>
-                  <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
-                  <Text style={styles.permitLoc}>Maintenance Bay 4, Site Alpha</Text>
-                </View>
-                <View style={styles.permitActionRow}>
-                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('1')}>
-                    <Text style={styles.ackBtnText}>Acknowledge</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.eyeBtn}>
-                    <Icon emoji="👁️" style={styles.eyeIcon} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Card 2 */}
-              <View style={styles.permitCard}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={[styles.badge, { backgroundColor: '#F3E5F5' }]}>
-                    <Text style={[styles.badgeText, { color: '#8B5CF6' }]}>Confined Space</Text>
-                  </View>
-                  <View style={styles.timerRow}>
-                    <Icon name="clock" size={12} color="#475569" style={styles.timerIcon} />
-                    <Text style={[styles.timerText, { color: '#475569' }]}>04:12:18</Text>
-                  </View>
-                </View>
-                <Text style={styles.permitTitle}>Tank Inspection - T02</Text>
-                <View style={styles.permitLocRow}>
-                  <Icon name="map-pin" size={12} color="#64748B" style={styles.timerIcon} />
-                  <Text style={styles.permitLoc}>Storage Yard West</Text>
-                </View>
-                <View style={styles.permitActionRow}>
-                  <TouchableOpacity style={styles.ackBtn} onPress={() => handleAcknowledge('2')}>
-                    <Text style={styles.ackBtnText}>Acknowledge</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.eyeBtn}>
-                    <Icon emoji="👁️" style={styles.eyeIcon} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
+            /* Two hardcoded sample permits used to stand in here, and their
+               Acknowledge buttons called the real endpoint with permit ids '1'
+               and '2' — permits belonging to whoever actually holds those ids.
+               An empty list is the honest answer and cannot act on somebody
+               else's permit. */
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyTitle}>No active permits</Text>
+              <Text style={styles.emptyText}>
+                A permit appears here once a manager has issued it. Acknowledge it to
+                start work under it.
+              </Text>
+            </View>
           )}
         </View>
 
@@ -314,6 +346,23 @@ export default function PermitsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  permitStage: { fontSize: 11.5, color: '#64748B', marginTop: 8 },
+  doneBtn: {
+    flex: 1, backgroundColor: '#16A34A', borderRadius: 10,
+    paddingVertical: 10, alignItems: 'center',
+  },
+  doneBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  btnBusy: { opacity: 0.6 },
+
+  emptyBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24,
+    alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: '#0B1C30' },
+  emptyText: {
+    fontSize: 12.5, color: '#64748B', textAlign: 'center', marginTop: 6, lineHeight: 18,
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',

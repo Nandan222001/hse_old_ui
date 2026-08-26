@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from typing import Any, List, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import text
@@ -270,6 +270,16 @@ def list_permits(
     return {"success": True, "data": {"items": items, "total": len(items)}}
 
 
+def _dt(value) -> Optional[datetime]:
+    """Parse an ISO datetime the app may or may not have sent."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", ""))
+    except ValueError:
+        return None
+
+
 @router.post("/permits")
 def create_permit(
     payload: dict,
@@ -322,16 +332,35 @@ def create_permit(
             "location_station_id": loc_id,
             "work_description": data.get("work_description", ""),
             "duration": data.get("duration_hours", 8),
-            "validity_start": datetime.fromisoformat(data.get("start_datetime").replace("Z", "")) if data.get("start_datetime") else datetime.now(),
-            "validity_end": datetime.fromisoformat(data.get("end_datetime").replace("Z", "")) if data.get("end_datetime") else datetime.now(),
-            "status": "pending_approval",
+            # A missing end date used to default to `datetime.now()`, which
+            # produced a permit that had already expired at the moment it was
+            # raised: /activate refuses outside the window, so it could never be
+            # worked under and the expiry sweep would take it out of service on
+            # its next pass. The requested duration is what the worker actually
+            # asked for, so the window runs from the start for that long.
+            "validity_start": _dt(data.get("start_datetime")) or datetime.now(),
+            "validity_end": (
+                _dt(data.get("end_datetime"))
+                or (_dt(data.get("start_datetime")) or datetime.now())
+                + timedelta(hours=int(data.get("duration_hours") or 8))
+            ),
+            # 'Pending', as permit_workflow writes it. This endpoint used to
+            # write 'pending_approval', a value no other permit writer or reader
+            # uses: the analytics aggregates count 'Active' and 'Pending', so a
+            # permit raised from the worker app was invisible to all of them.
+            "status": "Pending",
             "requested_by": requester_emp_id,
             "requested_at": datetime.now(),
         }
     )
-    db.commit()
 
+    # Read the id from the connection that did the INSERT, before the commit.
+    # `SELECT LAST_INSERT_ID()` after `db.commit()` runs on a connection the
+    # session has already released, so it returned 0 — every permit raised from
+    # the worker app came back as id "0" and reference "PTW-0000", and nothing
+    # the app did next could address the permit it had just created.
     new_id = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+    db.commit()
 
     created_permit = {
         "id": str(new_id),
@@ -341,7 +370,8 @@ def create_permit(
         "start_datetime": data.get("start_datetime", date.today().isoformat() + "T08:00:00"),
         "end_datetime": data.get("end_datetime", date.today().isoformat() + "T16:00:00"),
         "work_description": data.get("work_description", ""),
-        "status": "pending_approval",
+        "status": "pending",
+        "workflow_status": "requested",
         "requested_by": "Alex Safety",
         "created_at": date.today().isoformat(),
         "safety_gear": data.get("safety_gear", {
@@ -361,13 +391,33 @@ def acknowledge_permit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    if id.isdigit():
-        db.execute(
-            text("UPDATE permits_to_work SET status = 'Active' WHERE id = :id AND organisation_id = :org_id"),
-            {"id": int(id), "org_id": current_user.org_id}
-        )
-        db.commit()
-    return {"success": True, "data": {"id": id, "status": "active"}}
+    """The worker accepting an issued permit and starting work under it.
+
+    This used to be a bare `UPDATE permits_to_work SET status = 'Active'` — no
+    role check, no check that the caller had anything to do with the permit, no
+    check of what state it was in, and no gate evaluation. `status='Active'` is
+    the column six analytics aggregates read as "live work", so any signed-in
+    account could mark any permit in the organisation as live: one that no
+    manager had approved, one the gate engine had blocked for an expired
+    competence certificate, one already rejected. It also left `status` and
+    `workflow_status` contradicting each other, which the permit workflow is
+    explicit about keeping in step.
+
+    Accepting a permit *is* a real step — it is the holder taking it on and
+    starting the job — and that step already exists as `/permit-workflow/{id}/activate`,
+    with the guards this one was missing. So it delegates rather than writing:
+    one state machine, one set of rules, whichever door the request arrives at.
+    """
+    if not id.isdigit():
+        raise HTTPException(status_code=404, detail="No such permit")
+
+    from app.controllers.permit_workflow import activate_permit
+
+    row = activate_permit(int(id), db, current_user)
+    return {
+        "success": True,
+        "data": {"id": id, "status": row.status, "workflow_status": row.workflow_status},
+    }
 
 
 @router.get("/my-kpis")

@@ -45,5 +45,41 @@ export function usePermits() {
     }
   }, []);
 
-  return { permits, isLoading, error, fetchPermits, createPermit, acknowledgePermit };
+  /**
+   * The holder's two steps. Both refetch rather than patching the row: the
+   * backend decides the resulting state — an activation outside the validity
+   * window is refused, and the permit may have moved on since the list loaded —
+   * so the server's answer is the one worth rendering.
+   *
+   * The refusal text is returned rather than swallowed. "This permit expired on
+   * 12 Aug at 18:00 and cannot be activated" is the whole answer, and a screen
+   * that shows "Failed" instead sends the worker to find a supervisor.
+   */
+  const runPermitStep = useCallback(
+    async (id: string, step: 'start' | 'complete'): Promise<string | null> => {
+      try {
+        if (step === 'start') {
+          await permitService.startWork(id);
+        } else {
+          await permitService.completeWork(id);
+        }
+        await fetchPermits();
+        return null;
+      } catch (err: any) {
+        const detail = err?.response?.data?.detail;
+        if (typeof detail === 'string') return detail;
+        if (detail?.message) return detail.message;
+        return step === 'start' ? 'Could not start work.' : 'Could not finish work.';
+      }
+    },
+    [fetchPermits],
+  );
+
+  const startWork = useCallback((id: string) => runPermitStep(id, 'start'), [runPermitStep]);
+  const completeWork = useCallback((id: string) => runPermitStep(id, 'complete'), [runPermitStep]);
+
+  return {
+    permits, isLoading, error, fetchPermits, createPermit,
+    acknowledgePermit, startWork, completeWork,
+  };
 }

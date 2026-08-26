@@ -37,4 +37,20 @@ export const permitService = {
     const { data } = await apiClient.post<Permit>(ENDPOINTS.PERMITS.ACKNOWLEDGE(id));
     return data;
   },
+
+  /**
+   * Accept the issued permit and start work under it.
+   *
+   * The window is enforced server-side — a permit whose validity has passed, or
+   * has not begun, is refused with the reason — so this does not second-guess
+   * it. The refusal text is what the screen shows.
+   */
+  async startWork(id: string): Promise<void> {
+    await apiClient.post(ENDPOINTS.PERMITS.START_WORK(id));
+  },
+
+  /** Work is finished; the permit is spent and goes to the supervisor to close. */
+  async completeWork(id: string): Promise<void> {
+    await apiClient.post(ENDPOINTS.PERMITS.COMPLETE_WORK(id));
+  },
 };

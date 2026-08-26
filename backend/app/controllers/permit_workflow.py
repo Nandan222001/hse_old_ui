@@ -53,6 +53,7 @@ from app.controllers.workflow_common import (
     ALL_READ_ROLES,
     employee_id_for,
     require_role,
+    role_matches,
     station_id_for,
 )
 from app.models.permit_to_work import PermitToWork
@@ -66,7 +67,6 @@ from app.schemas.permit_workflow import (
     PermitReject,
     PermitRequest,
     PermitSuspend,
-    PermitClose,
     PermitVerify,
     PermitWorkflowResponse,
 )
@@ -131,6 +131,67 @@ def _require_within_validity(row: PermitToWork, verb: str) -> None:
                 "validity_end": row.validity_end.isoformat() if row.validity_end else None,
             },
         )
+
+
+# Which states each pre-issue transition may be applied from.
+#
+# These three were the only verbs with no state check: acknowledge, approve and
+# reject wrote their new state over whatever was there. That let a closed permit
+# be rejected, a gate-blocked one be dragged back to `acknowledged`, and — the
+# worst of the three — a finished permit be approved back into `Active`, which
+# is the column six analytics aggregates read as "live work". Every other verb
+# in this file already checked, so this is the rule they were missing rather
+# than a new one.
+#
+# `gate_blocked` is deliberately in the approve and reject sets: a hard gate
+# failure is a control problem someone fixes and then re-submits, and if the
+# permit could never be approved or rejected afterwards it would be stranded.
+ACKNOWLEDGE_FROM = ("requested",)
+APPROVE_FROM = ("requested", "acknowledged", "gate_blocked")
+REJECT_FROM = ("requested", "acknowledged", "gate_blocked")
+
+
+def _require_state(row: PermitToWork, allowed: tuple, verb: str) -> None:
+    if row.workflow_status in allowed:
+        return
+    st = workflow_stages.describe("permit", row.workflow_status)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Permit is at stage {st.get('stage_number')} "
+            f"{st.get('stage_label') or row.workflow_status} and cannot be {verb}. "
+            f"This applies to a permit that is {' or '.join(allowed)}."
+        ),
+    )
+
+
+def _require_holder_or_elevated(
+    db: Session, row: PermitToWork, current_user: CurrentUser, verb: str
+) -> None:
+    """The permit holder, or somebody who supervises the work.
+
+    `/activate` and `/complete-work` are the two verbs the flow gives the
+    worker, and they were the only two in this file with no authorisation of any
+    kind — no role check and no check that the caller had anything to do with
+    the permit. Any signed-in account could start work under somebody else's
+    permit, and worse, end it: `complete-work` withdraws the authorisation while
+    a crew may still be under it.
+
+    Elevated roles are allowed through because the supervisor's permit screen is
+    what actually drives both verbs today, and the site supervisor starting or
+    finishing a job on the holder's behalf is the normal case.
+    """
+    if role_matches(current_user.role, ALL_ELEVATED_ROLES):
+        return
+    emp_id = employee_id_for(db, current_user.user_id)
+    if emp_id and emp_id in (row.requested_by, row.issued_by, row.acknowledged_by):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"Only the permit holder or their supervisor can {verb} this permit."
+        ),
+    )
 
 
 def _station_names(db: Session, rows) -> dict:
@@ -325,6 +386,7 @@ def supervisor_acknowledge(
 ):
     require_role(current_user.role, ALL_ELEVATED_ROLES, "acknowledge permits")
     row = _get(db, permit_id, current_user.org_id)
+    _require_state(row, ACKNOWLEDGE_FROM, "acknowledged")
     row.workflow_status = "acknowledged"
     row.acknowledged_at = datetime.now()
     row.acknowledged_by = employee_id_for(db, current_user.user_id)
@@ -367,6 +429,9 @@ def manager_approve(
 ):
     require_role(current_user.role, MANAGER_ROLES, "approve permits")
     row = _get(db, permit_id, current_user.org_id)
+    # Checked before the gates run: re-evaluating a closed permit writes a gate
+    # verdict and a decision-log entry for work that finished weeks ago.
+    _require_state(row, APPROVE_FROM, "approved")
 
     # ── The Integration Spine runs here ──────────────────────────────────────
     # Permit issuance is the gate point the whole WF-06/08/09 chain feeds. A
@@ -430,6 +495,7 @@ def activate_permit(
     checked by anyone, so both sit at IMPROVE. Only /verify advances the stage.
     """
     row = _get(db, permit_id, current_user.org_id)
+    _require_holder_or_elevated(db, row, current_user, "start work under")
     if row.workflow_status not in ("issued", "approved"):
         raise HTTPException(
             status_code=400, detail="Only an issued permit can be activated"
@@ -517,6 +583,7 @@ def complete_permit_work(
     simply never occupied stage 06, which is the honest record of what happened.
     """
     row = _get(db, permit_id, current_user.org_id)
+    _require_holder_or_elevated(db, row, current_user, "finish work under")
     if row.workflow_status not in LIVE_STATUSES:
         raise HTTPException(
             status_code=400, detail="Only a live permit can be completed"
@@ -536,6 +603,7 @@ def manager_reject(
 ):
     require_role(current_user.role, MANAGER_ROLES, "reject permits")
     row = _get(db, permit_id, current_user.org_id)
+    _require_state(row, REJECT_FROM, "rejected")
     row.workflow_status = "rejected"
     row.status = "Rejected"
     row.rejected_at = datetime.now()
