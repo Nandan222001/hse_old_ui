@@ -6,6 +6,7 @@ export type ManagerScreen =
   | "app"
   | "investigation"
   | "assign_actions"
+  | "unassigned_capa"
   | "compliance_approvals"
   | "permit_approvals"
   | "assigned_tasks"

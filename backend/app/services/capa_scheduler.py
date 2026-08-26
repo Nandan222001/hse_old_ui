@@ -8,11 +8,12 @@ counting overdue actions and posting the number to everybody. Nothing fired on
 elapsed time, nothing re-scored, nothing scheduled a review, and nothing noticed
 when the same root cause came back for the third time.
 
-Four jobs:
+Five jobs:
 
     run_capa_escalations        hourly · the 50/75/90/100/110% chain
     rescore_capa_priorities     weekly · "re-scores weekly against live risk data"
     notify_due_effectiveness_reviews  daily · the 30/60/90-day checks
+    nudge_unassigned_actions    daily · an action with no owner is chased by nobody
     flag_systemic_issues        daily · 3+ actions on one root cause in 6 months
 
 Every job is idempotent. `escalation_level` records the highest threshold already
@@ -264,6 +265,98 @@ def notify_due_effectiveness_reviews() -> None:
     except Exception:
         db.rollback()
         logger.exception("Scheduler: CAPA effectiveness review sweep failed")
+    finally:
+        db.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Actions nobody has picked an owner for
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# The escalation chain is addressed off `responsible_person_id`, so an action
+# with no owner is chased by nobody: the 50% step resolves the owner's
+# supervisor (None), the 75% step notifies the owner (None), and the first
+# audience that exists regardless is the Safety Manager at 100% — after the
+# deadline. An audit raises its actions unassigned by design, which is exactly
+# the shape that falls into that hole.
+
+# How far into its own window an unowned action may drift before this fires.
+UNASSIGNED_NUDGE_PERCENT = 25
+# ... and the floor for one with no deadline at all, which has no percentage.
+UNASSIGNED_NUDGE_DAYS = 3
+
+_UNASSIGNED_CATEGORY = "capa_unassigned"
+
+
+def _already_nudged(db, ref: str) -> bool:
+    """Idempotency without a new column.
+
+    `escalation_level` is the chain's own bookmark and writing this into it would
+    make the chain think a threshold had already fired. The notification row is
+    the record instead — one per action, found by its category and subject.
+    """
+    from app.models.notification import Notification
+
+    return (
+        db.query(Notification.id)
+        .filter(Notification.category == _UNASSIGNED_CATEGORY, Notification.subject_ref == ref)
+        .first()
+        is not None
+    )
+
+
+def nudge_unassigned_actions() -> None:
+    """Tell the Safety Manager an action is sitting with no owner.
+
+    Once per action. A queue that repeats itself daily is muted within a week,
+    and the standing list of unowned actions is on the console — this exists to
+    put the first one in front of somebody, not to be the queue.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(CapaAction)
+            .filter(func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)))
+            .filter(CapaAction.responsible_person_id.is_(None))
+            .all()
+        )
+        sent = 0
+        for capa in rows:
+            ref = capa.capa_ref or f"CAPA-{capa.id:06d}"
+            pct = lc.elapsed_percent(capa.created_at, capa.due_date)
+            if pct is None:
+                age = (datetime.now() - capa.created_at).days if capa.created_at else 0
+                overdue_to_assign = age >= UNASSIGNED_NUDGE_DAYS
+                how_long = f"{age} day(s) old, no due date set"
+            else:
+                overdue_to_assign = pct >= UNASSIGNED_NUDGE_PERCENT
+                how_long = f"{pct}% of its window has gone"
+            if not overdue_to_assign or _already_nudged(db, ref):
+                continue
+
+            capa_notify.notify_many(
+                db, capa_notify.safety_managers(db, capa.organisation_id),
+                org_id=capa.organisation_id,
+                title=f"{ref} has no owner",
+                message=(
+                    f"{capa.description}\n"
+                    f"Raised from {capa.source or capa.subject_family or 'a report'} and "
+                    f"{how_long} without anyone assigned. Nothing chases an action with no "
+                    f"owner — assign it before the deadline does the chasing.\n"
+                    f"Due {capa.due_date or 'not set'}."
+                ),
+                category=_UNASSIGNED_CATEGORY,
+                subject_ref=ref,
+                type_="warning",
+            )
+            sent += 1
+
+        db.commit()
+        if sent:
+            logger.info("Scheduler: flagged %s unassigned CAPA(s)", sent)
+    except Exception:
+        db.rollback()
+        logger.exception("Scheduler: unassigned CAPA sweep failed")
     finally:
         db.close()
 

@@ -27,6 +27,7 @@ import { AssignActionsScreenView } from "./components/AssignActionsScreen";
 import { AssignedTasksScreenView } from "./components/AssignedTasksScreen";
 import { MgrInvestigation } from "./components/MgrInvestigation";
 import { MgrAssignActions } from "./components/MgrAssignActions";
+import { UnassignedCapaScreen } from "./components/UnassignedCapaScreen";
 import { ComplianceApprovalsView } from "./components/ComplianceApprovals";
 import type { ManagerScreen } from "./components/types";
 import { HazardRegisterScreen } from "./components/HazardRegisterScreen";
@@ -342,6 +343,8 @@ export function ManagerAppRoot() {
         return <MgrInvestigation {...sharedProps} />;
       case "assign_actions":
         return <MgrAssignActions {...sharedProps} />;
+      case "unassigned_capa":
+        return <UnassignedCapaScreen {...sharedProps} />;
       case "assigned_tasks":
         return <AssignedTasksScreenView {...sharedProps} />;
       case "compliance_approvals":

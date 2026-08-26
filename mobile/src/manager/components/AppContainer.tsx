@@ -19,6 +19,7 @@ import {
   Building2,
   Truck,
   BrainCircuit,
+  UserPlus,
 } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { useAuth } from "../../hooks/useAuth";
@@ -38,9 +39,14 @@ export function AppContainerView(props: ScreenProps) {
 
   const menuItems = [
     { label: "Assigned Tasks", desc: "Supervisor tasks & worker responses", icon: ListChecks, color: "#12B8A6", bg: "#E0F2F1", go: () => setCurrentScreen("assigned_tasks") },
-    { label: "Compliance Sign-off", desc: "Validate CAPA closures", icon: ClipboardCheck, color: "#16A34A", bg: "#F0FDF4", go: () => setCurrentScreen("compliance_approvals") },
+    { label: "Closure Approvals", desc: "Step 10 — the only place a CAPA closes", icon: ClipboardCheck, color: "#16A34A", bg: "#F0FDF4", go: () => setCurrentScreen("compliance_approvals") },
     { label: "Permit Approvals", desc: "Approve/reject work permits", icon: FileCheck2, color: "#8B5CF6", bg: "#FAF5FF", go: () => setCurrentScreen("permit_approvals") },
     { label: "Assign CAPA Actions", desc: "Assign corrective actions", icon: Wrench, color: "#F97316", bg: "#FFF7ED", go: () => setCurrentScreen("assign_actions") },
+    // Separate from "Assign CAPA Actions" above, which raises new actions off an
+    // investigation. This is the queue of actions that already exist — an audit
+    // raises them with no owner by design — and it is the only place they can be
+    // picked up from.
+    { label: "Unassigned Actions", desc: "CAPA raised but nobody owns it yet", icon: UserPlus, color: "#BE123C", bg: "#FEF2F2", go: () => setCurrentScreen("unassigned_capa") },
     // ── WF-06 … WF-09 (HSE_Mobile_Architecture_v4) ──────────────────────────
     { label: "Safety Performance Score", desc: "Five domains, weekly, with alerts", icon: Activity, color: "#DC2626", bg: "#FEF2F2", go: () => setCurrentScreen("sps_dashboard") },
     { label: "Competence & Fatigue", desc: "Own the matrix, authorise exceptions", icon: GraduationCap, color: "#2563EB", bg: "#EFF6FF", go: () => setCurrentScreen("human_readiness") },

@@ -188,6 +188,12 @@ def start_scheduler() -> None:
         capa_scheduler.flag_systemic_issues, "interval", hours=24,
         id="capa_systemic_flag", next_run_time=now,
     )
+    # Daily, not hourly: assigning an owner is a person's decision taken in
+    # working hours, and the sweep notifies once per action anyway.
+    _scheduler.add_job(
+        capa_scheduler.nudge_unassigned_actions, "interval", hours=24,
+        id="capa_unassigned_sweep", next_run_time=now,
+    )
     # ── Permit expiry ────────────────────────────────────────────────────────
     # Every 15 minutes, matching the checklist SLA sweep above: a permit whose
     # window has closed is a live safety condition, not a daily report.

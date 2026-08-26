@@ -75,7 +75,7 @@ from app.schemas.capa_workflow import (
     CapaSubmit,
 )
 from app.services import capa_lifecycle as lc
-from app.services import capa_notify, media_storage
+from app.services import capa_notify, capa_owners, media_storage
 from app.services.capa_priority import prioritise
 from app.utils.logger import get_logger
 
@@ -1092,6 +1092,8 @@ def approve_closure(
     capa.closed_at = now
     capa.closure_notes = payload.closure_notes
     capa.lesson_learned = payload.lesson_learned
+    if payload.effectiveness_rating is not None:
+        capa.effectiveness_rating = payload.effectiveness_rating
     capa.is_locked = 1
 
     # Step 09 is scheduled from closure — see capa_lifecycle.review_schedule for
@@ -1378,11 +1380,87 @@ def ageing_report(
     }
 
 
+@router.get("/queue")
+def stage_queue(
+    stage: str = Query(..., description="interim | review | approval | unassigned"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """What this role is holding up, by lifecycle stage.
+
+    Four of the ten steps are somebody's inbox rather than the owner's work, and
+    each was reachable only by knowing an action's id: the halfway check, the
+    independent review, the closure approval, and naming an owner in the first
+    place. `my-actions` cannot answer these — it is the owner's list, and none of
+    these four are done by the owner.
+
+    Read-only and role-gated at the read level only. Each write endpoint applies
+    its own rule (the owner may not check their own progress, may not review
+    their own evidence, and only the Safety Manager approves a closure), so a
+    supervisor seeing an action here does not mean they may act on it — the
+    screen shows why when the write refuses.
+    """
+    require_role(current_user.role, ALL_READ_ROLES, "view the CAPA queues")
+
+    q = db.query(CapaAction).filter(
+        CapaAction.organisation_id == current_user.org_id,
+        func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)),
+    )
+
+    key = (stage or "").strip().lower()
+    if key == "interim":
+        # Started, halfway check not yet done. Deliberately not filtered on the
+        # 50% mark: an owner who finishes early is blocked at submit by the same
+        # missing check, and a supervisor who cannot see the action until half
+        # the window has gone cannot clear it for them.
+        q = q.filter(
+            CapaAction.interim_check_at.is_(None),
+            CapaAction.responsible_person_id.isnot(None),
+            func.lower(func.coalesce(CapaAction.status, "")).in_(
+                [lc.IN_PROGRESS.lower(), lc.EVIDENCE_SUBMITTED.lower()]
+            ),
+        )
+    elif key == "review":
+        q = q.filter(func.lower(func.coalesce(CapaAction.status, "")) == lc.PENDING_REVIEW.lower())
+    elif key == "approval":
+        q = q.filter(func.lower(func.coalesce(CapaAction.status, "")) == lc.PENDING_APPROVAL.lower())
+    elif key == "unassigned":
+        q = q.filter(CapaAction.responsible_person_id.is_(None))
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="stage must be one of: interim, review, approval, unassigned",
+        )
+
+    rows = q.order_by(CapaAction.due_date.is_(None), CapaAction.due_date).limit(200).all()
+    return [_summary(db, c) for c in rows]
+
+
+@router.get("/assignable-owners")
+def assignable_owners(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Who step 05 may hand an action to.
+
+    The same list the incident and report families already offer, from
+    `app.services.capa_owners` — a second query for "who may own a CAPA" would
+    disagree with the first the day a role is added. Note this is narrower than
+    what `assign` accepts: the write takes any employee in the organisation,
+    because the lifecycle document's owner row reads "worker, supervisor or
+    manager". The picker leads with the accountable line rather than the whole
+    payroll.
+    """
+    require_role(current_user.role, ALL_READ_ROLES, "list assignable owners")
+    return capa_owners.assignable_owners(db, current_user.org_id)
+
+
 @router.get("/all")
 def list_all_capa(
     page: int = Query(1, ge=1),
     pageSize: int = Query(25, ge=1, le=200),
     overdue_only: bool = Query(False),
+    unassigned_only: bool = Query(False, description="Only actions with no owner yet — step 05 is owed."),
     include_closed: bool = Query(True),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
@@ -1400,6 +1478,15 @@ def list_all_capa(
         q = q.filter(CapaAction.status == "Overdue")
     elif not include_closed:
         q = q.filter(func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)))
+    if unassigned_only:
+        # An audit raises its actions deliberately unassigned — the auditor finds
+        # the non-conformance, the Safety Manager names who fixes it. Closed rows
+        # are never in this queue whatever `include_closed` says: an action that
+        # ended without an owner is history, not work.
+        q = q.filter(
+            CapaAction.responsible_person_id.is_(None),
+            func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)),
+        )
 
     total = q.count()
     rows = (

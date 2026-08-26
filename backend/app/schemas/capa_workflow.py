@@ -68,7 +68,13 @@ class CapaEvidenceCreate(BaseModel):
     evidence_type: str = Field(..., description="photo | document | training_record | test_report | inspection_confirmation")
     description: Optional[str] = None
     file_url: Optional[str] = Field(None, description="Path returned by the upload endpoint")
-    evidence_date: Optional[datetime] = Field(None, description="When the evidenced thing happened — not when it was uploaded")
+    # Required, not optional. CHECK 2 fails on any undated item and there is no
+    # endpoint that can date one afterwards or remove it, so accepting an
+    # undated attachment created an action that could never be closed and could
+    # never be repaired either. The date is the whole point of the check: an
+    # attachment that cannot be shown to post-date the action is exactly the
+    # recycled evidence it exists to catch.
+    evidence_date: datetime = Field(..., description="When the evidenced thing happened — not when it was uploaded")
 
 
 class CapaEvidenceOut(BaseModel):
@@ -101,6 +107,12 @@ class CapaApproveClosure(BaseModel):
     approved: bool = True
     closure_notes: Optional[str] = None
     lesson_learned: Optional[str] = None
+    # WF-04 measures effectiveness with the 30/60/90-day reviews, not with a
+    # number typed at closure. This is kept because `capa_actions.effectiveness_rating`
+    # is read by the incident trail and the exports, and the legacy sign-off
+    # route was the only thing that ever wrote it — dropping it here would have
+    # left that column empty for every action closed the correct way.
+    effectiveness_rating: Optional[int] = Field(None, ge=1, le=5)
 
 
 # ── Step 09 · effectiveness review ───────────────────────────────────────────
