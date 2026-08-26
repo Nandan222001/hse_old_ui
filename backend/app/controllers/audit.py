@@ -395,6 +395,11 @@ def reference(current_user: CurrentUser = Depends(get_current_user)) -> dict:
         "escalations": audit_escalation.reference(),
         "notice_days": audit_programme.NOTICE_DAYS,
         "brief_pack_days": audit_programme.BRIEF_PACK_DAYS,
+        # What the scheduling form offers when the organisation has no template
+        # of its own yet. An audit's checklist type decides which template seeds
+        # its questions, so a free-text field could silently miss every template
+        # and fall through to the generic list.
+        "checklist_types": audit_templates.builtin_types(),
     }
 
 
@@ -1823,14 +1828,20 @@ def verify_finding(
 
     if f.capa_id and payload.effective:
         from app.models.capa_action import CapaAction
+        from app.services import capa_lifecycle as lc
 
         capa = db.query(CapaAction).filter(CapaAction.id == f.capa_id).first()
-        if capa and capa.status != "Completed":
+        # Terminal, not the literal "Completed". WF-04 closes an action at
+        # "Closed" and never writes "Completed" — that value only exists on rows
+        # raised before the lifecycle landed. Comparing against the string meant
+        # a properly closed action still failed this gate, so every finding under
+        # it stayed unverifiable and the audit could never reach step 10.
+        if capa and not lc.is_terminal(capa.status):
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Corrective action {capa.capa_ref or capa.id} is still {capa.status}. "
-                    "It has to be completed before the finding can be verified."
+                    "It has to be closed before the finding can be verified."
                 ),
             )
 
@@ -1856,12 +1867,30 @@ def verify_finding(
         if a.closed_at:
             a.closed_at = None
             logger.info("Audit %s reopened — finding %s was not effectively closed", a.id, f.id)
+        # Recompute and flush before the action is reopened below. The CAPA
+        # reopen reads `audits.status` back in raw SQL to decide whether the
+        # parent needs returning to IMPROVE, and an unflushed 'completed' there
+        # reads as "closed record" and fires a warning about a state we have
+        # just left.
+        _sync_status(db, a)
+        db.flush()
         if f.capa_id:
+            from app.controllers.capa_workflow import _reopen as reopen_capa_action
             from app.models.capa_action import CapaAction
 
             capa = db.query(CapaAction).filter(CapaAction.id == f.capa_id).first()
             if capa:
-                capa.status = "Open"
+                # The full WF-04 reopen, not a status write. Setting the status
+                # alone left `is_locked` at 1 on an action that had been closed,
+                # so the owner sent back to redo the fix was refused by every
+                # step-06 and step-07 endpoint. This also clears the independent
+                # review, which attested to a control the site visit has just
+                # found wanting.
+                reopen_capa_action(
+                    db, capa,
+                    f"Finding '{f.title}' was checked on site and the fix is not holding. "
+                    + (payload.verification_notes or "No further detail was given."),
+                )
         capa_notify.notify_many(
             db, capa_notify.safety_managers(db, a.organisation_id),
             org_id=a.organisation_id,
