@@ -37,9 +37,17 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Two minutes, not thirty seconds.
+//
+// The server accepts media up to 100 MB — the cap was chosen for video — and a
+// recording of any length will not finish uploading in 30s on a site
+// connection. The request aborted, the caller fell back to queueing the whole
+// attachment offline, and the auditor was told their video had been "saved
+// offline" on a phone with full signal. Photos were small enough that nobody
+// noticed the ceiling was there.
 export const uploadClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 120000,
   headers: { 'Content-Type': 'multipart/form-data' },
 });
 

@@ -186,7 +186,13 @@ class AuditEvidence(Base):
     audit_id = Column(Integer, ForeignKey("audits.id", ondelete="CASCADE"), nullable=False, index=True)
     checklist_item_id = Column(Integer, index=True)
     finding_id = Column(Integer, index=True)
-    kind = Column(String(20), default="photo")   # photo | document | note | scan | interview
+    # photo | video | document | note | scan | interview
+    #
+    # `video` is not new storage — media_storage has accepted the video content
+    # types all along and the audit upload path allows them — it is the value
+    # that says so, without which a recording was filed as a `photo` and every
+    # renderer put it in an <img>.
+    kind = Column(String(20), default="photo")
     file_url = Column(String(500))
     caption = Column(Text)
     scanned_ref = Column(String(120))            # QR / barcode payload

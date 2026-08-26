@@ -26,6 +26,7 @@ import { KEYBOARD_BEHAVIOR } from '../../components/layout/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { launchCamera, launchImageLibrary, Asset } from 'react-native-image-picker';
+import { ensureCameraPermission, reportPickerError } from '../../utils/cameraPermission';
 import {
   auditService, Audit, ChecklistItem, Classification, CLASSIFICATION_META,
   defaultClassification, Evidence, ItemResponse, bandFor,
@@ -138,19 +139,71 @@ export function AuditChecklistScreen({ route, navigation }: any) {
   };
 
   // ── Step 06 · evidence in situ ────────────────────────────────────────────
-  const attachPhoto = async (item: LocalItem, from: 'camera' | 'gallery') => {
-    const opts = { mediaType: 'photo' as const, quality: 0.8 as const };
+  /**
+   * A photo or a video, from the camera or the library.
+   *
+   * Video was the missing half. Some findings cannot be photographed — a guard
+   * that rattles, an alarm that does not sound, a task performed the wrong way —
+   * and the auditor's only options were a still image or a written note that
+   * asks the reader to take their word for it. The backend has accepted the
+   * video content types all along and the upload path allows them; what was
+   * missing was a button and a `kind` that says which it is.
+   */
+  const attachMedia = async (
+    item: LocalItem, from: 'camera' | 'gallery', mediaType: 'photo' | 'video',
+  ) => {
+    // Without this the camera silently did nothing. The app declares CAMERA in
+    // its manifest, which makes requesting it the caller's job — see
+    // utils/cameraPermission for the whole story.
+    if (from === 'camera' && !(await ensureCameraPermission('attach audit evidence'))) return;
+
     const res = from === 'camera'
-      ? await launchCamera({ ...opts, saveToPhotos: false })
-      : await launchImageLibrary({ ...opts, selectionLimit: 1 });
-    if (res.didCancel || res.errorCode) return;
+      ? await launchCamera({
+          mediaType,
+          saveToPhotos: false,
+          ...(mediaType === 'video'
+            // A minute is enough to show a control failing, and keeps the upload
+            // inside the 100 MB the server accepts on a site connection.
+            // 'medium' rather than 'high' for the same reason — a 4K minute is
+            // not more evidential than a 720p one, it is just slower to send.
+            ? { videoQuality: 'medium' as const, durationLimit: 60 }
+            : { quality: 0.8 as const }),
+        })
+      // 'mixed', so a clip already filmed on this walk can be attached. Asking
+      // the library for 'photo' meant the video the auditor had just recorded
+      // was not even offered.
+      : await launchImageLibrary({ mediaType: 'mixed', selectionLimit: 1 });
+    if (res.didCancel) return;
+    // Was `if (res.didCancel || res.errorCode) return;` — a refusal and a
+    // deliberate cancel took the same silent path, so a denied permission was
+    // indistinguishable from a dead button.
+    if (res.errorCode) {
+      return reportPickerError(
+        from === 'camera' ? 'Camera' : 'Gallery',
+        res.errorCode,
+        res.errorMessage,
+      );
+    }
     const asset: Asset | undefined = res.assets?.[0];
-    if (!asset?.uri) return;
+    if (!asset?.uri) {
+      Alert.alert('Nothing captured', 'No file came back. Please try again.');
+      return;
+    }
+
+    // Read from what actually came back, not from what was asked for: the
+    // gallery is 'mixed' and hands back whichever the auditor picked. Some
+    // Android providers return no `type` at all, hence the extension fallback.
+    const isVideo = Boolean(
+      asset.type?.startsWith('video/')
+      || /\.(mp4|mov|3gp|webm)$/i.test(asset.uri)
+      || (!asset.type && mediaType === 'video'),
+    );
 
     const photo = {
       uri: asset.uri,
-      name: asset.fileName || `audit_${auditId}_${item.id}_${Date.now()}.jpg`,
-      type: asset.type || 'image/jpeg',
+      name: asset.fileName
+        || `audit_${auditId}_${item.id}_${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`,
+      type: asset.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
     };
 
     setBusy(true);
@@ -164,7 +217,7 @@ export function AuditChecklistScreen({ route, navigation }: any) {
 
       const out = await auditService.addEvidence(auditId, {
         checklist_item_id: item.id,
-        kind: 'photo',
+        kind: isVideo ? 'video' : 'photo',
         file_url: fileUrl,
         caption: item.title,
         gps_latitude: geo.gps_latitude,
@@ -173,13 +226,19 @@ export function AuditChecklistScreen({ route, navigation }: any) {
       }, fileUrl ? undefined : photo);
 
       if (out.queued) {
-        Alert.alert('Saved offline', 'The photo is on the device and will upload when you have signal.');
+        Alert.alert(
+          'Saved offline',
+          `The ${isVideo ? 'video' : 'photo'} is on the device and will upload when you have signal.`,
+        );
       } else if (out.data) {
         setEvidence((prev) => [...prev, out.data as Evidence]);
       }
       patch(item.id, { evidence_count: (item.evidence_count || 0) + 1 });
     } catch (e: any) {
-      Alert.alert('Could not attach the photo', e?.response?.data?.detail ?? 'Please try again.');
+      Alert.alert(
+        `Could not attach the ${isVideo ? 'video' : 'photo'}`,
+        e?.response?.data?.detail ?? 'Please try again.',
+      );
     } finally {
       setBusy(false);
       setEvidenceFor(null);
@@ -421,9 +480,10 @@ export function AuditChecklistScreen({ route, navigation }: any) {
                             <View style={styles.evIcon}>
                               <Ionicons
                                 name={
-                                  e.kind === 'scan' ? 'qr-code'
-                                    : e.kind === 'interview' ? 'chatbubbles'
-                                      : e.kind === 'document' ? 'document-text' : 'create'
+                                  e.kind === 'video' ? 'videocam'
+                                    : e.kind === 'scan' ? 'qr-code'
+                                      : e.kind === 'interview' ? 'chatbubbles'
+                                        : e.kind === 'document' ? 'document-text' : 'create'
                                 }
                                 size={18}
                                 color={C.brand}
@@ -546,12 +606,17 @@ export function AuditChecklistScreen({ route, navigation }: any) {
                 <SheetRow
                   icon="camera" title="Take a photo"
                   sub="GPS-stamped, linked to this item"
-                  onPress={() => evidenceFor && attachPhoto(evidenceFor, 'camera')}
+                  onPress={() => evidenceFor && attachMedia(evidenceFor, 'camera', 'photo')}
+                />
+                <SheetRow
+                  icon="videocam" title="Record a video"
+                  sub="For what a still cannot show — a guard rattling, an alarm not sounding"
+                  onPress={() => evidenceFor && attachMedia(evidenceFor, 'camera', 'video')}
                 />
                 <SheetRow
                   icon="images" title="Choose from gallery"
-                  sub="For a photo already taken on this walk"
-                  onPress={() => evidenceFor && attachPhoto(evidenceFor, 'gallery')}
+                  sub="A photo or video already taken on this walk"
+                  onPress={() => evidenceFor && attachMedia(evidenceFor, 'gallery', 'photo')}
                 />
                 <SheetRow
                   icon="qr-code" title="Asset, permit or vehicle reference"

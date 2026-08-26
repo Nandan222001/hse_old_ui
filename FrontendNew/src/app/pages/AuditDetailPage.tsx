@@ -19,7 +19,7 @@ import {
 import {
   approveReport, closeAudit, decideReAudit, distributeReport, formatDate, getAudit,
   getAuditReport, humanise, CLASSIFICATION_META, BAND_META,
-  type Audit, type AuditReport,
+  type Audit, type AuditReport, type Evidence,
 } from "../../services/audits.service";
 import {
   Banner, ClassificationChip, EmptyState, KeyValue, RatingChip, RiskBandChip,
@@ -27,6 +27,153 @@ import {
 } from "../components/audit/AuditPrimitives";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+
+/**
+ * Evidence stored as a server path (/uploads/audit/<uuid>.jpg), never a full
+ * URL, so it survives the host changing. The files are mounted at the backend
+ * root, outside the /api/v1 prefix — in dev the Vite proxy forwards /uploads,
+ * in production the console and the API are served from the same origin.
+ */
+function mediaSrc(fileUrl?: string | null): string | undefined {
+  if (!fileUrl) return undefined;
+  if (/^(https?:|data:|blob:)/.test(fileUrl)) return fileUrl;
+  return fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
+}
+
+const EVIDENCE_LABEL: Record<string, string> = {
+  photo: "Photo", video: "Video", document: "Document",
+  note: "Note", scan: "Reference", interview: "Interview",
+};
+
+/**
+ * What the auditor captured on the walk.
+ *
+ * The report carried a count — "3 evidence" on a finding — and nothing else, so
+ * the photographs and videos taken to prove a control existed only on the phone
+ * that took them. The person reviewing the report is the one who most needs to
+ * see them.
+ */
+function EvidenceGallery({ evidence }: { evidence: Evidence[] }) {
+  if (!evidence.length) return null;
+  const media = evidence.filter((e) => e.file_url && (e.kind === "photo" || e.kind === "video"));
+  const written = evidence.filter((e) => !media.includes(e));
+
+  return (
+    <Card className="border-none shadow-[0_10px_26px_rgba(15,23,42,0.06)]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-[15px]">Evidence from the walk ({evidence.length})</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {media.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {media.map((e) => (
+              <figure key={e.id} className="overflow-hidden rounded-xl border border-slate-200">
+                {e.kind === "video" ? (
+                  <video
+                    src={mediaSrc(e.file_url)}
+                    controls
+                    preload="metadata"
+                    className="h-32 w-full bg-slate-900 object-cover"
+                  />
+                ) : (
+                  <a href={mediaSrc(e.file_url)} target="_blank" rel="noreferrer">
+                    <img
+                      src={mediaSrc(e.file_url)}
+                      alt={e.caption ?? "Audit evidence"}
+                      className="h-32 w-full object-cover"
+                      loading="lazy"
+                    />
+                  </a>
+                )}
+                <figcaption className="space-y-0.5 px-2 py-1.5">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    {EVIDENCE_LABEL[e.kind] ?? e.kind}
+                    {e.gps_latitude != null && " · GPS"}
+                  </p>
+                  {e.caption && (
+                    <p className="truncate text-[11px] text-slate-600" title={e.caption}>{e.caption}</p>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
+
+        {written.length > 0 && (
+          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {written.map((e) => (
+              <div key={e.id} className="px-3 py-2">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                  {EVIDENCE_LABEL[e.kind] ?? e.kind}
+                  {e.subject_name && ` · ${e.subject_name}`}
+                  {e.scanned_ref && ` · ${e.scanned_ref}`}
+                </p>
+                {/* An interview is a question and an answer, and the answer is
+                    not interpretable without the question. "Pulled the breaker,
+                    no lock, no tag" means nothing until you know they were asked
+                    to demonstrate isolation. */}
+                {e.interview_prompt && (
+                  <p className="mt-0.5 text-[12px] italic text-slate-500">
+                    Asked: {e.interview_prompt}
+                  </p>
+                )}
+                <p className="mt-0.5 text-[12px] text-slate-700">
+                  {e.caption ?? (e.interview_prompt ? null : "—")}
+                </p>
+                {e.competence_verified != null && (
+                  <p
+                    className="mt-0.5 text-[11px] font-semibold"
+                    style={{ color: e.competence_verified ? "#15803D" : "#BE123C" }}
+                  >
+                    Competence {e.competence_verified ? "verified against the matrix" : "NOT verified"}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The two signatures taken on site, drawn on the auditor's phone. */
+function Signatures({ audit }: { audit: Audit }) {
+  const rows = [
+    { label: "Auditor", name: audit.auditor_signed_name, sig: audit.auditor_signature, at: audit.report_issued_at },
+    { label: "Auditee — factual accuracy", name: audit.auditee_signed_name, sig: audit.auditee_signature, at: audit.auditee_confirmed_at },
+  ].filter((r) => r.sig || r.name);
+
+  if (!rows.length) return null;
+
+  return (
+    <Card className="border-none shadow-[0_10px_26px_rgba(15,23,42,0.06)]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-[15px]">Signatures</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{r.label}</p>
+            {r.sig ? (
+              <img
+                src={r.sig}
+                alt={`${r.label} signature`}
+                className="mt-1 h-20 w-full rounded-lg border border-slate-200 bg-white object-contain"
+              />
+            ) : (
+              <p className="mt-1 rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[11px] text-slate-400">
+                Signed by name only — no drawn signature was captured
+              </p>
+            )}
+            <p className="mt-1 text-[12px] font-semibold text-slate-800">{r.name ?? "—"}</p>
+            <p className="text-[11px] text-slate-500">{formatDate(r.at)}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function AuditDetailPage() {
   const { id } = useParams();
@@ -379,6 +526,11 @@ export function AuditDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* What was captured on site: the media first, then who signed for it. */}
+          <EvidenceGallery evidence={report.evidence ?? []} />
+
+          <Signatures audit={audit} />
 
           {/* Clause mapping */}
           {report.clause_map?.length > 0 && (
