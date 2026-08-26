@@ -335,7 +335,7 @@ export function CapaActionsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-[16px]" style={{ color: "#0F172A", fontWeight: 700 }}>
-              Assign {assigning.capa_ref || `CAPA-${assigning.id}`}
+              Assign {assigning.capa_ref || `CAPA-${String(assigning.id).padStart(6, "0")}`}
             </h3>
             <p className="mt-1 text-[12.5px]" style={{ color: "#64748B" }}>
               {assigning.description || "Corrective action"}

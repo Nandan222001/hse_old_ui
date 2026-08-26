@@ -43,7 +43,15 @@ export interface OpenAction {
 }
 
 export interface VendorSummary {
-  risk_score: { value: number; delta: number | null; up: boolean; has_contractors?: boolean };
+  risk_score: {
+    value: number;
+    delta: number | null;
+    up: boolean | null;
+    // Same High/Medium/Low/No Contractors thresholds the dashboard's
+    // contractor_risk_label uses — one severity vocabulary for both screens.
+    label: string;
+    has_contractors?: boolean;
+  };
   total_contractors: number;
   compliance: ComplianceSegment[];
   exposure_hours: ExposureMonth[];

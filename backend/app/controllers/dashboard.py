@@ -291,8 +291,16 @@ def get_leading_indicators(
             return 0.0
         return min(100.0, (weight_sum / (count * 3)) * 100)
 
-    current_start = latest_date - timedelta(days=90)
-    previous_start = latest_date - timedelta(days=180)
+    # The comparison window tracks whatever period the user actually selected
+    # (7D/30D/90D/1Y/custom) rather than always being a fixed 90 days — a 7-day
+    # selection was previously still scored and trended over 90-day windows, so
+    # the trend arrow answered a different question from the one the period
+    # picker asked. "Previous" is the immediately preceding window of the same
+    # length, per the client's own correction: not "vs last year", the
+    # corresponding prior period for whatever range is on screen.
+    period_days = max(1, (data_window_end - data_window_start).days) if data_window_start else 90
+    current_start = latest_date - timedelta(days=period_days)
+    previous_start = latest_date - timedelta(days=period_days * 2)
     current_score = weighted_risk_score(current_start, latest_date, inclusive_end=True)
     previous_score = weighted_risk_score(previous_start, current_start)
     injury_risk_score = _safe_round(current_score)
@@ -592,6 +600,11 @@ def get_safety_walks_recent(
     for sw, ws, emp in rows:
         result.append({
             "id": sw.id,
+            # DSW- per the client's own naming during the meeting review — no
+            # stored ref column, computed the same way INC-{id:05d} is, so
+            # there is exactly one source of truth for the number, not a
+            # stored value that a second callsite can reformat differently.
+            "reference": f"DSW-{sw.id:05d}",
             "inspection_date_time": sw.inspection_date_time.isoformat() if sw.inspection_date_time else None,
             "location": ws.station_name if ws else (f"Station {sw.location_station_id}" if sw.location_station_id else "Unknown"),
             "inspector": emp.full_name if emp else "Unknown",
@@ -624,6 +637,14 @@ def get_near_misses_recent(
     for nm, ws, emp in rows:
         result.append({
             "id": nm.id,
+            # NEA-{id}, unpadded — matches report_trail_factory.py's own
+            # ref_prefix="NEA" (near_miss_trail.py), the reference shown on
+            # the actual Near Miss register/tracker pages. An earlier pass
+            # here computed "NM-{id:05d}" instead, matching a naming example
+            # floated in the client meeting but not the codebase's own
+            # already-established convention — that just moved the same
+            # cross-panel mismatch this is meant to fix rather than closing it.
+            "reference": f"NEA-{nm.id}",
             "report_date": nm.report_date.isoformat() if nm.report_date else None,
             "event_date_time": nm.event_date_time.isoformat() if nm.event_date_time else None,
             "location": ws.station_name if ws else (f"Station {nm.location_station_id}" if nm.location_station_id else "Unknown"),

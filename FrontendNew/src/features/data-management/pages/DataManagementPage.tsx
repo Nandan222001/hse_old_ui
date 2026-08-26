@@ -22,6 +22,7 @@ import {
   type FullImportResult,
   type SheetImportResult,
 } from "@/features/data-management/api/dataManagementApi";
+import { SettingsFamilyTabBar } from "@/app/components/audits/SettingsFamilyTabBar";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string || "/api/v1").replace(/\/$/, "");
 
@@ -499,6 +500,12 @@ function ApiIntegrationsTab() {
 const AI_DATA_TYPES = [
   { key: "employees",         label: "Employees",         icon: UserCheck    },
   { key: "departments",       label: "Departments",        icon: Building2    },
+  // Manual entry always had a Sites form (MANUAL_MODULES above); bulk import
+  // never listed it here even though the backend's _insert_sites and the
+  // separate Full Data Import flow both already support it — this is the gap
+  // the client hit ("import interface does not provide the expected import
+  // facility for Sites").
+  { key: "sites",             label: "Sites",              icon: MapPin       },
   { key: "working_stations",  label: "Working Stations",   icon: BarChart3    },
   { key: "roles",             label: "Roles",              icon: Shield       },
   { key: "policies",          label: "Policies",           icon: FileText     },
@@ -529,6 +536,19 @@ const AI_IMPORT_FIELDS: Record<string, AiFieldDef[]> = {
     { label: "Shift Pattern",         key: "shift_pattern",         type: "select",   options: ["Rotating","Days","Nights","Afternoon","Fixed"] },
     { label: "Manager ID",            key: "manager_id",            type: "text",     placeholder: "EMP001" },
     { label: "Active Status",         key: "active_status",         type: "select",   options: ["Active","Inactive","On Leave"] },
+  ],
+  sites: [
+    { label: "Site ID",                    key: "site_id",                    type: "text",   placeholder: "SITE001", required: true },
+    { label: "Site Name",                  key: "site_name",                  type: "text",   placeholder: "Altens Fabrication Yard", required: true },
+    { label: "Address",                    key: "address",                    type: "text",   placeholder: "12 Wellington Rd" },
+    { label: "Postcode",                   key: "postcode",                   type: "text",   placeholder: "AB12 3CD" },
+    { label: "City",                       key: "city",                       type: "text",   placeholder: "Aberdeen" },
+    { label: "Site Type",                  key: "type",                       type: "select", options: ["Office","Warehouse","Manufacturing","Construction","Plant","Offshore","Other"] },
+    { label: "Operational Status",         key: "operational_status",         type: "select", options: ["Active","Inactive","Under Construction","Decommissioned"] },
+    { label: "Number of Working Stations", key: "number_of_working_stations", type: "number", placeholder: "6" },
+    { label: "Capacity",                   key: "capacity",                   type: "number", placeholder: "500" },
+    { label: "Primary Products",           key: "primary_products",           type: "text",   placeholder: "Structural steel assemblies" },
+    { label: "Hazard Level",               key: "hazard_classification",      type: "select", options: ["Low Risk","Medium Risk","High Risk","Critical Risk"] },
   ],
   departments: [
     { label: "Department ID",   key: "department_id",   type: "text", placeholder: "DEPT001", required: true },
@@ -1170,6 +1190,9 @@ export function DataManagementPage() {
 
   return (
     <div style={{ background: "#F3F7FF", minHeight: "100vh" }}>
+      <div className="px-8 pt-4">
+        <SettingsFamilyTabBar />
+      </div>
       {/* ── Page header ───────────────────────────────────────────────── */}
       <div className="bg-white border-b" style={{ borderColor: "#E8EDF6" }}>
         <div className="px-8 pt-7 pb-0">

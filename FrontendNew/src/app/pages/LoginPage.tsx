@@ -33,6 +33,7 @@ export function LoginPage() {
   useEffect(() => {
     if (!isAuthenticated || forceLoginView) return;
     if (user?.isSuperAdmin) { navigate("/superadmin", { replace: true }); return; }
+    if (user?.role === "Auditor") { navigate("/auditor", { replace: true }); return; }
     const normalizedEmail = user?.email?.trim().toLowerCase() || "";
     const isProductAdmin = PRODUCT_ADMIN_EMAILS.has(normalizedEmail);
     navigate(isProductAdmin ? "/auth/onboarding/admin" : "/", { replace: true });

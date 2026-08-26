@@ -718,6 +718,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       case "safety_manager": return "HSE Manager";
       case "supervisor":   return "Supervisor";
       case "operator":     return "Worker";
+      case "auditor":      return "Auditor";
       case "viewer":       return "Auditor";
       default:             return "Auditor";
     }
@@ -772,9 +773,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const backendRole = (data.user.role ?? "").toLowerCase();
 
-      // Web is admin-only — HSE Manager, Supervisor, Worker and Auditor accounts
-      // are meant for the mobile app, which covers all four of those roles.
-      if (backendRole !== "admin" && backendRole !== "superadmin") {
+      // Web is admin-only, with one exception: the Auditor's own narrow
+      // "My Audits" view under /auditor (see AuditorLayout). HSE Manager,
+      // Supervisor and Worker accounts are still mobile-only.
+      const isAuditor = backendRole === "auditor";
+      if (backendRole !== "admin" && backendRole !== "superadmin" && !isAuditor) {
         return "mobile_only";
       }
 
@@ -788,7 +791,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: data.user.email,
         role: mappedRole,
         initials: displayName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
-        allowedModules: ALL_MODULE_LABELS,
+        // The Auditor's whole web experience is the separate /auditor layout,
+        // which does not consult this list — it stays empty rather than
+        // ALL_MODULE_LABELS so nothing under AppLayout treats them as scoped-in
+        // if a future change ever lets them reach it.
+        allowedModules: isAuditor ? [] : ALL_MODULE_LABELS,
         isSuperAdmin: backendRole === "superadmin",
       };
 

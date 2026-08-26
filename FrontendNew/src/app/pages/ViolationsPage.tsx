@@ -7,6 +7,7 @@ import { getViolationsSummary, type ViolationItem, type RcaItem, type SeverityMi
 import axiosInstance from "../../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
 import { IncidentsTabBar } from "../components/audits/IncidentsTabBar";
+import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 interface IncidentRecord {
   id: number;
@@ -33,7 +34,7 @@ interface IncidentFilterOptions {
 }
 
 const PAGE_SIZE = 25;
-const SOURCE_OPTIONS = ["Mobile App", "Web App"];
+const SOURCE_OPTIONS = ["Mobile App", "Web App", "Data Import"];
 
 // Windowed page list so very large datasets don't render hundreds of page buttons.
 function getPageNumbers(current: number, total: number): (number | "…")[] {
@@ -202,9 +203,19 @@ export function ViolationsPage() {
 
   return (
     <div className="space-y-6">
+      <EventFamilyTabBar />
       <IncidentsTabBar />
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1>Welcome, {currentUser?.name || currentUser?.email || "User"}</h1>
+        {/* The client's ask: register an incident from the web, through the
+            same workflow the mobile app uses, not a separate form. */}
+        <button
+          onClick={() => navigate("/violations/register")}
+          className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] text-white transition-colors"
+          style={{ background: "#4A57B9", fontWeight: 600 }}
+        >
+          + Register Incident
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">

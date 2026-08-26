@@ -129,13 +129,17 @@ export interface NonConformanceRow {
 export interface ComplianceSummary {
   compliance_score: number;
   compliance_label: string;
+  compliance_score_prev_12mo_delta: number | null;
   legal_register_coverage_pct: number;
   legal_register_label: string;
   audit_readiness_pct: number;
   audit_readiness_label: string;
+  audit_readiness_prev_12mo_delta: number | null;
   permit_compliance_pct: number;
+  permit_compliance_prev_12mo_delta: number | null;
   loto_compliance_pct: number | null;
   corrective_action_closure_rate: number;
+  corrective_action_closure_prev_12mo_delta: number | null;
   policy_review_pct: number;
   compliance_trend: { month: string; value: number }[];
   compliance_trend_mom: number | null;

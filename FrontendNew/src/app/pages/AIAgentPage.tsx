@@ -12,6 +12,7 @@ import { getViolations } from '../../services/violations.service';
 import { getZones } from '../../services/infrastructure.service';
 import { FormattedMessage } from '../components/shared/FormattedMessage';
 import { useAuth } from '../context/AuthContext';
+import { SettingsFamilyTabBar } from '../components/audits/SettingsFamilyTabBar';
 import axiosInstance from '../../api/axiosInstance';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -428,7 +429,12 @@ export function AIAgentPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 112px)', background: '#fff', borderRadius: '12px', border: `1px solid ${BRAND.border}`, overflow: 'hidden' }}>
+    <>
+      <SettingsFamilyTabBar />
+      {/* Height shrunk by the bar's own footprint (~46px) so the fixed-height
+          chat panel below still ends flush with the viewport, not overflowing
+          it by however tall the new row on top turned out to be. */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 158px)', background: '#fff', borderRadius: '12px', border: `1px solid ${BRAND.border}`, overflow: 'hidden' }}>
 
       {/* ═══ TOP HEADER ═══════════════════════════════════════════════════ */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: `1px solid ${BRAND.border}`, background: '#fff', flexShrink: 0 }}>
@@ -942,5 +948,6 @@ export function AIAgentPage() {
       )}
 
     </div>
+    </>
   );
 }

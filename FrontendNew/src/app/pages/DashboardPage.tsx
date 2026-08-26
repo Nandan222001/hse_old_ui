@@ -10,12 +10,14 @@ import {
   getOverdueCapa,
   getLeadingIndicators,
   getNearMissesRecent,
+  getSafetyWalksRecent,
   type DashboardStats,
   type IncidentByCategory,
   type CapaAction,
   type OverdueCapa as OverdueCapaItem,
   type LeadingIndicators,
   type RecentNearMiss,
+  type RecentSafetyWalk,
 } from "../../services/dashboard.service";
 
 // â”€â”€ date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -82,6 +84,7 @@ export function DashboardPage() {
   const [overdueCapa, setOverdueCapa] = useState<OverdueCapaItem[]>([]);
   const [leading, setLeading] = useState<LeadingIndicators | null>(null);
   const [nearMisses, setNearMisses] = useState<RecentNearMiss[]>([]);
+  const [safetyWalks, setSafetyWalks] = useState<RecentSafetyWalk[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // â”€â”€ date filter state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -99,6 +102,16 @@ export function DashboardPage() {
     setShowCustom(key === "CUSTOM");
   }
 
+  // What "Top Incident Categories" (and any other period-filtered chart) is
+  // actually counting — the period picker's own selection was shown once at
+  // the top of the page but not repeated on the chart it governs, so a chart
+  // read as "as of always" rather than "as of the period currently chosen".
+  const periodLabel = preset === "ALL"
+    ? "All time"
+    : activeDates.start
+      ? `${formatFilterDate(activeDates.start)} – ${activeDates.end ? formatFilterDate(activeDates.end) : "now"}`
+      : "";
+
   useEffect(() => {
     const { start, end } = activeDates;
     Promise.all([
@@ -108,14 +121,16 @@ export function DashboardPage() {
         getOverdueCapa(4),
         getLeadingIndicators(start, end),
         getNearMissesRecent(4),
+        getSafetyWalksRecent(4),
       ])
-      .then(([s, cats, capas, overdue, lead, nm]) => {
+      .then(([s, cats, capas, overdue, lead, nm, sw]) => {
         setStats(s as DashboardStats);
         setRiskBars(cats as IncidentByCategory[]);
         setCapaActions(capas as CapaAction[]);
         setOverdueCapa(overdue as OverdueCapaItem[]);
         setLeading(lead as LeadingIndicators);
         setNearMisses(nm as RecentNearMiss[]);
+        setSafetyWalks(sw as RecentSafetyWalk[]);
         setLastUpdated(new Date());
       })
       .catch(console.error);
@@ -126,25 +141,31 @@ export function DashboardPage() {
     {
       title: "Predictive Injury Risk Score",
       value: `${leading.predictive_injury_risk_score}%`,
-      sub: "Leading Indicator",
-      accent: "#E9EDFF",
-      border: "#6173C5",
+      sub: "",
+      // Plain like every other card — the number and the trend arrow carry
+      // the information, a tinted box doesn't add to it.
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
       inline: `${Math.abs(leading.predictive_injury_risk_trend)}%`,
       trendDown: leading.predictive_injury_risk_trend < 0,
     },
     {
-      title: "TRIR / LTIFR",
-      value: `${leading.trir} / ${leading.ltif}`,
-      sub: "Leading Indicator",
+      title: "TRIR",
+      value: `${leading.trir}`,
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
     },
     {
-      title: "Near Miss Ratio",
-      value: `${leading.near_miss_ratio ?? "0 : 1"}`,
-      sub: "Leading Indicator",
+      // Title said "LTIFR" — the "incorrect 'RF' reference" the meeting
+      // asked to drop — while already reading the `ltif` value underneath;
+      // only the label was wrong. Split out of the combined TRIR/LTIF card
+      // so each metric gets its own tile.
+      title: "LTIF",
+      value: `${leading.ltif}`,
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
@@ -152,8 +173,10 @@ export function DashboardPage() {
     },
     {
       title: "Audit Readiness Score",
+      // Label already sits in the value line — repeating it as sub was the
+      // same text twice on one card.
       value: `${leading.audit_readiness_score}% / ${leading.audit_readiness_label}`,
-      sub: leading.audit_readiness_label,
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
@@ -165,16 +188,16 @@ export function DashboardPage() {
     {
       title: "DART Rate",
       value: `${leading.dart_rate ?? 0}`,
-      sub: "Limiting Indicator",
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
     },
     {
-      title: "LTIF",
-      value: `${leading.ltisr ?? 0}`,
-      sub: "Limiting Indicator",
+      title: "Near Miss Ratio",
+      value: `${leading.near_miss_ratio ?? "0 : 1"}`,
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
@@ -183,7 +206,7 @@ export function DashboardPage() {
     {
       title: "FAR",
       value: `${leading.far ?? 0}`,
-      sub: "Limiting Indicator",
+      sub: "",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
@@ -194,11 +217,17 @@ export function DashboardPage() {
       value: leading.contractor_has_contractors === false
         ? "No Contractors"
         : `${leading.contractor_risk_label} / ${Number((leading.contractor_risk_score_10 ?? 0).toFixed(1)).toString()}/10`,
+      // Label already sits in the value line ("Medium / 7/10") — a "Medium
+      // risk" sub repeated it. Kept only for the no-contractors case, where
+      // the value alone ("No Contractors") doesn't explain itself.
       sub: leading.contractor_has_contractors === false
         ? "No contractor workforce recorded"
-        : (leading.contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
-      accent: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FFF1F2" : "#FFFFFF",
-      border: leading.contractor_has_contractors !== false && (leading.contractor_risk_score_10 ?? 0) < 3 ? "#FCA5A5" : "#E5E7EB",
+        : "",
+      // Plain box like every other card. The High/Medium/Low label text is
+      // still the same one Vendors shows (RISK_LABEL_COLOR there) — only the
+      // background/border tint is gone, not the underlying consistency fix.
+      accent: "#FFFFFF",
+      border: "#E5E7EB",
       inline: "",
       trendDown: false,
     },
@@ -210,71 +239,47 @@ export function DashboardPage() {
           className="rounded-2xl border p-4 md:p-5"
           style={{ borderColor: '#CFDCF5', background: '#F8FBFF' }}
         >
-          {/* Leading Indicators Row */}
-          <div className="mb-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-              {leadingKpis.map((item) => (
-                <div
-                  key={item.title}
-                  className="rounded-2xl border px-4 py-3"
-                  style={{
-                    background: item.accent,
-                    borderColor: item.border,
-                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
-                  }}
-                >
-                  <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
-                    {item.inline && (
-                      <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? <ArrowDown className="inline-block h-3.5 w-3.5 align-middle mr-1" /> : <ArrowUp className="inline-block h-3.5 w-3.5 align-middle mr-1" />}
-                        {item.inline}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
+          {/* One compact KPI strip, not two rows split by a divider — a
+              single grid is what makes "auto-rows-fr" hold all eight cards to
+              one identical height (a short card like FAR and a two-line title
+              like "Contractor Risk Score" would otherwise diverge). No
+              "Leading/Limiting Indicator" heading per the client's review:
+              the metric name and value are the point. */}
+          <div className="grid grid-cols-1 auto-rows-fr gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[...leadingKpis, ...limitingKpis].map((item) => (
+              <div
+                key={item.title}
+                className="flex flex-col justify-center rounded-2xl border px-4 py-[14px] md:px-[18px] md:py-4"
+                style={{
+                  background: item.accent,
+                  borderColor: item.border,
+                  boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
+                }}
+              >
+                <div className="text-[13px] leading-tight" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="text-[1.375rem] leading-none md:text-[1.5rem]" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
+                  {item.inline && (
+                    <span className="text-[12.5px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
+                      {item.trendDown ? <ArrowDown className="inline-block h-3.5 w-3.5 align-middle mr-1" /> : <ArrowUp className="inline-block h-3.5 w-3.5 align-middle mr-1" />}
+                      {item.inline}
+                    </span>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="my-3 border-t" style={{ borderColor: '#DBEAFE' }} />
-
-          {/* Limiting Indicators Row */}
-          <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-              {limitingKpis.map((item) => (
-                <div
-                  key={item.title}
-                  className="rounded-2xl border px-4 py-3"
-                  style={{
-                    background: item.accent,
-                    borderColor: item.border,
-                    boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
-                  }}
-                >
-                  <div className="text-[14px]" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="text-[clamp(1.6rem,3.4vw,2rem)] leading-none" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
-                    {item.inline && (
-                      <span className="text-[13px]" style={{ color: item.trendDown ? '#B91C1C' : '#3C8A52', fontWeight: 600 }}>
-                        {item.trendDown ? <ArrowDown className="inline-block h-3.5 w-3.5 align-middle mr-1" /> : <ArrowUp className="inline-block h-3.5 w-3.5 align-middle mr-1" />}
-                        {item.inline}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>{item.sub}</div>
-                </div>
-              ))}
-            </div>
+                {item.sub && (
+                  <div className="mt-1 text-[12px] leading-tight" style={{ color: '#6B7280' }}>{item.sub}</div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
-            <h2 className="mb-4 text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Incident Categories</h2>
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Top Incident Categories</h2>
+              {periodLabel && <span className="text-[12.5px]" style={{ color: '#6B7280' }}>{periodLabel}</span>}
+            </div>
             <ResponsiveContainer width="100%" height={380}>
               <BarChart data={riskBars} barGap={6} margin={{ bottom: 56 }}>
                 <CartesianGrid stroke="#E5E7EB" vertical={false} />
@@ -332,9 +337,8 @@ export function DashboardPage() {
                 <div className="mt-3 h-3 rounded-full bg-slate-200">
                   <div className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-blue-600" style={{ width: `${Math.max(stats ? Math.round(stats.capa_completion_rate) : 0, 4)}%` }} />
                 </div>
-                <div className="mt-3 flex items-center justify-between text-[12px] text-slate-500">
+                <div className="mt-3 text-[12px] text-slate-500">
                   <span>Target 90%+</span>
-                  <span className="font-semibold text-slate-700">ISO 45001 §10</span>
                 </div>
               </div>
             </div>
@@ -443,12 +447,12 @@ export function DashboardPage() {
                     <button
                       key={nm.id}
                       type="button"
-                      onClick={() => navigate('/near-miss/tracking')}
+                      onClick={() => navigate(`/near-miss/tracking?id=${nm.id}`)}
                       className="block w-full text-left"
                     >
                       <div className="flex items-baseline gap-2">
                         <span className="text-[11px] tabular-nums" style={{ color: '#4A57B9', fontWeight: 700 }}>
-                          NEA-{nm.id}
+                          {nm.reference}
                         </span>
                         <span className="truncate text-[13px]" style={{ color: '#374151' }}>
                           {nm.description || 'No description'}
@@ -468,6 +472,44 @@ export function DashboardPage() {
             </div>
             <button onClick={() => navigate('/near-miss')} className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-6 py-3 text-[14px] text-white transition-transform duration-150 hover:scale-[1.01]" style={{ background: 'linear-gradient(135deg, #5565C1 0%, #6E7BDB 100%)', boxShadow: '0 8px 18px rgba(81, 96, 186, 0.28)', fontWeight: 600 }}>Open Near Miss Reporting</button>
           </div>
+        </div>
+
+        {/* Latest Safety Walks — proves the mobile-to-web loop end to end for
+            the client's own demo scenario: a walk logged on the phone, given
+            a DSW- reference, showing up here without a page reload. */}
+        <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
+          <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Latest Safety Walks</h2>
+          <p className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Inspections from the field, newest first — including those raised on the mobile app.</p>
+          {safetyWalks.length === 0 ? (
+            <p className="mt-3 text-[13px]" style={{ color: '#9CA3AF' }}>No safety walks reported yet.</p>
+          ) : (
+            <div className="mt-3 divide-y" style={{ borderColor: '#F1F5F9' }}>
+              {safetyWalks.map((sw) => (
+                <div key={sw.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                  <span className="text-[11px] tabular-nums" style={{ color: '#4A57B9', fontWeight: 700 }}>
+                    {sw.reference}
+                  </span>
+                  <span className="text-[13px]" style={{ color: '#374151' }}>{sw.inspection_type || 'Inspection'}</span>
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{
+                      background: sw.priority === 'Critical' ? '#FEF2F2' : sw.priority === 'High' ? '#FFF7ED' : '#F1F5F9',
+                      color: sw.priority === 'Critical' ? '#B91C1C' : sw.priority === 'High' ? '#C2410C' : '#475569',
+                    }}
+                  >
+                    {sw.issues_found} issue{sw.issues_found === 1 ? '' : 's'}
+                  </span>
+                  <span className="ml-auto flex flex-wrap gap-x-2 text-[11px]" style={{ color: '#6B7280' }}>
+                    <span>{sw.location}</span>
+                    <span>· {sw.inspector}</span>
+                    {sw.inspection_date_time && (
+                      <span>· {new Date(sw.inspection_date_time).toLocaleDateString()}</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

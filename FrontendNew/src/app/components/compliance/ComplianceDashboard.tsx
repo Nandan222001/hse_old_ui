@@ -3,20 +3,27 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianG
 import { getComplianceSummary, type ComplianceSummary } from "../../../services/analytics.service";
 import { useAuth } from "../../context/AuthContext";
 
-// Distinguishes KPIs computed per the client's formal KPI-definition spec from
-// supplementary metrics we compute for extra visibility but that aren't in that spec.
-function KpiTag({ kind }: { kind: "client" | "supplementary" }) {
-  const isClient = kind === "client";
+// Client feedback (Compliance Section): "unnecessary classification lines
+// should be removed" — this used to tag every card "Client KPI" vs
+// "Supplementary", a meta-classification of the metric rather than
+// information about it. Comparison against the previous 12-month period
+// (the client's own correction: "not previous year, previous period")
+// replaces it below instead.
+function PeriodDelta({ pointsDelta }: { pointsDelta: number | null }) {
+  if (pointsDelta === null) {
+    return (
+      <span className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px]" style={{ background: "#F1F5F9", color: "#94A3B8", fontWeight: 700 }}>
+        Not enough data for prior 12 months
+      </span>
+    );
+  }
+  const up = pointsDelta >= 0;
   return (
     <span
       className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px]"
-      style={{
-        background: isClient ? "#DCFCE7" : "#F1F5F9",
-        color: isClient ? "#166534" : "#64748B",
-        fontWeight: 700,
-      }}
+      style={{ background: up ? "#DCFCE7" : "#FEE2E2", color: up ? "#166534" : "#B91C1C", fontWeight: 700 }}
     >
-      {isClient ? "Client KPI" : "Supplementary"}
+      {up ? "▲" : "▼"} {Math.abs(pointsDelta)}pp vs previous 12 months
     </span>
   );
 }
@@ -45,7 +52,7 @@ export function ComplianceDashboard() {
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Permit Compliance</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.permit_compliance_pct}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>PTW Compliance Rate</div>
-          <KpiTag kind="client" />
+          {summary && <PeriodDelta pointsDelta={summary.permit_compliance_prev_12mo_delta} />}
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>LOTO Compliance</div>
@@ -55,19 +62,18 @@ export function ComplianceDashboard() {
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>
             {summary?.loto_compliance_pct != null ? "Lockout/Isolation permits, no deviation" : "No lockout permits recorded"}
           </div>
-          <KpiTag kind="client" />
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Corrective Action Closure Rate</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.corrective_action_closure_rate}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>CAPA actions closed</div>
-          <KpiTag kind="client" />
+          {summary && <PeriodDelta pointsDelta={summary.corrective_action_closure_prev_12mo_delta} />}
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Compliance Score</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.compliance_score}%` : "—"}</div>
-          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.compliance_label ?? ""}</div>
-          <KpiTag kind="supplementary" />
+          <div className="mt-1 text-[13px]" style={{ color: "#4B5563" }}>{summary?.compliance_label ?? ""}</div>
+          {summary && <PeriodDelta pointsDelta={summary.compliance_score_prev_12mo_delta} />}
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Policy–Hazard Category Coverage</div>
@@ -75,19 +81,17 @@ export function ComplianceDashboard() {
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>
             Policy categories vs. hazard categories — not a full legal/risk register audit
           </div>
-          <KpiTag kind="supplementary" />
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Audit Readiness Score</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.audit_readiness_pct}%` : "—"}</div>
-          <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>{summary?.audit_readiness_label ?? ""}</div>
-          <KpiTag kind="supplementary" />
+          <div className="mt-1 text-[13px]" style={{ color: "#4B5563" }}>{summary?.audit_readiness_label ?? ""}</div>
+          {summary && <PeriodDelta pointsDelta={summary.audit_readiness_prev_12mo_delta} />}
         </div>
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Policy Review Status</div>
           <div className="mt-2 text-[54px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>{summary ? `${summary.policy_review_pct}%` : "—"}</div>
           <div className="mt-1 text-[14px]" style={{ color: "#4B5563" }}>Current policies</div>
-          <KpiTag kind="supplementary" />
         </div>
       </div>
 

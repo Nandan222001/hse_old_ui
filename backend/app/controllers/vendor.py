@@ -46,14 +46,19 @@ _FAKE_INCIDENT_REF_RE = re.compile(r"\s*\b(for|addressing)\s+INC-?\d+\b\.?", re.
 
 
 def _capa_label(capa) -> str:
-    """CAPA-{id}: {description}, with the real incident reference in front when
+    """{capa_ref}: {description}, with the real incident reference in front when
     known. Seed/legacy descriptions embed a made-up "INC00018"-style number
     unrelated to the real incident_id — see DashboardPage.tsx for the same fix
-    on the web dashboard. Stripped here so it can't be mistaken for real data."""
+    on the web dashboard. Stripped here so it can't be mistaken for real data.
+
+    Uses the CAPA's own stored capa_ref rather than re-deriving "CAPA-{id}"
+    here — the two disagree once the id needs padding, which is how the same
+    action ends up shown under two different numbers on two screens."""
     desc = (capa.description or "Action")
     desc = _FAKE_INCIDENT_REF_RE.sub("", desc).strip() or "Action"
     ref = f"INC-{capa.incident_id:05d} " if capa.incident_id else ""
-    return f"CAPA-{capa.id}: {ref}{desc[:30]}"
+    capa_ref = capa.capa_ref or f"CAPA-{capa.id:06d}"
+    return f"{capa_ref}: {ref}{desc[:30]}"
 
 
 @router.get("/summary")
@@ -238,7 +243,13 @@ def get_vendor_summary(
     # Guarantees the Vendors page always matches the Dashboard leading-indicators panel.
     contractor_risk = compute_contractor_risk(db, org_id)
     risk_score = contractor_risk.score_10
-    delta = 0.0  # previous-period trend not tracked yet; kept at 0 rather than fabricated
+    # Previous-period trend is not tracked yet. This used to be stamped 0.0,
+    # which reads as "unchanged" but rendered as a green "+0 / trending up"
+    # badge regardless of how bad the score actually was — a score of 0/10
+    # (the worst this scale produces) showed green here while the dashboard's
+    # own panel showed the same 0 as Extreme Risk. None here means the client
+    # hides the badge entirely instead of drawing a fabricated trend.
+    delta = None
 
     # ── Repeat Breaches ──────────────────────────────────────────────────────
     repeat_breaches: List[dict] = []
@@ -311,7 +322,7 @@ def get_vendor_summary(
             .all()
         )
     capa_items = [
-        {"label": f"CAPA-{c.id}", "status": _capa_status(c.status)}
+        {"label": c.capa_ref or f"CAPA-{c.id:06d}", "status": _capa_status(c.status)}
         for c in capa_rows
     ]
 
@@ -346,8 +357,12 @@ def get_vendor_summary(
     return {
         "risk_score":        {
             "value": risk_score,
-            "delta": delta if contractor_risk.has_contractors else None,
-            "up": delta >= 0,
+            "delta": delta,
+            "up": None,
+            # High/Medium/Low from the same thresholds contractor_risk_label
+            # uses on the dashboard panel — the number no longer has to be
+            # re-interpreted per screen to know whether it's bad.
+            "label": contractor_risk.label,
             "has_contractors": contractor_risk.has_contractors,
         },
         "total_contractors": total,

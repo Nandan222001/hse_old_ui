@@ -11,6 +11,7 @@ import {
 } from "../../features/data-management/api/dataManagementApi";
 import { getAuditTrail } from "../../services/compliance.service";
 import type { AuditTrail } from "../../types";
+import { SettingsFamilyTabBar } from "../components/audits/SettingsFamilyTabBar";
 
 const VALID_SETTINGS_TABS = ["general", "integrations", "api", "webhooks", "branding", "knowledge", "formula", "audit"];
 
@@ -20,6 +21,28 @@ interface ContractorWeights {
   incident_penalty_multiplier: number;
   incident_penalty_cap: number;
 }
+
+interface RatingBandConfig {
+  high_floor: number;
+  high_label: string;
+  mid_floor: number;
+  mid_label: string;
+  low_label: string;
+}
+
+interface RatingLabelsConfig {
+  workforce_competency: RatingBandConfig;
+  compliance_score: RatingBandConfig;
+  workforce_exposure_risk: RatingBandConfig;
+  asset_maintenance_risk: RatingBandConfig;
+}
+
+const RATING_SCALE_META: { key: keyof RatingLabelsConfig; title: string; hint: string }[] = [
+  { key: "workforce_competency", title: "Workforce Competency", hint: "People page — share of employees with no open training-related CAPA." },
+  { key: "compliance_score", title: "Overall Compliance", hint: "Compliance page — blended PTW / legal-register / audit-readiness score." },
+  { key: "workforce_exposure_risk", title: "Workforce Exposure Risk", hint: "People page — recent incident + near-miss rate per employee." },
+  { key: "asset_maintenance_risk", title: "Asset Maintenance Risk", hint: "Assets page — share of certifications expired or expiring soon." },
+];
 
 interface ApiKeyRecord {
   id: number;
@@ -250,6 +273,42 @@ export function SettingsPage() {
     finally { setFormulaSaving(false); }
   };
 
+  // Formula & Rules tab — Rating label wording (Excellent/Good/... , Low/Medium/High Risk)
+  const [ratingLabels, setRatingLabels] = useState<RatingLabelsConfig | null>(null);
+  const [ratingLabelsLoading, setRatingLabelsLoading] = useState(true);
+  const [ratingLabelsSaving, setRatingLabelsSaving] = useState(false);
+  const [ratingLabelsSaved, setRatingLabelsSaved] = useState(false);
+  const [ratingLabelsError, setRatingLabelsError] = useState<string | null>(null);
+
+  const fetchRatingLabels = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/org-admin/settings/rating-labels");
+      setRatingLabels((res.data as { data: RatingLabelsConfig }).data);
+    } catch (e) { console.error("Failed to load rating labels", e); }
+    finally { setRatingLabelsLoading(false); }
+  }, []);
+  useEffect(() => { fetchRatingLabels(); }, [fetchRatingLabels]);
+
+  const updateRatingBand = (scale: keyof RatingLabelsConfig, field: keyof RatingBandConfig, value: string | number) => {
+    setRatingLabels(prev => prev ? { ...prev, [scale]: { ...prev[scale], [field]: value } } : prev);
+  };
+
+  const handleSaveRatingLabels = async () => {
+    if (!ratingLabels) return;
+    setRatingLabelsSaving(true);
+    setRatingLabelsSaved(false);
+    setRatingLabelsError(null);
+    try {
+      const res = await axiosInstance.put("/org-admin/settings/rating-labels", ratingLabels);
+      setRatingLabels((res.data as { data: RatingLabelsConfig }).data);
+      setRatingLabelsSaved(true);
+      setTimeout(() => setRatingLabelsSaved(false), 3000);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setRatingLabelsError(msg || "Failed to save rating labels");
+    } finally { setRatingLabelsSaving(false); }
+  };
+
   const tabs = [
     { id: "general", label: "General" },
     { id: "integrations", label: "Integrations" },
@@ -306,6 +365,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      <SettingsFamilyTabBar />
       <h1>System Settings</h1>
 
       <div className="flex gap-1 border-b" style={{ borderColor: '#E2E8E2' }}>
@@ -893,6 +953,90 @@ export function SettingsPage() {
                   </button>
                   {formulaSaved && (
                     <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>✓ Saved successfully</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border p-6" style={{ borderColor: '#E8EFE8', boxShadow: '0px 2px 12px rgba(27, 94, 32, 0.08)' }}>
+            <h2 className="mb-1">Rating Labels</h2>
+            <p className="text-[12px] mb-5" style={{ color: '#6B7280' }}>
+              Rename the wording these scores are shown with, and move the cutoffs, to match how
+              your industry talks about performance and risk.
+            </p>
+            {ratingLabelsLoading || !ratingLabels ? (
+              <div className="flex items-center gap-2 py-8 justify-center">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#1B5E20' }} />
+                <span className="text-[13px]" style={{ color: '#9CA3AF' }}>Loading…</span>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {RATING_SCALE_META.map(({ key, title, hint }) => {
+                  const cfg = ratingLabels[key];
+                  return (
+                    <div key={key} className="pt-5 first:pt-0 border-t first:border-t-0" style={{ borderColor: '#EEF2EE' }}>
+                      <h3 className="text-[13px] mb-1" style={{ color: '#0A0A0A', fontWeight: 600 }}>{title}</h3>
+                      <p className="text-[11px] mb-3" style={{ color: '#9CA3AF' }}>{hint}</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block mb-1.5 text-[11px]" style={{ color: '#6B7280' }}>High band label</label>
+                          <input
+                            value={cfg.high_label}
+                            onChange={e => updateRatingBand(key, "high_label", e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+                          />
+                          <label className="block mt-2 mb-1.5 text-[11px]" style={{ color: '#6B7280' }}>Applies at or above</label>
+                          <input
+                            type="number" step="1"
+                            value={cfg.high_floor}
+                            onChange={e => updateRatingBand(key, "high_floor", Number(e.target.value))}
+                            className="w-full h-9 px-3 rounded-lg border text-[12px]" style={{ borderColor: '#E2E8E2' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-1.5 text-[11px]" style={{ color: '#6B7280' }}>Mid band label</label>
+                          <input
+                            value={cfg.mid_label}
+                            onChange={e => updateRatingBand(key, "mid_label", e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+                          />
+                          <label className="block mt-2 mb-1.5 text-[11px]" style={{ color: '#6B7280' }}>Applies at or above</label>
+                          <input
+                            type="number" step="1"
+                            value={cfg.mid_floor}
+                            onChange={e => updateRatingBand(key, "mid_floor", Number(e.target.value))}
+                            className="w-full h-9 px-3 rounded-lg border text-[12px]" style={{ borderColor: '#E2E8E2' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-1.5 text-[11px]" style={{ color: '#6B7280' }}>Low band label</label>
+                          <input
+                            value={cfg.low_label}
+                            onChange={e => updateRatingBand(key, "low_label", e.target.value)}
+                            className="w-full h-9 px-3 rounded-lg border text-[13px]" style={{ borderColor: '#E2E8E2' }}
+                          />
+                          <p className="mt-2 text-[11px]" style={{ color: '#9CA3AF' }}>Below the mid threshold</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={handleSaveRatingLabels}
+                    disabled={ratingLabelsSaving}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-white text-[13px] disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, #1B5E20, #2E7D32)', fontWeight: 600 }}
+                  >
+                    {ratingLabelsSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {ratingLabelsSaving ? "Saving…" : "Save Rating Labels"}
+                  </button>
+                  {ratingLabelsSaved && (
+                    <span className="text-[13px]" style={{ color: '#2E7D32', fontWeight: 500 }}>✓ Saved successfully</span>
+                  )}
+                  {ratingLabelsError && (
+                    <span className="text-[13px]" style={{ color: '#B91C1C', fontWeight: 500 }}>{ratingLabelsError}</span>
                   )}
                 </div>
               </div>

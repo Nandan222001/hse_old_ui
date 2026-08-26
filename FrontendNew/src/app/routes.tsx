@@ -1,6 +1,8 @@
 import { createBrowserRouter, Navigate, useRouteError } from "react-router";
 import { AppLayout } from "./components/layout/AppLayout";
 import { SuperAdminLayout } from "./components/layout/SuperAdminLayout";
+import { AuditorLayout } from "./components/layout/AuditorLayout";
+import { AuditorMyAuditsPage } from "./pages/AuditorMyAuditsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ViolationsPage } from "./pages/ViolationsPage";
@@ -10,12 +12,16 @@ import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
 import { HazardRegisterPage } from "./pages/HazardRegisterPage";
 import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { NearMissTrackingPage } from "./pages/NearMissTrackingPage";
+import { UnsafeActPage } from "./pages/UnsafeActPage";
+import { UnsafeActTrackingPage } from "./pages/UnsafeActTrackingPage";
+import { RegisterIncidentPage } from "./pages/RegisterIncidentPage";
 import { PermitTrackingPage } from "./pages/PermitTrackingPage";
 import { RiskTrackingPage } from "./pages/RiskTrackingPage";
 import { PoliciesPage } from "./pages/PoliciesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { CapaActionsPage } from "./pages/CapaActionsPage";
+import { CapaDetailPage } from "./pages/CapaDetailPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AIAgentPage } from "./pages/AIAgentPage";
 import { CompliancePage } from "./pages/CompliancePage";
@@ -118,6 +124,7 @@ const SitesZonesRoute = SitesZonesPage;
 const AIAgentRoute = AIAgentPage;
 const AnalyticsRoute = AnalyticsPage;
 const NearMissRoute = NearMissPage;
+const UnsafeActRoute = UnsafeActPage;
 const RootCauseAnalysisRoute = RiskPage;
 const EquipmentCertificationRoute = EquipmentCertificationPage;
 
@@ -201,9 +208,12 @@ export const router = createBrowserRouter([
       { path: "incidents/tracking", Component: IncidentTrackingPage },
       { path: "hazards", Component: HazardRegisterPage },
       { path: "hazards/tracking", Component: HazardTrackingPage },
+      // Literal path before violations/:id, same reason as audits/programme below.
+      { path: "violations/register", Component: RegisterIncidentPage },
       { path: "violations/:id", Component: ViolationDetailRoute },
       { path: "actions", Component: ActionsRoute },
       { path: "capa-actions", Component: CapaActionsPage },
+      { path: "capa-actions/:id", Component: CapaDetailPage },
       { path: "checklists", Component: ChecklistsRoute },
       { path: "compliance", Component: ComplianceRoute },
       // Literal paths before the :id one — "programme" must not be read as an id.
@@ -224,6 +234,8 @@ export const router = createBrowserRouter([
       { path: "subscription", Component: SubscriptionRoute },
       { path: "near-miss", Component: NearMissRoute },
       { path: "near-miss/tracking", Component: NearMissTrackingPage },
+      { path: "unsafe-acts", Component: UnsafeActRoute },
+      { path: "unsafe-acts/tracking", Component: UnsafeActTrackingPage },
       { path: "permits/tracking", Component: PermitTrackingPage },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       // The Risk section's second tab. Its own top-level path rather than
@@ -234,6 +246,15 @@ export const router = createBrowserRouter([
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
       { path: "data-management", Component: DataManagementPage },
       { path: "vendors", Component: VendorsPage },
+    ],
+  },
+  {
+    path: "/auditor",
+    Component: AuditorLayout,
+    errorElement: <RouteErrorFallback />,
+    children: [
+      { index: true, Component: AuditorMyAuditsPage },
+      { path: "audits/:id", Component: AuditDetailPage },
     ],
   },
   {

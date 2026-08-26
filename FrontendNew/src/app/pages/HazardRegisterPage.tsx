@@ -13,6 +13,7 @@ import {
   type HazardRegisterStats, type StageKey,
 } from "../../services/hazard-register.service";
 import { HazardsTabBar } from "../components/audits/HazardsTabBar";
+import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
  * The working hazard register — what is owed, and the one action that clears it.
@@ -130,6 +131,7 @@ export function HazardRegisterPage() {
 
   return (
     <div className="space-y-4">
+      <EventFamilyTabBar />
       <HazardsTabBar />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

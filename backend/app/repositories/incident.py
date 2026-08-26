@@ -19,14 +19,11 @@ class IncidentRepository(BaseRepository[Incident]):
             query = query.filter(self.model_class.incident_type == incident_type)
         if severity:
             query = query.filter(self.model_class.severity == severity)
-        if source == "Mobile App":
-            query = query.filter(
-                (self.model_class.gps_latitude.isnot(None)) | (self.model_class.gps_longitude.isnot(None))
-            )
-        elif source == "Web App":
-            query = query.filter(
-                self.model_class.gps_latitude.is_(None), self.model_class.gps_longitude.is_(None)
-            )
+        if source:
+            # Real column now (migration 077) — was a GPS-presence guess that
+            # mislabelled every GPS-less row "Web App" before a web creation
+            # path existed to actually produce one.
+            query = query.filter(self.model_class.source == source)
         if q:
             like = f"%{q}%"
             query = query.filter(self.model_class.description.ilike(like))

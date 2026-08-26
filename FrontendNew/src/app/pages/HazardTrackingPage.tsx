@@ -11,6 +11,7 @@ import {
   type HazardTrailResponse, type StageKey, type TrackedHazard,
 } from "../../services/hazard-register.service";
 import { HazardsTabBar } from "../components/audits/HazardsTabBar";
+import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
  * Hazard register lifecycle tracker.
@@ -227,6 +228,7 @@ export function HazardTrackingPage() {
 
   return (
     <div className="space-y-4">
+      <EventFamilyTabBar />
       <HazardsTabBar />
       <div>
         <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Hazard Lifecycle Tracking</h1>

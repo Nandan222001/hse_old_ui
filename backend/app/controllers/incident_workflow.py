@@ -518,7 +518,7 @@ def my_next_actions(
         subject = None
         if info["stage"] == workflow_stages.IMPROVE and capa:
             subject = {
-                "reference": f"CAPA-{capa['first_id']}",
+                "reference": f"CAPA-{capa['first_id']:06d}",
                 "description": (capa["first_description"] or "")[:120],
                 "due_date": capa["first_due"].isoformat() if capa["first_due"] else None,
                 "open_count": int(capa["open_count"]),

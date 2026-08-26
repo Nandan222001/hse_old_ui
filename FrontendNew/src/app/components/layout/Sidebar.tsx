@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import {
-  House, BookOpenText, Users, CircleAlert, Briefcase,
-  Lightbulb, ClipboardCheck, ChevronDown,
+  House, Users, CircleAlert, Briefcase,
+  ClipboardCheck, ChevronDown,
   FolderClosed, AlertTriangle,
-  LogOut, Settings, X, Database, HardHat, MapPin,
-  ShieldCheck, Siren, Eye, FileCheck2, type LucideIcon
+  LogOut, Settings, X, HardHat, MapPin,
+  ShieldCheck, type LucideIcon
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -23,59 +23,55 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// Simplified to the client's own ten-item list from the platform review
+// (Home, People, Assets, Vendors, Compliance, Risk, Work, Incidents, Audit
+// Trail, Settings). Nothing that isn't one of those ten disappeared:
+// Hazards/Permits/Near Miss/Unsafe Act moved to tabs at the top of the
+// Incidents page (IncidentsTabBar) rather than a sidebar submenu — the
+// sidebar itself stays a flat, single-click list. Settings still uses the
+// expandable-children rendering below for Checklists/Data/Intelligence,
+// which are one click away rather than cluttering the top level.
 const navGroups: NavGroup[] = [
   {
     items: [
-      { name: "Home", icon: House, path: "/" },
+      // Was "Home" — the top breadcrumb (TopNavbar.tsx) already calls this
+      // page "Dashboard", and so does everything else that names it (the
+      // page component itself is DashboardPage). The client's own review
+      // asked for one term, not both for the same page.
+      { name: "Dashboard", icon: House, path: "/" },
       { name: "People", icon: Users, path: "/users" },
-      { name: "Vendors", icon: HardHat, path: "/vendors" },
       { name: "Assets", icon: FolderClosed, path: "/equipment-certification" },
+      { name: "Vendors", icon: HardHat, path: "/vendors" },
       { name: "Compliance", icon: ClipboardCheck, path: "/compliance" },
-      {
-        // Sub-sections (Register/Programme/Trends/Templates) show as tabs at
-        // the top of the audits pages instead of a sidebar submenu.
-        name: "Audits",
-        icon: ShieldCheck,
-        path: "/audits",
-      },
       { name: "Risk", icon: CircleAlert, path: "/root-cause-analysis" },
       { name: "Work", icon: Briefcase, path: "/actions" },
       {
-        // Sub-sections (Overview/Lifecycle Tracking) show as tabs at the top
-        // of the incidents pages instead of a sidebar submenu.
+        // Hazards/Permits/Near Miss/Unsafe Act run the same eight-stage
+        // lifecycle Incidents does and are read together with it — reachable
+        // as tabs at the top of the Incidents page itself (IncidentsTabBar),
+        // not as a sidebar submenu.
         name: "Incidents",
         icon: AlertTriangle,
         path: "/violations",
       },
       {
-        // Flow 5. Sits next to Incidents rather than under Risk because it runs
-        // the same eight-stage lifecycle and the two are read together.
-        // Sub-sections show as tabs at the top of the hazards pages instead
-        // of a sidebar submenu.
-        name: "Hazards",
-        icon: Siren,
-        path: "/hazards",
+        // Was "Audits" — the client's own naming for this item is "Audit
+        // Trail". Same page (/audits — WF-05 register/programme/report),
+        // no new page was needed for this one.
+        name: "Audit Trail",
+        icon: ShieldCheck,
+        path: "/audits",
       },
       {
-        // Permits run the same eight stages and had no console page at all —
-        // the lifecycle was mapped in the backend and visible nowhere.
-        name: "Permits",
-        icon: FileCheck2,
-        path: "/permits/tracking",
+        // Checklists/Data/Intelligence used to hang off here as a sidebar
+        // submenu — same flaw the Incidents one had: it only showed while
+        // still on /settings, and vanished the moment you actually clicked
+        // through to one of them. Moved to SettingsFamilyTabBar, mounted at
+        // the top of all four pages instead, so it stays on screen.
+        name: "Settings",
+        icon: Settings,
+        path: "/settings",
       },
-      {
-        // Third of the eight-stage families, alongside Incidents and Hazards.
-        // It had no sidebar entry at all — the register was reachable only from
-        // a button on the dashboard, so an admin looking for what the mobile app
-        // had reported had nowhere obvious to go.
-        name: "Near Miss",
-        icon: Eye,
-        path: "/near-miss",
-      },
-      { name: "Intelligence", icon: Lightbulb, path: "/ai-agent" },
-      { name: "Checklists", icon: BookOpenText, path: "/checklists" },
-      { name: "Data", icon: Database, path: "/data-management" },
-      { name: "Settings", icon: Settings, path: "/settings" },
     ],
   },
 ];

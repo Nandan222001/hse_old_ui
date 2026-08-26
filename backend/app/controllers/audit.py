@@ -504,7 +504,10 @@ def get_audit(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    return _to_response(db, _get(db, audit_id, current_user))
+    # _owned rather than _get: the list above already keeps an auditor from
+    # browsing to someone else's queue, but without this a direct /audits/{id}
+    # URL would still open it — the same independence concern _owned exists for.
+    return _to_response(db, _owned(db, audit_id, current_user))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1365,7 +1368,7 @@ def get_score(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """The live rubric breakdown — section by section, with the arithmetic shown."""
-    a = _get(db, audit_id, current_user)
+    a = _owned(db, audit_id, current_user)
     score = audit_scoring.score_items(_items(db, a.id))
     counts = {k: 0 for k in audit_scoring.CLASSIFICATIONS}
     for f in _findings(db, a.id):
@@ -1679,7 +1682,7 @@ def get_report(
     mapping. The web console is where a long document is genuinely easier to work
     with; this is the same content the phone shows in summary.
     """
-    a = _get(db, audit_id, current_user)
+    a = _owned(db, audit_id, current_user)
     items = _items(db, a.id)
     findings = _findings(db, a.id)
     evidence = _evidence(db, a.id)
@@ -1765,7 +1768,7 @@ def list_findings(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    _get(db, audit_id, current_user)
+    _owned(db, audit_id, current_user)
     evidence = _evidence(db, audit_id)
     rows = _findings(db, audit_id)
     if open_only:
