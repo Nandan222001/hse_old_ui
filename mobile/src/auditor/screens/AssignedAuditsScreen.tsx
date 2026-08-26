@@ -104,7 +104,19 @@ export function AssignedAuditsScreen({ navigation }: any) {
         )}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
+      {/* The height constraint belongs on the ScrollView, the padding on its
+          content container. With everything on contentContainerStyle and no
+          `style`, a horizontal ScrollView in a column flex parent stretches to
+          fill the space left over — the chips drew at the top of a band running
+          most of the way down the screen, squeezing the list under it.
+          AuditTrailScreen already does it this way. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterBar}
+        contentContainerStyle={styles.filterRow}
+        keyboardShouldPersistTaps="handled"
+      >
         {FILTERS.map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -235,7 +247,8 @@ const styles = StyleSheet.create({
   },
   search: { flex: 1, fontSize: 13, color: C.ink, fontWeight: '600' },
 
-  filterRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  filterBar: { flexGrow: 0, flexShrink: 0 },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8, alignItems: 'center' },
   filterBtn: {
     paddingHorizontal: 13, paddingVertical: 7, borderRadius: 9,
     backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: C.border,
