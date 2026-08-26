@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, RefreshCw } from "lucide-react";
+import { ArrowRight, Search, RefreshCw } from "lucide-react";
 import { getRootCauseAnalysis, type RootCauseAnalysis, type RCAFilters } from "../../services/analytics.service";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -48,6 +48,7 @@ export function RootCauseAnalysisPage() {
     inProgress: records.filter(r => r.Status === "In Progress").length,
     pending: records.filter(r => r.Status === "Pending").length,
   };
+  const openReports = records.filter((r) => r.Status !== "Closed").slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -80,6 +81,96 @@ export function RootCauseAnalysisPage() {
           </Card>
         ))}
       </div>
+
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-base">Risk Reports</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Unsafe conditions raised from the field, scored on WF-01 Likelihood × Consequence.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <a href="/risk/tracking">
+              Lifecycle tracking <ArrowRight className="ml-2 h-4 w-4" />
+            </a>
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <Card className="border-slate-200">
+              <CardContent className="pt-5">
+                <p className="text-sm text-muted-foreground">Open</p>
+                <p className="mt-1 text-3xl font-bold text-slate-900">{records.length > 0 ? stats.total : 0}</p>
+                <p className="text-xs text-muted-foreground">{stats.closed} closed</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="pt-5">
+                <p className="text-sm text-muted-foreground">High or Critical</p>
+                <p className="mt-1 text-3xl font-bold text-orange-600">0</p>
+                <p className="text-xs text-muted-foreground">Banded on the adjusted score</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="pt-5">
+                <p className="text-sm text-muted-foreground">Blocking work</p>
+                <p className="mt-1 text-3xl font-bold text-red-600">0</p>
+                <p className="text-xs text-muted-foreground">Adjusted score ≥ 15</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="pt-5">
+                <p className="text-sm text-muted-foreground">Overdue</p>
+                <p className="mt-1 text-3xl font-bold text-amber-700">0</p>
+                <p className="text-xs text-muted-foreground">Past the response deadline</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="pt-5">
+                <p className="text-sm text-muted-foreground">Not yet assessed</p>
+                <p className="mt-1 text-3xl font-bold text-slate-900">0</p>
+                <p className="text-xs text-muted-foreground">No score, so not on the matrix</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {openReports.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              No risk reports have been raised yet. They arrive here from the mobile app.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead>Criticality</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {openReports.map((row) => (
+                    <TableRow key={row.RCA_ID}>
+                      <TableCell className="font-mono text-xs">{row.RCA_ID}</TableCell>
+                      <TableCell className="font-medium">{row.Root_Causes}</TableCell>
+                      <TableCell>{row.Conducted_By}</TableCell>
+                      <TableCell>{row.Completion_Date || "No Date"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700">
+                          ● High
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

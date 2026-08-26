@@ -1153,7 +1153,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     non_conformance_rows = [
         {
             "id": f"NC-{c.id:03d}",
-            "action": c.description or c.action_type or "Corrective Action",
+            "action": _clean_capa_description(c),
             "owner": emp.full_name if emp else "Unassigned",
             "due": c.due_date.strftime("%b %d, %Y") if c.due_date else "No Date",
             "criticality": priority_to_criticality.get(_rca_priority(inc.severity if inc else None), "Low"),
@@ -1550,7 +1550,7 @@ def get_engagement_summary(
     )
     open_actions = [
         {
-            "text": c.description or c.action_type or f"CAPA Action #{c.id}",
+            "text": _clean_capa_description(c),
             "status": _action_status(c.due_date),
         }
         for c in open_capa_rows
@@ -1605,7 +1605,7 @@ def get_violation_detail(
         {
             "id": f"CAPA-{c.id:03d}",
             "action_type": c.action_type or "Corrective Action",
-            "description": c.description or "",
+            "description": _clean_capa_description(c),
             "responsible_person": emp.full_name if emp else "Unassigned",
             "due_date": c.due_date.strftime("%b %d, %Y") if c.due_date else None,
             "status": c.status or "Pending",
@@ -1652,7 +1652,7 @@ def get_violation_detail(
         })
     for c, emp in capa_rows:
         timeline.append({
-            "action": f"CAPA: {c.action_type or 'Corrective Action'}",
+            "action": f"CAPA: {_clean_capa_description(c)}",
             "user": emp.full_name if emp else "Unassigned",
             "time": c.due_date.strftime("%b %d, %Y") if c.due_date else "No date",
             "type": "capa",

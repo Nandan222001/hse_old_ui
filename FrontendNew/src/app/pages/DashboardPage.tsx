@@ -193,7 +193,7 @@ export function DashboardPage() {
       title: "Contractor Risk Score",
       value: leading.contractor_has_contractors === false
         ? "No Contractors"
-        : `${leading.contractor_risk_label} / ${Number(leading.contractor_risk_score_10 ?? 0).toFixed(1)}/10`,
+        : `${leading.contractor_risk_label} / ${Number((leading.contractor_risk_score_10 ?? 0).toFixed(1)).toString()}/10`,
       sub: leading.contractor_has_contractors === false
         ? "No contractor workforce recorded"
         : (leading.contractor_risk_score_10 ?? 0) < 1 ? "⚠ Extreme Risk — Violations Present" : "Limiting Indicator",
