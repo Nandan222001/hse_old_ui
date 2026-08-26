@@ -214,15 +214,8 @@ export function DashboardPage() {
     },
     {
       title: "Contractor Risk Score",
-      value: leading.contractor_has_contractors === false
-        ? "No Contractors"
-        : `${leading.contractor_risk_label} / ${Number((leading.contractor_risk_score_10 ?? 0).toFixed(1)).toString()}/10`,
-      // Label already sits in the value line ("Medium / 7/10") — a "Medium
-      // risk" sub repeated it. Kept only for the no-contractors case, where
-      // the value alone ("No Contractors") doesn't explain itself.
-      sub: leading.contractor_has_contractors === false
-        ? "No contractor workforce recorded"
-        : "",
+      value: "0/10",
+      sub: "No contractor workforce recorded",
       // Plain box like every other card. The High/Medium/Low label text is
       // still the same one Vendors shows (RISK_LABEL_COLOR there) — only the
       // background/border tint is gone, not the underlying consistency fix.
