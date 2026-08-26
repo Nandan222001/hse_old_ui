@@ -468,7 +468,8 @@ def my_next_actions(
         text(
             "SELECT id, description, incident_type, severity_priority, severity_label, "
             "       workflow_status, reported_at, created_at, investigation_due_at, "
-            "       is_hipo, is_recurring_pattern, statutory_reportable "
+            "       is_hipo, is_recurring_pattern, statutory_reportable, "
+            "       assigned_supervisor_id, escalated_to_manager_id "
             "  FROM incidents "
             " WHERE organisation_id = :org AND workflow_status <> 'closed' "
             " ORDER BY COALESCE(reported_at, created_at) DESC LIMIT 300"
@@ -494,6 +495,11 @@ def my_next_actions(
     capa_by_incident = {c["incident_id"]: c for c in open_capa}
 
     now = datetime.utcnow()
+    # See the factory's copy of this: a record the caller has already handled
+    # stays in their list instead of disappearing the moment the step moves on.
+    my_employee_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
     items = []
     mine_count = 0
 
@@ -541,6 +547,13 @@ def my_next_actions(
             "owner_role": nxt["owner_role"],
             "is_mine": info["is_mine"],
             "can_act": info["can_act"],
+            "handled_by_me": bool(
+                my_employee_id
+                and (
+                    r["assigned_supervisor_id"] == my_employee_id
+                    or r["escalated_to_manager_id"] == my_employee_id
+                )
+            ),
             "subject": subject,
             "is_hipo": bool(r["is_hipo"]),
             "is_recurring": bool(r["is_recurring_pattern"]),

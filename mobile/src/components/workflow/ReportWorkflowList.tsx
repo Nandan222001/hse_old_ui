@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaScreen } from '../layout/KeyboardAvoider';
@@ -13,7 +13,7 @@ import { useReportWorkflow } from '../../hooks/useReportWorkflow';
 import type { ReportType } from '../../api/endpoints';
 import { reportWorkflowService } from '../../services/reportWorkflowService';
 import type {
-  InvestigatePayload, ReportDetail, ReportNextActionItem,
+  InvestigatePayload, ReportDetail, ReportNextAction, ReportNextActionItem,
 } from '../../services/reportWorkflowService';
 
 /**
@@ -97,7 +97,32 @@ export function ReportWorkflowList({
     return unsubscribe;
   }, [navigation, refresh]);
 
-  const mine = useMemo(() => queue.filter(i => i.is_mine), [queue]);
+  // "Needs you" is your step *or* your record. A supervisor who acknowledged a
+  // near miss and submitted the investigation used to watch it drop out of this
+  // tab the moment they finished: the step passed to the manager, `is_mine`
+  // went false, and the only place their own work still appeared was an "all
+  // open" list that does not distinguish it from anyone else's. It stays, and
+  // the card says who is holding it now.
+  const mine = useMemo(
+    () => queue.filter(i => i.is_mine || i.handled_by_me),
+    [queue],
+  );
+
+  // The stage rail, opened per record rather than drawn on every card — the
+  // rail was taken off these screens on request and this puts it behind a
+  // deliberate tap instead of back on the list.
+  const [tracking, setTracking] = useState<ReportNextActionItem | null>(null);
+  const [track, setTrack] = useState<ReportNextAction | null>(null);
+
+  const openTrack = useCallback(async (item: ReportNextActionItem) => {
+    setTracking(item);
+    setTrack(null);
+    try {
+      setTrack(await api.getNextAction(item.id));
+    } catch {
+      setTrack(null);
+    }
+  }, [api]);
 
   const submitInvestigation = useCallback(async (payload: InvestigatePayload) => {
     if (!investigating) return;
@@ -262,10 +287,43 @@ export function ReportWorkflowList({
             {'  '}{item.action}
           </Text>
           <Text style={styles.waiting}>
-            {item.is_mine ? 'Waiting on you' : `Waiting on the ${item.owner_role.replace(/_/g, ' ')}`}
+            {item.is_mine
+              ? 'Waiting on you'
+              : item.handled_by_me
+                ? `You are done — now with the ${item.owner_role.replace(/_/g, ' ')}`
+                : `Waiting on the ${item.owner_role.replace(/_/g, ' ')}`}
             {item.unblocks ? ` → ${item.unblocks}` : ''}
           </Text>
         </TouchableOpacity>
+
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={() => {
+              const opening = !isOpen;
+              setExpanded(opening ? item.id : null);
+              setNotes('');
+              setDetail(null);
+              if (opening) {
+                api.getDetail(item.id).then(setDetail).catch(() => setDetail(null));
+              }
+            }}
+          >
+            <Ionicons
+              name={isOpen ? 'chevron-up-outline' : 'document-text-outline'}
+              size={15}
+              color={Colors.primary}
+            />
+            <Text style={styles.cardActionText}>{isOpen ? 'Close' : 'Open'}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.cardActionDivider} />
+
+          <TouchableOpacity style={styles.cardAction} onPress={() => openTrack(item)}>
+            <Ionicons name="git-commit-outline" size={15} color={Colors.primary} />
+            <Text style={styles.cardActionText}>Track</Text>
+          </TouchableOpacity>
+        </View>
 
         {isOpen && (
           <View style={styles.formBox}>
@@ -386,6 +444,54 @@ export function ReportWorkflowList({
         <View style={{ height: 24 }} />
       </ScrollView>
 
+      <Modal
+        visible={tracking !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTracking(null)}
+      >
+        <View style={styles.trackBackdrop}>
+          <View style={styles.trackSheet}>
+            <Text style={styles.trackTitle}>{tracking?.reference}</Text>
+            <Text style={styles.trackDesc} numberOfLines={3}>{tracking?.description}</Text>
+
+            {track ? (
+              <>
+                {/* The stage in words, not the eight-dot rail. The rail is
+                    deliberately off every supervisor and manager screen — what
+                    is useful here is which step is outstanding and who holds
+                    it, which is what follows. */}
+                {!!track.stage_label && (
+                  <Text style={styles.trackStage}>
+                    {track.stage_number ? `${String(track.stage_number).padStart(2, '0')} · ` : ''}
+                    {track.stage_label}
+                  </Text>
+                )}
+                <Text style={styles.trackStep}>
+                  {track.next_action
+                    ? track.next_action.action
+                    : 'Nothing outstanding — this record is complete.'}
+                </Text>
+                <Text style={styles.trackOwner}>
+                  {track.is_closed
+                    ? 'Closed.'
+                    : track.is_mine
+                      ? 'Your step.'
+                      : `With the ${(track.next_action?.owner_role ?? 'next role').replace(/_/g, ' ')}.`}
+                  {track.next_action?.unblocks ? ` Clearing it opens ${track.next_action.unblocks}.` : ''}
+                </Text>
+              </>
+            ) : (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 24 }} />
+            )}
+
+            <TouchableOpacity style={styles.trackClose} onPress={() => setTracking(null)}>
+              <Text style={styles.trackCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <InvestigationFormModal
         visible={investigating !== null}
         reportType={reportType}
@@ -417,6 +523,33 @@ function SecondaryButton({ label, onPress }: { label: string; onPress: () => voi
 }
 
 const styles = StyleSheet.create({
+  cardActions: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 12, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: '#EEF2F7',
+  },
+  cardAction: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 4,
+  },
+  cardActionText: { fontSize: 12.5, fontWeight: '700', color: Colors.primary },
+  cardActionDivider: { width: 1, height: 18, backgroundColor: '#EEF2F7' },
+
+  trackBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
+  trackSheet: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20,
+  },
+  trackTitle: { fontSize: 15, fontWeight: '800', color: Colors.primary },
+  trackDesc: { fontSize: 13, color: Colors.textDark, marginTop: 6, lineHeight: 19 },
+  trackStage: {
+    fontSize: 11, fontWeight: '800', letterSpacing: 0.5, marginTop: 14,
+    textTransform: 'uppercase', color: Colors.textMuted,
+  },
+  trackStep: { fontSize: 13, fontWeight: '700', color: Colors.textDark, marginTop: 14 },
+  trackOwner: { fontSize: 12, color: Colors.textMuted, marginTop: 4, lineHeight: 17 },
+  trackClose: { alignItems: 'center', paddingVertical: 14, marginTop: 8 },
+  trackCloseText: { fontSize: 13.5, fontWeight: '700', color: Colors.textMuted },
+
   root: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

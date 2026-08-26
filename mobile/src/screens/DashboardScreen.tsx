@@ -229,7 +229,7 @@ export function DashboardScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={styles.gridCard}
-            onPress={() => navigation.navigate('Incidents')}
+            onPress={() => navigation.navigate('Tasks')}
             activeOpacity={0.8}
           >
             <View style={[styles.gridIcon, { backgroundColor: '#FEF2F2' }]}>

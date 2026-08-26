@@ -44,6 +44,8 @@ export interface NextActionItem {
   /** This step is this role's own job, not merely one they outrank. */
   is_mine: boolean;
   can_act: boolean;
+  /** This user already did their part, whoever holds the step now. */
+  handled_by_me?: boolean;
   /** The specific CAPA blocking an IMPROVE-stage incident, when there is one. */
   subject: {
     reference: string;

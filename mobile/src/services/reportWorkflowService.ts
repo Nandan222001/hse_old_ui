@@ -170,6 +170,15 @@ export interface ReportNextActionItem {
   owner_role: string;
   is_mine: boolean;
   can_act: boolean;
+  /**
+   * This user already did their part, whoever holds the step now.
+   *
+   * Without it a record left the supervisor's list the moment they finished
+   * with it — the step moved on, `is_mine` went false, and their own work
+   * looked like it had vanished. Stamped from `assigned_supervisor_id`, which
+   * the first transition sets and nothing overwrites.
+   */
+  handled_by_me?: boolean;
   /** The corrective action holding an IMPROVE row, when there is one. */
   subject: {
     id: number;

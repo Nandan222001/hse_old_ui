@@ -7,6 +7,7 @@ import {
   type ReportListItem,
   type ReportNextActionItem,
 } from '../services/reportWorkflowService';
+import { newestFirst } from '../utils/newestFirst';
 
 /**
  * Queue state + workflow actions for one report type.
@@ -43,7 +44,7 @@ export function useReportWorkflow(type: ReportType) {
       // flagged is_mine:false. That is what lets the screen say "waiting on the
       // manager" instead of showing an empty list.
       const q = await service.getNextActions(false, 100);
-      setQueue(q.items);
+      setQueue(newestFirst(q.items));
       setError(null);
     } catch (e: any) {
       // 403 means this role has no business in this queue — say so rather than
@@ -60,7 +61,7 @@ export function useReportWorkflow(type: ReportType) {
     // Secondary, and deliberately not allowed to fail the whole refresh: a
     // supervisor who cannot list closed records should still get their queue.
     try {
-      setClosed(await service.getAll({ stage: 'CLOSE', limit: 50 }));
+      setClosed(newestFirst(await service.getAll({ stage: 'CLOSE', limit: 50 })));
     } catch {
       setClosed([]);
     }

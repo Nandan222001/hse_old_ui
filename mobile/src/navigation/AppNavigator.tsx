@@ -28,7 +28,8 @@ import { ToolboxTalkScreen } from '../screens/ToolboxTalkScreen';
 import { SafetyComplianceScreen } from '../screens/SafetyComplianceScreen';
 import { PermitsScreen } from '../screens/PermitsScreen';
 import { AcknowledgePermitScreen } from '../screens/AcknowledgePermitScreen';
-import { IncidentsScreen } from '../screens/IncidentsScreen';
+import { TasksScreen } from '../screens/TasksScreen';
+import { IncidentQueueScreen } from '../screens/IncidentQueueScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 
 // Figma detail screens (Supervisor)
@@ -41,6 +42,7 @@ import { SafetyObservationManagementScreen } from '../screens/SafetyObservationM
 import { InspectionManagementScreen } from '../screens/InspectionManagementScreen';
 import { AuditPreparationScreen } from '../screens/AuditPreparationScreen';
 import { CAPAManagementScreen } from '../screens/CAPAManagementScreen';
+import { CapaReviewQueueScreen } from '../screens/CapaReviewQueueScreen';
 import AssignTaskScreen from '../screens/AssignTaskScreen';
 import { NearMissManagementScreen } from '../screens/NearMissManagementScreen';
 import { PermitRequestManagementScreen } from '../screens/PermitRequestManagementScreen';
@@ -126,10 +128,10 @@ function SupervisorPermitsStack() {
   );
 }
 
-function SupervisorIncidentsStack() {
+function SupervisorTasksStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="IncidentsHome" component={IncidentsScreen} />
+      <Stack.Screen name="TasksHome" component={TasksScreen} />
     </Stack.Navigator>
   );
 }
@@ -146,7 +148,7 @@ const SUPERVISOR_TAB_ICONS: Record<string, string> = {
   Home: 'home',
   Operations: 'activity',
   Permits: 'file-text',
-  Incidents: 'alert-octagon',
+  Tasks: 'check-square',
   Profile: 'user',
 };
 
@@ -173,7 +175,7 @@ function SupervisorMainTabs() {
       <Tab.Screen name="Home" component={SupervisorHomeStack} />
       <Tab.Screen name="Operations" component={SupervisorOperationsStack} />
       <Tab.Screen name="Permits" component={SupervisorPermitsStack} />
-      <Tab.Screen name="Incidents" component={SupervisorIncidentsStack} />
+      <Tab.Screen name="Tasks" component={SupervisorTasksStack} />
       <Tab.Screen name="Profile" component={SupervisorProfileStack} />
     </Tab.Navigator>
   );
@@ -313,6 +315,8 @@ export function AppNavigator() {
               <Stack.Screen name="InspectionManagement" component={InspectionManagementScreen} />
               <Stack.Screen name="AuditPreparation" component={AuditPreparationScreen} />
               <Stack.Screen name="CAPAManagement" component={CAPAManagementScreen} />
+              <Stack.Screen name="CapaReviewQueue" component={CapaReviewQueueScreen} />
+              <Stack.Screen name="IncidentQueue" component={IncidentQueueScreen} />
               <Stack.Screen name="NearMissManagement" component={NearMissManagementScreen} />
               <Stack.Screen name="PermitRequestManagement" component={PermitRequestManagementScreen} />
               <Stack.Screen name="RiskManagement" component={RiskManagementScreen} />

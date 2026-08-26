@@ -503,6 +503,14 @@ def next_actions(
     )
     maps = _lookup_maps(db, rows)
 
+    # Who this caller is, so a hazard they have already worked stays in their
+    # list once the step moves on — the same reason the incident and report
+    # queues carry this. The register stamps a different column at each step,
+    # so any of the three means "this was mine".
+    my_employee_id = db.execute(
+        text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": current_user.user_id}
+    ).scalar()
+
     items = []
     mine = 0
     for row in rows:
@@ -533,6 +541,10 @@ def next_actions(
             "owner_role": na["owner_role"],
             "is_mine": desc.get("is_mine"),
             "can_act": desc.get("can_act"),
+            "handled_by_me": bool(
+                my_employee_id
+                and my_employee_id in (row.reviewed_by, row.assessed_by, row.controls_planned_by)
+            ),
             "due_at": row.response_due_at.isoformat() if row.response_due_at else None,
             "is_overdue": bool(
                 row.response_due_at and row.response_due_at < datetime.now()

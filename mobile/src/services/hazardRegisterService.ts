@@ -282,6 +282,8 @@ export interface HazardQueueItem {
   owner_role: string;
   is_mine: boolean;
   can_act: boolean;
+  /** This user already did their part, whoever holds the step now. */
+  handled_by_me?: boolean;
   due_at: string | null;
   is_overdue: boolean;
   work_stopped: boolean;

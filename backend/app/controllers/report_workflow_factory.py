@@ -1116,6 +1116,12 @@ def build_workflow_router(
 
         station_names = _station_names(db, rows)
         now = datetime.now()
+        # Who this caller is, so a record they have already handled can say so.
+        # Without it a supervisor's own record vanished from their list the
+        # moment they finished with it: the step moved to the manager, `is_mine`
+        # went false, and the only trace left was an "all open" tab that does
+        # not distinguish their work from anyone else's.
+        my_employee_id = _employee_id_for(db, current_user.user_id)
         items = []
         mine_count = 0
 
@@ -1173,6 +1179,17 @@ def build_workflow_router(
                 "owner_role": nxt["owner_role"],
                 "is_mine": info["is_mine"],
                 "can_act": info["can_act"],
+                # Already handled by this caller, whoever holds the step now.
+                # `assigned_supervisor_id` is stamped on the first transition
+                # and never overwritten, so this stays true for the person who
+                # actually did the work rather than whoever touched it last.
+                "handled_by_me": bool(
+                    my_employee_id
+                    and (
+                        getattr(r, "assigned_supervisor_id", None) == my_employee_id
+                        or getattr(r, "escalated_to_manager_id", None) == my_employee_id
+                    )
+                ),
                 "subject": subject,
                 "is_hipo": bool(getattr(r, "is_hipo", 0)),
                 "is_recurring": bool(getattr(r, "is_recurring_pattern", 0)),
