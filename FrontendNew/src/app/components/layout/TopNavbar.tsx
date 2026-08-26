@@ -4,14 +4,17 @@ import { useAuth } from "../../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
 import {
   getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead,
-  type NotificationItem,
+  resolveNotificationLink, type NotificationItem,
 } from "../../../services/notifications.service";
 
 const breadcrumbMap: Record<string, string> = {
   "/": "Dashboard",
   "/violations": "Incidents",
+  "/hazards": "Hazards",
   "/near-miss": "Near Miss",
+  "/unsafe-acts": "Unsafe Act",
   "/permits/tracking": "Permits",
+  "/audits": "Audit Trail",
   "/actions": "Work",
   "/checklists": "Daily Checklists",
   "/compliance": "Compliance",
@@ -188,7 +191,11 @@ export function TopNavbar({ darkMode, onToggleDarkMode, onOpenSidebar }: TopNavb
                   notifItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => { markRead(item.id); navigate("/notifications"); setShowNotifMenu(false); }}
+                      onClick={() => {
+                        markRead(item.id);
+                        navigate(resolveNotificationLink(item) ?? "/notifications");
+                        setShowNotifMenu(false);
+                      }}
                       className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
                       style={{ background: item.is_read ? 'transparent' : (darkMode ? '#0F2044' : '#EFF6FF') }}
                     >

@@ -13,6 +13,7 @@ from app.models.organisation import Organisation
 from app.models.audit_log import AuditLog
 from app.services.audit_log import record_audit, resolve_employee_id
 from app.services.contractor_risk import DEFAULT_CONTRACTOR_WEIGHTS
+from app.services.rating_labels import DEFAULT_RATING_LABELS
 from app.utils.tenant import org_scoped_join
 
 router = APIRouter(prefix="/org-admin/settings", tags=["Settings"])
@@ -260,6 +261,69 @@ def save_formula_config(
     )
     db.commit()
     return {"data": {"contractor_score": weights}}
+
+
+# ── Rating Labels ─────────────────────────────────────────────────────────────
+# Wording (and cutoffs) for the two rating vocabularies used across the
+# People, Compliance and Assets pages — "Excellent/Good/Needs Improvement" and
+# "Low/Medium/High Risk". Different industries read these words differently,
+# so an org admin can rename the bands here instead of them being fixed in
+# code. See app/services/rating_labels.py for how these are applied.
+
+@router.get("/rating-labels")
+def get_rating_labels_config(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)) -> dict:
+    org = db.query(Organisation).filter(Organisation.id == current_user.org_id).first()
+    saved = (org.formula_config or {}).get("rating_labels") if org and org.formula_config else None
+    return {
+        "data": {
+            scale: {**defaults, **((saved or {}).get(scale) or {})}
+            for scale, defaults in DEFAULT_RATING_LABELS.items()
+        }
+    }
+
+
+@router.put("/rating-labels")
+def save_rating_labels_config(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not current_user.org_id:
+        raise HTTPException(status_code=400, detail="No organisation on this account")
+    org = db.query(Organisation).filter(Organisation.id == current_user.org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    scales = {}
+    for scale, defaults in DEFAULT_RATING_LABELS.items():
+        incoming = payload.get(scale) or {}
+        try:
+            high_floor = float(incoming.get("high_floor", defaults["high_floor"]))
+            mid_floor = float(incoming.get("mid_floor", defaults["mid_floor"]))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{scale}: thresholds must be numeric")
+        if high_floor <= mid_floor:
+            raise HTTPException(status_code=400, detail=f"{scale}: the high threshold must be above the mid threshold")
+        high_label = str(incoming.get("high_label", defaults["high_label"])).strip()
+        mid_label = str(incoming.get("mid_label", defaults["mid_label"])).strip()
+        low_label = str(incoming.get("low_label", defaults["low_label"])).strip()
+        if not (high_label and mid_label and low_label):
+            raise HTTPException(status_code=400, detail=f"{scale}: labels cannot be empty")
+        scales[scale] = {
+            "high_floor": high_floor, "high_label": high_label,
+            "mid_floor": mid_floor, "mid_label": mid_label,
+            "low_label": low_label,
+        }
+
+    previous = (org.formula_config or {}).get("rating_labels")
+    org.formula_config = {**(org.formula_config or {}), "rating_labels": scales}
+    record_audit(
+        db, current_user.org_id, resolve_employee_id(db, current_user.user_id),
+        action="update", module="Rating Labels",
+        previous_value=str(previous), new_value=str(scales),
+    )
+    db.commit()
+    return {"data": scales}
 
 
 # ── Audit Trail ───────────────────────────────────────────────────────────────

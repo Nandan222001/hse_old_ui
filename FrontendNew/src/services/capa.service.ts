@@ -37,6 +37,42 @@ export interface AssignableOwner {
   role: string;
 }
 
+export interface CapaClosureCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface CapaDetail {
+  id: number;
+  capa_ref: string | null;
+  incident_id: number | null;
+  description: string | null;
+  action_type: string | null;
+  action_plan: string | null;
+  success_criteria: string | null;
+  action_category: string | null;
+  hierarchy_level: string | null;
+  responsible_person_id: number | null;
+  responsible_person_name: string | null;
+  due_date: string | null;
+  status: string | null;
+  priority_band: string | null;
+  capa_type_label: string | null;
+  priority_explanation: string | null;
+  step_label: string | null;
+  total_steps: number | null;
+  is_closed: boolean | null;
+  elapsed_percent: number | null;
+  is_overdue: boolean | null;
+  escalation_level: number | null;
+  reopened_count: number | null;
+  lesson_learned: string | null;
+  closure_checks: CapaClosureCheck[];
+  next_action: string | null;
+}
+
 export const getAllCapaActions = (
   page = 1,
   pageSize = 25,
@@ -53,6 +89,9 @@ export const getAllCapaActions = (
       },
     })
     .then((r) => r.data);
+
+export const getCapaDetail = (capaId: number) =>
+  axiosInstance.get<CapaDetail>(`/capa/${capaId}`).then((r) => r.data);
 
 /** Step 05 of WF-04. Supervisors and safety managers, scoped to this org. */
 export const getAssignableOwners = () =>

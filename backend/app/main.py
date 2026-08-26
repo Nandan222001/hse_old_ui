@@ -52,6 +52,7 @@ from app.controllers import (
     audit_trail as audit_trail_controller,
     incident_trail as incident_trail_controller,
     near_miss_trail as near_miss_trail_controller,
+    unsafe_act_trail as unsafe_act_trail_controller,
     risk_trail as risk_trail_controller,
     risk_assessment as risk_assessment_controller,
     permit_trail as permit_trail_controller,
@@ -166,6 +167,7 @@ def create_app() -> FastAPI:
     # Admin view: every action on an incident, stage 01 through stage 08.
     app.include_router(incident_trail_controller.router, prefix=prefix)
     app.include_router(near_miss_trail_controller.router, prefix=prefix)
+    app.include_router(unsafe_act_trail_controller.router, prefix=prefix)
     # Risk observations on `risk_reports`. Its own trail, separate from the
     # hazard register's below — different table, different status vocabulary.
     app.include_router(risk_trail_controller.router, prefix=prefix)

@@ -385,36 +385,11 @@ if not skip("safety_walks"):
     print(f"  done  safety_walks ({len(sw_rows)} rows)")
 
 # ─── 14. CAPA Actions ─────────────────────────────────────────────────────────
+# The legacy CAPA seed block inserted synthetic incident-linked rows that look
+# like live data but were actually demo fixtures. Keep the table empty here so
+# the dashboard only shows records created from the real application flow.
 if not skip("capa_actions"):
-    assignees = [e_safety, e_insp, e_tech1, e_sup1, e_sup2, e_eng1, e_tech2, e_tech3]
-    capas = [
-        # Critical / overdue
-        (inc_ids[1],  "Engineering Control", "Install toe-boards and mid-rails on all scaffold levels",              "Training gap + platform",    assignees[0], today - timedelta(days=5),  "Open",        None),
-        (inc_ids[4],  "Engineering Control", "Replace all damaged power cables on Assembly Line A",                   "Maintenance backlog",         assignees[2], today - timedelta(days=3),  "Open",        None),
-        (inc_ids[6],  "Engineering Control", "Install automatic gas detection in chemical store",                     "Equipment age",               assignees[0], today - timedelta(days=8),  "Open",        None),
-        (inc_ids[11], "Procedure Update",    "Implement mandatory LOTO checklist before all HV work",                "LOTO procedure gap",          assignees[1], today - timedelta(days=10), "In Progress", None),
-        (inc_ids[13], "Engineering Control", "Install pedestrian barriers and CCTV at all forklift crossings",       "Traffic management",          assignees[3], today - timedelta(days=6),  "Open",        None),
-        # Due soon
-        (inc_ids[0],  "PPE Enhancement",     "Issue chemical-resistant gloves and face shield to all store workers", "Inadequate PPE",              assignees[1], today + timedelta(days=3),  "In Progress", None),
-        (inc_ids[2],  "Engineering Control", "Fit interlocked guards on all hydraulic press points",                 "Guard removed",               assignees[4], today + timedelta(days=2),  "In Progress", None),
-        (inc_ids[3],  "Procedure Update",    "Update hot work isolation procedure and add pre-check card",           "Procedure not followed",      assignees[0], today + timedelta(days=5),  "In Progress", None),
-        (inc_ids[7],  "Training",            "Mandatory refresher for working-at-height for all site workers",        "Inadequate access",           assignees[1], today + timedelta(days=7),  "Open",        None),
-        (inc_ids[9],  "Monitoring",          "Monthly noise monitoring and audiometry for drilling teams",            "PPE compliance",              assignees[0], today + timedelta(days=10), "Open",        None),
-        # Completed
-        (inc_ids[5],  "Training",            "Manual handling training delivered to all warehouse operatives",        "Training gap",                assignees[5], today - timedelta(days=20), "Completed",   5),
-        (inc_ids[8],  "Housekeeping",        "5S audit of assembly area; sharp edge guarding programme",             "Housekeeping",                assignees[3], today - timedelta(days=18), "Completed",   4),
-        (inc_ids[14], "Procedure Update",    "Confined space entry permit mandatory sign-off by HSE Manager",        "Permit bypassed",             assignees[0], today - timedelta(days=25), "Completed",   5),
-        (inc_ids[16], "Engineering Control", "Thermal imaging survey of all switchgear panels",                      "Maintenance backlog",         assignees[2], today - timedelta(days=15), "Completed",   4),
-        (inc_ids[17], "Engineering Control", "Fall arrest anchor points installed at all roof access points",         "Equipment failure",           assignees[6], today - timedelta(days=12), "Completed",   5),
-    ]
-    cur.executemany("""
-        INSERT INTO capa_actions
-            (incident_id, action_type, description, root_cause_addressed,
-             responsible_person_id, due_date, status, effectiveness_rating)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-    """, capas)
-    conn.commit()
-    print(f"  done  capa_actions ({len(capas)} rows)")
+    print("  skip  capa_actions (legacy demo rows removed; use live CAPA creation)")
 
 cur.close()
 conn.close()

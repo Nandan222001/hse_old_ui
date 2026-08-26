@@ -16,7 +16,10 @@ from app.models.role import Role
 from app.models.safety_walk import SafetyWalk
 from app.models.shift_schedule import ShiftSchedule
 from app.models.site import Site
+from app.models.sps import SupervisorInteraction
 from app.models.training_program import TrainingProgram
+from app.models.competence import TrainingRecord
+from app.services.rating_labels import get_rating_labels, label_and_tone
 
 router = APIRouter(prefix="/people", tags=["People"])
 
@@ -60,6 +63,7 @@ def _of(query, model, org_id):
 def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser = Depends(get_current_user)):
     today = date.today()
     org_id = current_user.org_id
+    rating_labels = get_rating_labels(db, org_id)
 
     total_employees = _of(db.query(Employee), Employee, org_id).count() or 0
 
@@ -101,8 +105,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         pct = round((total_employees - len(flagged_by_then)) / total_employees * 100) if total_employees else 0
         sparkline.append(pct)
 
-    competency_tone = "green" if competency_pct >= 80 else ("amber" if competency_pct >= 60 else "red")
-    competency_subtitle = "Excellent" if competency_pct >= 80 else ("Good" if competency_pct >= 60 else "Needs Improvement")
+    competency_subtitle, competency_tone = label_and_tone(competency_pct, rating_labels, "workforce_competency")
 
     latest_incident_date = _of(db.query(func.max(Incident.incident_date_time)), Incident, org_id).scalar()
     latest_near_miss_date = _of(db.query(func.max(NearMiss.event_date_time)), NearMiss, org_id).scalar()
@@ -118,8 +121,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         NearMiss, org_id,
     ).count()
     exposure_index = round(min(100, (recent_incidents + recent_near_misses) / total_employees * 100)) if total_employees else 0
-    exposure_tone = "red" if exposure_index > 30 else ("amber" if exposure_index >= 10 else "green")
-    exposure_subtitle = "High Risk" if exposure_index > 30 else ("Medium Risk" if exposure_index >= 10 else "Low Risk")
+    exposure_subtitle, exposure_tone = label_and_tone(exposure_index, rating_labels, "workforce_exposure_risk")
 
     # Join through employee's actual role to check safety_signatory directly,
     # avoiding org mismatch when employees reference roles from another org.
@@ -135,6 +137,10 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     )
     supervisor_score = round(float(avg_supervisor_compliance) / 5 * 100) if avg_supervisor_compliance else 0
     supervisor_subtitle = "Highly Effective" if supervisor_score >= 90 else ("Effective" if supervisor_score >= 70 else "Needs Coaching")
+    # Was hardcoded "blue" below regardless of which of the three subtitles
+    # above was picked — a supervisor scoring "Needs Coaching" rendered with
+    # the exact same tone as one scoring "Highly Effective".
+    supervisor_tone = "green" if supervisor_score >= 90 else ("amber" if supervisor_score >= 70 else "red")
 
     latest_shift_date = _of(db.query(func.max(ShiftSchedule.shift_date)), ShiftSchedule, org_id).scalar()
     fatigue_trend: list = []
@@ -240,13 +246,35 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
 
     programs = _of(db.query(TrainingProgram).filter(TrainingProgram.expiry_months > 0), TrainingProgram, org_id).all()
     employees_with_induction = _of(db.query(Employee).filter(Employee.induction_date.isnot(None)), Employee, org_id).all()
+
+    # Real completions, most recent per employee+program, take priority over the
+    # induction-date projection below — only a real expires_at can ever land in
+    # the past, so this is the only path that can populate "Expired".
+    latest_record_by_key = {}
+    training_record_rows = (
+        _of(db.query(TrainingRecord).filter(TrainingRecord.training_program_id.isnot(None)), TrainingRecord, org_id)
+        .order_by(TrainingRecord.completed_at.desc())
+        .all()
+    )
+    for rec in training_record_rows:
+        key = (rec.employee_id, rec.training_program_id)
+        if key not in latest_record_by_key:
+            latest_record_by_key[key] = rec
+
     expired_count = due_30_count = due_90_count = 0
     for emp in employees_with_induction:
         for prog in programs:
-            next_due = emp.induction_date
-            while next_due < today:
-                next_due = _add_months_preserve_day(next_due, prog.expiry_months)
-            days_until = (next_due - today).days
+            record = latest_record_by_key.get((emp.id, prog.id))
+            if record and record.expires_at:
+                days_until = (record.expires_at - today).days
+            else:
+                # No completion on file yet — project the next scheduled due
+                # date from induction so it can still show as upcoming, but
+                # this path can never go negative, so it never counts as expired.
+                next_due = emp.induction_date
+                while next_due < today:
+                    next_due = _add_months_preserve_day(next_due, prog.expiry_months)
+                days_until = (next_due - today).days
             if days_until < 0:
                 expired_count += 1
             elif days_until < 30:
@@ -270,43 +298,44 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         {"label": "Near Miss", "value": round(near_miss_count / behaviour_total * 100) if behaviour_total else 0, "color": "#4D74C1"},
     ]
 
+    # Coaching sessions supervisors log via the mobile app's toolbox/coaching
+    # capture (SupervisorInteraction, interaction_type="coaching") — CapaAction
+    # has no "Training" action_type in this codebase (only Corrective/Preventive
+    # are ever raised), so filtering on it here always returned nothing.
     coaching_rows = (
         _of(
-            db.query(CapaAction, Employee)
-            .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
-            .filter(CapaAction.action_type == "Training", CapaAction.status != "Completed"),
-            CapaAction, org_id,
+            db.query(SupervisorInteraction, Employee)
+            .outerjoin(Employee, org_scoped_join(SupervisorInteraction.employee_id == Employee.id, Employee.organisation_id, org_id))
+            .filter(SupervisorInteraction.interaction_type == "coaching"),
+            SupervisorInteraction, org_id,
         )
-        .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
+        .order_by(SupervisorInteraction.occurred_at.desc())
         .limit(3)
         .all()
     )
     coaching_actions = []
-    for c, emp in coaching_rows:
-        days_until = (c.due_date - today).days if c.due_date else None
-        if days_until is None:
+    for interaction, emp in coaching_rows:
+        if not interaction.occurred_at:
             detail = "No Date"
-        elif days_until < 0:
-            detail = "Overdue"
-        elif days_until == 0:
-            detail = "Due Today"
-        elif days_until == 1:
-            detail = "Due Tomorrow"
-        elif days_until <= 7:
-            detail = "Due This Week"
         else:
-            detail = f"Due {_fmt_due(c.due_date)}"
+            days_ago = (today - interaction.occurred_at.date()).days
+            if days_ago <= 0:
+                detail = "Today"
+            elif days_ago == 1:
+                detail = "Yesterday"
+            else:
+                detail = f"{days_ago} days ago"
         coaching_actions.append({
-            "title": f"{c.description or c.action_type} - {emp.full_name if emp else 'Unassigned'}",
+            "title": f"{interaction.detail or 'Coaching Session'} - {emp.full_name if emp else 'Unassigned'}",
             "detail": detail,
-            "tone": "red" if days_until is not None and days_until < 0 else "green",
+            "tone": "green",
         })
 
     open_rows = (
         _of(
             db.query(CapaAction, Employee)
             .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))
-            .filter(CapaAction.action_type != "Training", CapaAction.status != "Completed"),
+            .filter(CapaAction.status != "Completed"),
             CapaAction, org_id,
         )
         .order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc())
@@ -342,8 +371,8 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         "supervisor_safety_score": {
             "value": supervisor_score,
             "subtitle": supervisor_subtitle,
-            "tone": "blue",
-            "change": f"▲ {supervisor_score}%",
+            "tone": supervisor_tone,
+            "change": f"{'▲' if supervisor_tone != 'red' else '▼'} {supervisor_score}%",
         },
         "fatigue_trend": fatigue_trend,
         "toolbox_trend": toolbox_trend,

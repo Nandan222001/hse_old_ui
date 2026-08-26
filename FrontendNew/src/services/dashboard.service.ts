@@ -51,6 +51,7 @@ export interface ComplianceTrend {
 
 export interface RecentSafetyWalk {
   id: number;
+  reference: string;
   inspection_date_time: string | null;
   location: string;
   inspector: string;
@@ -64,6 +65,7 @@ export interface RecentSafetyWalk {
 
 export interface RecentNearMiss {
   id: number;
+  reference: string;
   report_date: string | null;
   event_date_time: string | null;
   location: string;

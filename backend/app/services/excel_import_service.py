@@ -485,13 +485,13 @@ def _insert_incidents(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = 
                  (report_date,incident_date_time,location_station_id,incident_type,
                   severity,number_persons_involved,description,immediate_cause,
                   root_cause,hazard_id,permit_active,control_failure,reported_by,
-                  investigation_status,capa_generated,days_away,root_cause_category)
-                 VALUES (:rd,:idt,:lsid,:it,:sev,:npi,:desc,:ic,:rc,:hid,:pa,:cf,:rb,:is_,:cg,:da,:rcc)"""),
+                  investigation_status,capa_generated,days_away,root_cause_category,source)
+                 VALUES (:rd,:idt,:lsid,:it,:sev,:npi,:desc,:ic,:rc,:hid,:pa,:cf,:rb,:is_,:cg,:da,:rcc,:src)"""),
             dict(rd=_fmt_date(r[1]), idt=_fmt_datetime(r[2]),
                  lsid=_resolve(id_maps, "working_stations", r[3], db, org_id), it=r[4], sev=r[5], npi=r[6],
                  desc=r[7], ic=r[8], rc=r[9], hid=_resolve(id_maps, "hazards", r[10], db, org_id),
                  pa=r[11], cf=r[12], rb=_resolve(id_maps, "employees", r[13], db, org_id),
-                 is_=r[14], cg=r[15], da=r[16] or 0, rcc=r[17]),
+                 is_=r[14], cg=r[15], da=r[16] or 0, rcc=r[17], src="Data Import"),
         )
         _remember(db, id_maps, "incidents", declared_id)
         count += 1

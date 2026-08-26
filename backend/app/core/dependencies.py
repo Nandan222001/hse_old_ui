@@ -85,6 +85,21 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Current
     )
 
 
+def require_valid_org(current_user: CurrentUser) -> int:
+    """Guard for write endpoints: refuse to write data for a user whose
+    organisation could not be resolved, rather than silently stamping the
+    -1 sentinel (see get_current_user) onto a new row. A record saved with
+    that sentinel can never match a real organisation_id again, so it is
+    written successfully and then invisible everywhere, forever.
+    """
+    if current_user.org_id is None or current_user.org_id < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Your account is not linked to an organisation yet. Contact your administrator before submitting reports.",
+        )
+    return current_user.org_id
+
+
 def require_superadmin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     """Gate for platform-wide (cross-organisation) administration routes.
 

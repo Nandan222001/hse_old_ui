@@ -909,6 +909,7 @@ def org_setup_step6a_import(payload: dict) -> dict:
 _MODULE_SHEET = {
     "employees":            "Employees",
     "departments":          "Departments",
+    "sites":                "Sites",
     "working_stations":     "Working_Stations",
     "roles":                "Roles",
     "policies":             "Policies",
@@ -936,7 +937,7 @@ async def org_setup_onboarding_bulk(
 ) -> dict:
     import datetime
     from app.services.excel_import_service import (
-        _insert_employees, _insert_departments, _insert_working_stations,
+        _insert_employees, _insert_departments, _insert_sites, _insert_working_stations,
         _insert_roles, _insert_policies, _insert_permit_types,
         _insert_hazard_categories, _insert_hazards, _insert_training_programs,
         _insert_permits_to_work, _insert_incidents, _insert_near_misses,
@@ -946,6 +947,7 @@ async def org_setup_onboarding_bulk(
     _INSERT_FNS = {
         "employees": _insert_employees,
         "departments": _insert_departments,
+        "sites": _insert_sites,
         "working_stations": _insert_working_stations,
         "roles": _insert_roles,
         "policies": _insert_policies,
@@ -1126,6 +1128,13 @@ _CSV_TEMPLATES: Dict[str, Tuple[str, str]] = {
         "department_id,site_id,department_name,manager_id,number_of_teams\n"
         "DEPT001,SITE001,Heavy Assembly,,3\n",
         "departments_template.csv",
+    ),
+    "sites": (
+        "site_id,site_name,address,postcode,city,type,operational_status,"
+        "number_of_working_stations,capacity,primary_products,hazard_classification\n"
+        "SITE001,Altens Fabrication Yard,12 Wellington Rd,AB12 3CD,Aberdeen,Manufacturing,Active,"
+        "6,500,Structural steel assemblies,High\n",
+        "sites_template.csv",
     ),
     "working_stations": (
         "station_id,station_name,site_id,department,zone_classification,"

@@ -12,6 +12,15 @@ import {
   type OpenAction,
 } from "../../services/vendors.service";
 
+// Same High/Medium/Low vocabulary the dashboard's contractor_risk_label
+// panel colors by (DashboardPage.tsx) — one severity mapping for both
+// screens instead of each page re-deriving its own numeric threshold.
+const RISK_LABEL_COLOR: Record<string, { text: string; bg: string; border: string }> = {
+  High:   { text: "#B91C1C", bg: "#FFF1F2", border: "#FCA5A5" },
+  Medium: { text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
+  Low:    { text: "#15803D", bg: "#F0FDF4", border: "#86EFAC" },
+};
+
 // ── Shared card wrapper ───────────────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
@@ -171,9 +180,29 @@ export function VendorsPage() {
           <Card>
             <CardTitle>Contractor Risk Score</CardTitle>
             <div className="flex items-end gap-3">
-              <span className="text-[48px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>
+              <span
+                className="text-[48px] leading-none"
+                style={{
+                  color: data.risk_score.has_contractors === false
+                    ? "#111827"
+                    : RISK_LABEL_COLOR[data.risk_score.label]?.text ?? "#111827",
+                  fontWeight: 700,
+                }}
+              >
                 {data.risk_score.has_contractors === false ? "N/A" : `${data.risk_score.value}/10`}
               </span>
+              {data.risk_score.has_contractors !== false && (
+                <span
+                  className="mb-2 rounded-full px-2.5 py-1 text-[12px]"
+                  style={{
+                    background: RISK_LABEL_COLOR[data.risk_score.label]?.bg ?? "#F1F5F9",
+                    color: RISK_LABEL_COLOR[data.risk_score.label]?.text ?? "#475569",
+                    fontWeight: 700,
+                  }}
+                >
+                  {data.risk_score.label}
+                </span>
+              )}
               {data.risk_score.delta !== null && (
                 <div className="mb-2 flex items-center gap-1 rounded-full px-2.5 py-1"
                   style={{ background: data.risk_score.up ? "#DCFCE7" : "#FEE2E2" }}>

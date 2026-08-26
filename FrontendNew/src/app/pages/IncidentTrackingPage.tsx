@@ -8,6 +8,7 @@ import {
   ActionRow, PRIORITY_COLOR, PersonCard, STAGE_ICON, StageBlock, formatDateTime,
 } from "../components/tracking/lifecycle";
 import { IncidentsTabBar } from "../components/audits/IncidentsTabBar";
+import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
  * Admin incident lifecycle tracker.
@@ -75,6 +76,7 @@ export function IncidentTrackingPage() {
 
   return (
     <div className="space-y-4">
+      <EventFamilyTabBar />
       <IncidentsTabBar />
       <div>
         <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Incident Lifecycle Tracking</h1>

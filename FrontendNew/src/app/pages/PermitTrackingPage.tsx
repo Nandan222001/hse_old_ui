@@ -7,6 +7,7 @@ import {
 import {
   ActionRow, PersonCard, STAGE_ICON, STAGE_ORDER, StageBlock, formatDateTime,
 } from "../components/tracking/lifecycle";
+import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
  * Admin permit-to-work lifecycle tracker.
@@ -81,6 +82,7 @@ export function PermitTrackingPage() {
 
   return (
     <div className="space-y-4">
+      <EventFamilyTabBar />
       <div>
         <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Permit Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>

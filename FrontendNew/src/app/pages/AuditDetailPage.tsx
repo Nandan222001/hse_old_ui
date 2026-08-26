@@ -27,6 +27,7 @@ import {
 } from "../components/audit/AuditPrimitives";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { useAuth } from "../context/AuthContext";
 
 /**
  * Evidence stored as a server path (/uploads/audit/<uuid>.jpg), never a full
@@ -175,10 +176,20 @@ function Signatures({ audit }: { audit: Audit }) {
   );
 }
 
+/**
+ * Shared by two routes: /audits/:id (Admin — reviews, approves, distributes,
+ * decides re-audits, closes) and /auditor/audits/:id (the assigned Auditor —
+ * read-only; those four actions are the Admin's per WF-05 step 09/10, see the
+ * page-top docstring). isAdmin below is the only branch point between them.
+ */
 export function AuditDetailPage() {
   const { id } = useParams();
   const auditId = Number(id);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "Admin";
+  const basePath = isAdmin ? "/audits" : "/auditor/audits";
+  const listPath = isAdmin ? "/audits" : "/auditor";
 
   const [audit, setAudit] = useState<Audit | null>(null);
   const [report, setReport] = useState<AuditReport | null>(null);
@@ -238,7 +249,7 @@ export function AuditDetailPage() {
     <div className="space-y-5 p-6 print:p-0">
       <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
         <div className="flex items-start gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/audits")}>
+          <Button variant="ghost" size="sm" onClick={() => navigate(listPath)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -379,13 +390,13 @@ export function AuditDetailPage() {
                       <>
                         {" "}
                         <button className="font-semibold underline"
-                                onClick={() => navigate(`/audits/${audit.re_audit_audit_id}`)}>
+                                onClick={() => navigate(`${basePath}/${audit.re_audit_audit_id}`)}>
                           View the re-audit
                         </button>
                       </>
                     )}
                   </Banner>
-                ) : (
+                ) : isAdmin ? (
                   <>
                     <p className="text-[11.5px] text-slate-500">
                       The trigger fires on its own; the decision is the Admin's. Waiving a
@@ -418,6 +429,10 @@ export function AuditDetailPage() {
                       </Button>
                     </div>
                   </>
+                ) : (
+                  <p className="text-[11.5px] text-slate-500">
+                    Waiting on your Admin to schedule or waive the re-audit.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -437,7 +452,7 @@ export function AuditDetailPage() {
                             detail={distributed ? humanise(audit.distribution_scope) : "Not released"} />
               </div>
 
-              {!approved && (
+              {isAdmin && !approved && (
                 <div className="flex flex-wrap items-end gap-2">
                   <input
                     className="min-w-[240px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-[13px]"
@@ -452,7 +467,7 @@ export function AuditDetailPage() {
                 </div>
               )}
 
-              {approved && !distributed && (
+              {isAdmin && approved && !distributed && (
                 <Button size="sm" disabled={!!busy}
                         onClick={() => act("distribute", () => distributeReport(auditId, { scope: "organisation" }))}>
                   {busy === "distribute" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
@@ -460,7 +475,7 @@ export function AuditDetailPage() {
                 </Button>
               )}
 
-              {!approved && (
+              {isAdmin && !approved && (
                 <p className="text-[11.5px] text-slate-500">
                   Distribution beyond the site is refused until the report has been reviewed and approved —
                   otherwise the review is decorative.
@@ -622,14 +637,16 @@ export function AuditDetailPage() {
                 action it raised has been verified effective on site.
               </p>
             </div>
-            <Button
-              size="sm"
-              disabled={!!busy || audit.open_finding_count > 0}
-              onClick={() => act("close", () => closeAudit(auditId))}
-            >
-              {busy === "close" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
-              Close the audit
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                disabled={!!busy || audit.open_finding_count > 0}
+                onClick={() => act("close", () => closeAudit(auditId))}
+              >
+                {busy === "close" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+                Close the audit
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

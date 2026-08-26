@@ -317,7 +317,7 @@ def _build_actions(db: Session, inc: dict) -> List[dict]:
     # 3 ── CAPA actions: raised, and closed where the status says so
     capas = db.execute(
         text(
-            "SELECT id, description, action_type, status, due_date, created_at, updated_at, "
+            "SELECT id, capa_ref, description, action_type, status, due_date, created_at, updated_at, "
             "       responsible_person_id, priority_band, effectiveness_rating "
             "  FROM capa_actions WHERE incident_id = :id ORDER BY created_at"
         ),
@@ -325,6 +325,11 @@ def _build_actions(db: Session, inc: dict) -> List[dict]:
     ).mappings().all()
 
     for capa in capas:
+        # capa_ref is the same reference the CAPA list, its detail page and its
+        # notifications show — building a fresh "CAPA-{id}" string here (no
+        # padding, unlike the CAPA-{id:06d} stamped at creation) is how the
+        # same action ends up under two different numbers on two screens.
+        capa_reference = capa["capa_ref"] or f"CAPA-{capa['id']:06d}"
         actions.append({
             "stage": IMPROVE,
             "action": f"CAPA raised — {capa['action_type'] or 'action'}",
@@ -333,7 +338,7 @@ def _build_actions(db: Session, inc: dict) -> List[dict]:
             "occurred_at": capa["created_at"],
             "source": "capa_actions",
             "timestamp_inferred": False,
-            "reference": f"CAPA-{capa['id']}",
+            "reference": capa_reference,
             "capa_status": capa["status"],
             "capa_due_date": _iso(capa["due_date"]),
             "capa_priority": capa["priority_band"],
@@ -350,7 +355,7 @@ def _build_actions(db: Session, inc: dict) -> List[dict]:
                 "source": "capa_actions.status",
                 "timestamp_inferred": True,
                 "inferred_from": "capa_actions.updated_at",
-                "reference": f"CAPA-{capa['id']}",
+                "reference": capa_reference,
                 "capa_status": capa["status"],
             })
 

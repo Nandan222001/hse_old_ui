@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { Bell, CheckCheck, Info, CheckCircle, AlertTriangle, Wrench, Megaphone, Loader2 } from "lucide-react";
 import {
   getNotifications, markNotificationRead, markAllNotificationsRead,
-  type NotificationItem,
+  resolveNotificationLink, type NotificationItem,
 } from "../../services/notifications.service";
 
 type Filter = "all" | "unread" | "read";
@@ -28,6 +29,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export function NotificationsPage() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
@@ -133,10 +135,14 @@ export function NotificationsPage() {
           {filtered.map(n => {
             const cfg = TYPE_CONFIG[n.type] ?? TYPE_CONFIG.info;
             const Icon = cfg.icon;
+            const link = resolveNotificationLink(n);
             return (
               <div
                 key={n.id}
-                className="flex items-start gap-4 p-4 rounded-xl border transition-colors"
+                role={link ? "button" : undefined}
+                tabIndex={link ? 0 : undefined}
+                onClick={link ? () => { if (!n.is_read) handleMarkRead(n.id); navigate(link); } : undefined}
+                className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${link ? "cursor-pointer hover:bg-[#F8FAFF]" : ""}`}
                 style={{
                   background: n.is_read ? '#ffffff' : '#EFF6FF',
                   borderColor: n.is_read ? '#E2E8F0' : '#BFDBFE',
@@ -170,7 +176,7 @@ export function NotificationsPage() {
                       </span>
                       {!n.is_read && (
                         <button
-                          onClick={() => handleMarkRead(n.id)}
+                          onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
                           className="text-[11px] px-2 py-0.5 rounded-md border transition-colors hover:bg-white"
                           style={{ borderColor: '#BFDBFE', color: '#1D4ED8', fontWeight: 500 }}
                         >

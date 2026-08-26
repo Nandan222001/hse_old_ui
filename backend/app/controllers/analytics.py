@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
 from app.utils.tenant import org_scoped_join
-from app.models.audit import Audit
+from app.models.audit import Audit, AuditFinding
 from app.models.capa_action import CapaAction
 from app.models.employee import Employee
 from app.models.hazard import Hazard
@@ -22,6 +22,7 @@ from app.models.policy import Policy
 from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
 from app.models.working_station import WorkingStation
+from app.services.rating_labels import get_rating_labels, label_and_tone
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -1072,10 +1073,16 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     avg_compliance = _org_filter(
         db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id
     ).scalar()
+    walk_count_with_rating = _org_filter(
+        db.query(SafetyWalk).filter(SafetyWalk.compliance_rating.isnot(None)), SafetyWalk, org_id
+    ).count()
     avg_audit_compliance = (
         _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
         .filter(Audit.compliance_score.isnot(None))
         .scalar()
+    )
+    audit_count_with_score = (
+        _org_filter(db.query(Audit), Audit, org_id).filter(Audit.compliance_score.isnot(None)).count()
     )
     readiness_components = []
     if avg_compliance is not None:
@@ -1085,9 +1092,103 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     audit_readiness_pct = round(sum(readiness_components) / len(readiness_components)) if readiness_components else 0
 
     compliance_score = round((permit_compliance_pct + legal_register_pct + audit_readiness_pct) / 3)
-    compliance_label = "Excellent" if compliance_score >= 85 else ("Good" if compliance_score >= 70 else "Needs Improvement")
     legal_label = "High" if legal_register_pct >= 85 else ("Medium" if legal_register_pct >= 60 else "Low")
-    audit_label = "Ready" if audit_readiness_pct >= 80 else ("Needs Attention" if audit_readiness_pct >= 60 else "Not Ready")
+    # Client feedback (Compliance Section): "unnecessary classification lines
+    # should be removed... existing explanatory text was considered useful and
+    # could potentially be reused... instead of generic labels such as 'Needs
+    # Attention'." These describe what actually feeds the number instead of
+    # re-classifying it — the same pattern already used on the LOTO and
+    # Policy-Hazard cards below.
+    compliance_label = (
+        f"Blend of permit closure ({permit_compliance_pct}%), policy coverage "
+        f"({legal_register_pct}%) & audit readiness ({audit_readiness_pct}%)"
+    )
+    audit_label = (
+        f"From {walk_count_with_rating} rated safety walk{'s' if walk_count_with_rating != 1 else ''} "
+        f"and {audit_count_with_score} scored audit{'s' if audit_count_with_score != 1 else ''}"
+        if (walk_count_with_rating or audit_count_with_score) else "No rated safety walks or scored audits yet"
+    )
+
+    # ── Previous-period comparison ───────────────────────────────────────────
+    # Client correction: "not previous year, previous period" — the preceding
+    # window of the same length (here, trailing 12 months), anchored to the
+    # latest real activity in this org's own data rather than literal today
+    # (seed data doesn't reach today's date, so a literal-today anchor would
+    # show zero activity in both windows for every org — same reasoning as
+    # the leading-indicators trend window in dashboard.py).
+    def _as_date(d):
+        return d.date() if hasattr(d, "date") else d
+
+    activity_dates = [
+        _as_date(d) for d in (
+            _org_filter(db.query(func.max(PermitToWork.date_issued)), PermitToWork, org_id).scalar(),
+            _org_filter(db.query(func.max(CapaAction.created_at)), CapaAction, org_id).scalar(),
+            _org_filter(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar(),
+            _org_filter(db.query(func.max(Audit.scheduled_date)), Audit, org_id).scalar(),
+        ) if d is not None
+    ]
+    latest_activity = max(activity_dates) if activity_dates else date.today()
+    current_period_start = latest_activity - timedelta(days=365)
+    previous_period_start = latest_activity - timedelta(days=730)
+
+    def _permit_compliance_window(start, end):
+        q = _org_filter(db.query(PermitToWork), PermitToWork, org_id).filter(
+            func.date(PermitToWork.date_issued) > start, func.date(PermitToWork.date_issued) <= end,
+        )
+        total = q.count()
+        if not total:
+            return None
+        return round(q.filter(PermitToWork.status == "Closed").count() / total * 100)
+
+    def _capa_closure_window(start, end):
+        q = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
+            func.date(CapaAction.created_at) > start, func.date(CapaAction.created_at) <= end,
+        )
+        total = q.count()
+        if not total:
+            return None
+        closed = q.filter(func.lower(CapaAction.status).in_(["completed", "closed", "verified", "done"])).count()
+        return round(closed / total * 100, 1)
+
+    def _audit_readiness_window(start, end):
+        components = []
+        walk_avg = (
+            _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
+            .filter(func.date(SafetyWalk.inspection_date_time) > start, func.date(SafetyWalk.inspection_date_time) <= end)
+            .scalar()
+        )
+        if walk_avg is not None:
+            components.append(float(walk_avg) / 5 * 100)
+        audit_avg = (
+            _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
+            .filter(Audit.compliance_score.isnot(None))
+            .filter(func.date(Audit.scheduled_date) > start, func.date(Audit.scheduled_date) <= end)
+            .scalar()
+        )
+        if audit_avg is not None:
+            components.append(float(audit_avg))
+        return round(sum(components) / len(components)) if components else None
+
+    def _delta(current, previous):
+        return None if current is None or previous is None else round(current - previous, 1)
+
+    permit_compliance_current = _permit_compliance_window(current_period_start, latest_activity)
+    permit_compliance_previous = _permit_compliance_window(previous_period_start, current_period_start)
+    corrective_action_current = _capa_closure_window(current_period_start, latest_activity)
+    corrective_action_previous = _capa_closure_window(previous_period_start, current_period_start)
+    audit_readiness_current = _audit_readiness_window(current_period_start, latest_activity)
+    audit_readiness_previous = _audit_readiness_window(previous_period_start, current_period_start)
+
+    compliance_score_components_current = [v for v in (permit_compliance_current, audit_readiness_current) if v is not None]
+    compliance_score_components_previous = [v for v in (permit_compliance_previous, audit_readiness_previous) if v is not None]
+    compliance_score_current = (
+        round(sum(compliance_score_components_current) / len(compliance_score_components_current))
+        if compliance_score_components_current else None
+    )
+    compliance_score_previous = (
+        round(sum(compliance_score_components_previous) / len(compliance_score_components_previous))
+        if compliance_score_components_previous else None
+    )
 
     latest_walk_date = _org_filter(
         db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id
@@ -1123,18 +1224,26 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         prev, curr = compliance_trend[-2]["value"], compliance_trend[-1]["value"]
         trend_mom = curr - prev
 
-    compliance_walks = _org_filter(
-        db.query(SafetyWalk).filter(SafetyWalk.inspection_type == "Compliance"), SafetyWalk, org_id
-    ).all()
-    findings_critical = sum(1 for w in compliance_walks if (w.critical_issues or 0) >= 2)
-    findings_major = sum(1 for w in compliance_walks if (w.critical_issues or 0) == 1)
-    findings_minor = sum(1 for w in compliance_walks if (w.critical_issues or 0) == 0 and (w.issues_found or 0) >= 1)
-    findings_observation = sum(1 for w in compliance_walks if (w.critical_issues or 0) == 0 and (w.issues_found or 0) == 0)
+    # Genuinely from the WF-05 audit workflow's own classification, not a
+    # Safety Walk issue-count heuristic standing in for it. The card is titled
+    # "Audit Findings by Severity" — it used to build that count out of
+    # SafetyWalk.critical_issues/issues_found thresholds, which have no
+    # relationship to an auditor's actual conformance/observation/minor_nc/
+    # major_nc/critical classification. Conformances are excluded here: they
+    # are the audit's passing results, not a severity of finding.
+    audit_finding_counts = dict(
+        _org_filter(
+            db.query(AuditFinding.classification, func.count(AuditFinding.id)), AuditFinding, org_id,
+        )
+        .filter(AuditFinding.classification != "conformance")
+        .group_by(AuditFinding.classification)
+        .all()
+    )
     findings_by_severity = [
-        {"name": "Critical", "value": findings_critical, "color": "#5A7895"},
-        {"name": "Major", "value": findings_major, "color": "#5E67A9"},
-        {"name": "Minor", "value": findings_minor, "color": "#E6AF37"},
-        {"name": "Observation", "value": findings_observation, "color": "#5E7399"},
+        {"name": "Critical", "value": audit_finding_counts.get("critical", 0), "color": "#5A7895"},
+        {"name": "Major", "value": audit_finding_counts.get("major_nc", 0), "color": "#5E67A9"},
+        {"name": "Minor", "value": audit_finding_counts.get("minor_nc", 0), "color": "#E6AF37"},
+        {"name": "Observation", "value": audit_finding_counts.get("observation", 0), "color": "#5E7399"},
     ]
 
     nc_rows = (
@@ -1153,7 +1262,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     non_conformance_rows = [
         {
             "id": f"NC-{c.id:03d}",
-            "action": c.description or c.action_type or "Corrective Action",
+            "action": _clean_capa_description(c),
             "owner": emp.full_name if emp else "Unassigned",
             "due": c.due_date.strftime("%b %d, %Y") if c.due_date else "No Date",
             "criticality": priority_to_criticality.get(_rca_priority(inc.severity if inc else None), "Low"),
@@ -1164,13 +1273,17 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     return {
         "compliance_score": compliance_score,
         "compliance_label": compliance_label,
+        "compliance_score_prev_12mo_delta": _delta(compliance_score_current, compliance_score_previous),
         "legal_register_coverage_pct": legal_register_pct,
         "legal_register_label": legal_label,
         "audit_readiness_pct": audit_readiness_pct,
         "audit_readiness_label": audit_label,
+        "audit_readiness_prev_12mo_delta": _delta(audit_readiness_current, audit_readiness_previous),
         "permit_compliance_pct": permit_compliance_pct,
+        "permit_compliance_prev_12mo_delta": _delta(permit_compliance_current, permit_compliance_previous),
         "loto_compliance_pct": loto_compliance_pct,
         "corrective_action_closure_rate": corrective_action_closure_rate,
+        "corrective_action_closure_prev_12mo_delta": _delta(corrective_action_current, corrective_action_previous),
         "policy_review_pct": policy_review_pct,
         "compliance_trend": compliance_trend,
         "compliance_trend_mom": trend_mom,
@@ -1216,12 +1329,7 @@ def get_asset_summary(
 
     control_effectiveness = round(valid_count / total_certs * 100) if total_certs else 0
     maintenance_risk_pct  = round((expiring_count + expired_count) / total_certs * 100) if total_certs else 0
-    if maintenance_risk_pct >= 60:
-        risk_label = "High Risk"
-    elif maintenance_risk_pct >= 25:
-        risk_label = "Medium Risk"
-    else:
-        risk_label = "Low Risk"
+    risk_label, _ = label_and_tone(maintenance_risk_pct, get_rating_labels(db, org_id), "asset_maintenance_risk")
 
     # ── Incident trend by month (asset context = all incidents) ───────────────
     inc_rows = (
@@ -1550,7 +1658,7 @@ def get_engagement_summary(
     )
     open_actions = [
         {
-            "text": c.description or c.action_type or f"CAPA Action #{c.id}",
+            "text": _clean_capa_description(c),
             "status": _action_status(c.due_date),
         }
         for c in open_capa_rows
@@ -1603,9 +1711,9 @@ def get_violation_detail(
 
     capa_list = [
         {
-            "id": f"CAPA-{c.id:03d}",
+            "id": c.capa_ref or f"CAPA-{c.id:06d}",
             "action_type": c.action_type or "Corrective Action",
-            "description": c.description or "",
+            "description": _clean_capa_description(c),
             "responsible_person": emp.full_name if emp else "Unassigned",
             "due_date": c.due_date.strftime("%b %d, %Y") if c.due_date else None,
             "status": c.status or "Pending",
@@ -1652,7 +1760,7 @@ def get_violation_detail(
         })
     for c, emp in capa_rows:
         timeline.append({
-            "action": f"CAPA: {c.action_type or 'Corrective Action'}",
+            "action": f"CAPA: {_clean_capa_description(c)}",
             "user": emp.full_name if emp else "Unassigned",
             "time": c.due_date.strftime("%b %d, %Y") if c.due_date else "No date",
             "type": "capa",

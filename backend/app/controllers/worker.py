@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
-from app.core.dependencies import get_current_user, CurrentUser
+from app.core.dependencies import get_current_user, require_valid_org, CurrentUser
 from app.services import workflow_stages
 from app.utils import report_media
 
@@ -696,6 +696,7 @@ async def report_incident(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
+    require_valid_org(current_user)
     data, photo_urls = await _body_and_photos(request)
 
     # Find employee linked to this user
@@ -705,7 +706,7 @@ async def report_incident(
     ).mappings().first()
 
     emp_id = user_row["employee_id"] if user_row else None
-    
+
     import json
 
     # Resolve working station: prefer an explicit FK, fall back to name lookup so
@@ -733,6 +734,15 @@ async def report_incident(
         val = str(data.get(key, default) or default).strip().lower()
         return "Yes" if val in ("yes", "true", "1") else "No"
 
+    # Mobile never sends this field, so it defaults to "Mobile App" for every
+    # caller today — the web registration form is the one caller that passes
+    # "Web App" explicitly. Whitelisted rather than trusting the raw string:
+    # this column drives the Incidents page's source filter (item #16), and a
+    # typo'd value would just silently stop matching that filter forever.
+    source = data.get("source")
+    if source not in ("Mobile App", "Web App", "Data Import"):
+        source = "Mobile App"
+
     # Save to incidents table
     db.execute(
         text("""
@@ -742,14 +752,14 @@ async def report_incident(
                 injured_person_name, injured_body_part, hazard_id, permit_active, control_failure,
                 hazard_still_present, immediate_actions_taken, witnesses_json, evidence_json,
                 gps_latitude, gps_longitude, investigation_status, reported_by, workflow_status,
-                reported_at
+                reported_at, source
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
                 :severity, :description, :immediate_cause, :number_persons_involved, :anyone_injured,
                 :injured_person_name, :injured_body_part, :hazard_id, :permit_active, :control_failure,
                 :hazard_still_present, :immediate_actions_taken, :witnesses_json, :evidence_json,
                 :gps_latitude, :gps_longitude, :investigation_status, :reported_by, :workflow_status,
-                :reported_at
+                :reported_at, :source
             )
         """),
         {
@@ -784,6 +794,7 @@ async def report_incident(
             "reported_by": emp_id,
             "workflow_status": "reported",
             "reported_at": datetime.now(),
+            "source": source,
         }
     )
     # Read the id before committing — after a commit the SELECT can land on a
@@ -809,8 +820,13 @@ async def report_incident(
         _apply_severity_and_statutory(
             db, incident_row,
             treatment_level=data.get("treatment_level"),
-            dangerous_occurrence=data.get("dangerous_occurrence"),
-            worst_case_fatal=data.get("worst_case_fatal"),
+            # bool(...), not the raw payload value: these two are Yes/No
+            # strings on the wire, and bool("No") is True — every submission
+            # that answered "No" was being classified as if it had answered
+            # "Yes" here. _yes_no is the same "yes"/"true"/"1" normaliser the
+            # other Yes/No fields on this endpoint already go through.
+            dangerous_occurrence=_yes_no("dangerous_occurrence") == "Yes" if "dangerous_occurrence" in data else None,
+            worst_case_fatal=_yes_no("worst_case_fatal") == "Yes" if "worst_case_fatal" in data else None,
             days_away=data.get("days_away"),
         )
 

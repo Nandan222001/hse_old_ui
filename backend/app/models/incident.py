@@ -21,6 +21,11 @@ class Incident(Base):
     control_failure = Column(String(10))
     reported_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     investigation_status = Column(String(50))
+    # Mobile App | Web App | Data Import | Legacy (migration 077 backfill for
+    # rows that predate this column). Set explicitly by every write path —
+    # worker.py's /worker/incidents, the web registration form, and the Excel
+    # importer — not inferred from whether GPS happened to be present.
+    source = Column(String(20), nullable=True)
     capa_generated = Column(String(10))
     days_away = Column(Integer)
     root_cause_category = Column(String(100))
@@ -110,7 +115,3 @@ class Incident(Base):
     auditor_verified_by = Column(Integer, ForeignKey("employees.id"), nullable=True)
     auditor_verified_at = Column(DateTime, nullable=True)
     verification_notes = Column(Text, nullable=True)
-
-    @property
-    def source(self) -> str:
-        return "Mobile App" if (self.gps_latitude is not None or self.gps_longitude is not None) else "Web App"

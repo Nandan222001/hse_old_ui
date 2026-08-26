@@ -2,49 +2,49 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { AlertTriangle, ChevronRight, Loader2, Search, Users } from "lucide-react";
 import {
-  getNearMissTrail, getTrackedNearMisses,
-  type NearMissTrailResponse, type StageKey, type TrackedNearMiss,
-} from "../../services/near-miss-trail.service";
+  getUnsafeActTrail, getTrackedUnsafeActs,
+  type UnsafeActTrailResponse, type StageKey, type TrackedUnsafeAct,
+} from "../../services/unsafe-act-trail.service";
 import {
   ActionRow, PRIORITY_COLOR, PersonCard, STAGE_ICON, STAGE_ORDER, StageBlock, formatDateTime,
 } from "../components/tracking/lifecycle";
-import { NearMissTabBar } from "../components/audits/NearMissTabBar";
+import { UnsafeActTabBar } from "../components/audits/UnsafeActTabBar";
 import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
- * Admin near-miss lifecycle tracker.
+ * Admin unsafe-act lifecycle tracker.
  *
- * The counterpart to `IncidentTrackingPage`, answering the same question for
- * the near-miss family: what has happened to this record, by whom, when, across
- * all eight stages of the workflow engine.
+ * The counterpart to `NearMissTrackingPage`/`IncidentTrackingPage`, answering
+ * the same question for the unsafe-act family: what has happened to this
+ * record, by whom, when, across all eight stages of the workflow engine.
  *
- * Everything here is the data the mobile app writes. A worker reporting a near
- * miss on a phone creates the RECORD entry; the supervisor's acknowledgement,
- * investigation and corrective action, and the manager's verification and
- * closure, each land as further actions on the same trail. Nothing on this
- * screen writes.
+ * Everything here is the data the mobile app writes. A worker reporting an
+ * unsafe act on a phone creates the RECORD entry; the supervisor's
+ * acknowledgement, investigation and corrective action, and the manager's
+ * verification and closure, each land as further actions on the same trail.
+ * Nothing on this screen writes.
  *
  * The stage rail, action rows and people cards come from the shared
- * `components/tracking/lifecycle` module, which the incident tracker uses too —
- * the backend serves both families an identical shape precisely so one renderer
- * can draw them.
+ * `components/tracking/lifecycle` module, which the incident and near-miss
+ * trackers use too — the backend serves all three families an identical
+ * shape precisely so one renderer can draw them.
  */
 
-const NOUN = "near miss";
+const NOUN = "unsafe act";
 
-export function NearMissTrackingPage() {
-  // Deep link from the dashboard's "Latest reports" panel: /near-miss/tracking?id=123
+export function UnsafeActTrackingPage() {
+  // Deep link, same pattern as the near-miss tracker: /unsafe-acts/tracking?id=123
   // opens straight onto that record instead of dropping the reader on the
   // list and making them find it again.
   const [searchParams] = useSearchParams();
   const linkedId = Number(searchParams.get("id"));
 
-  const [items, setItems] = useState<TrackedNearMiss[]>([]);
+  const [items, setItems] = useState<TrackedUnsafeAct[]>([]);
   const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
   const [selectedId, setSelectedId] = useState<number | null>(
     Number.isFinite(linkedId) && linkedId > 0 ? linkedId : null,
   );
-  const [trail, setTrail] = useState<NearMissTrailResponse | null>(null);
+  const [trail, setTrail] = useState<UnsafeActTrailResponse | null>(null);
   const [stageFilter, setStageFilter] = useState<StageKey | "">("");
   const [query, setQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
@@ -55,12 +55,12 @@ export function NearMissTrackingPage() {
     setLoadingList(true);
     setError(null);
     try {
-      const data = await getTrackedNearMisses({ stage: stageFilter || undefined, q: query || undefined });
+      const data = await getTrackedUnsafeActs({ stage: stageFilter || undefined, q: query || undefined });
       setItems(data.items);
       setStageCounts(data.stage_counts ?? {});
       setSelectedId((prev) => (prev && data.items.some((i) => i.id === prev) ? prev : data.items[0]?.id ?? null));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load near misses");
+      setError(e instanceof Error ? e.message : "Could not load unsafe acts");
       setItems([]);
     } finally {
       setLoadingList(false);
@@ -76,7 +76,7 @@ export function NearMissTrackingPage() {
     if (!selectedId) { setTrail(null); return; }
     let cancelled = false;
     setLoadingTrail(true);
-    getNearMissTrail(selectedId)
+    getUnsafeActTrail(selectedId)
       .then((data) => { if (!cancelled) setTrail(data); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Could not load trail"); })
       .finally(() => { if (!cancelled) setLoadingTrail(false); });
@@ -91,11 +91,11 @@ export function NearMissTrackingPage() {
   return (
     <div className="space-y-4">
       <EventFamilyTabBar />
-      <NearMissTabBar />
+      <UnsafeActTabBar />
       <div>
-        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Near Miss Lifecycle Tracking</h1>
+        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Unsafe Act Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>
-          Every action on every near miss, stage 01 Record through stage 08 Close — who did it and when.
+          Every action on every unsafe act, stage 01 Record through stage 08 Close — who did it and when.
           Reports raised on the mobile app appear here as they are submitted.
         </p>
       </div>
@@ -150,7 +150,7 @@ export function NearMissTrackingPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search near misses…"
+                placeholder="Search unsafe acts…"
                 className="w-full rounded-md border py-1.5 pl-8 pr-2 text-[12.5px] outline-none"
                 style={{ borderColor: "#DDE5F4", color: "#111827" }}
               />
@@ -167,69 +167,69 @@ export function NearMissTrackingPage() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
             ) : items.length === 0 ? (
-              <p className="py-8 text-center text-[12px]" style={{ color: "#94A3B8" }}>No near misses match.</p>
+              <p className="py-8 text-center text-[12px]" style={{ color: "#94A3B8" }}>No unsafe acts match.</p>
             ) : (
-              items.map((nm) => {
-                const active = nm.id === selectedId;
+              items.map((ua) => {
+                const active = ua.id === selectedId;
                 return (
                   <button
-                    key={nm.id}
+                    key={ua.id}
                     type="button"
-                    onClick={() => setSelectedId(nm.id)}
+                    onClick={() => setSelectedId(ua.id)}
                     className="flex w-full items-start gap-2 border-b px-3 py-2.5 text-left transition-colors"
                     style={{ borderColor: "#F1F5F9", background: active ? "#EEF2FB" : "transparent" }}
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11.5px]" style={{ color: "#4A57B9", fontWeight: 700 }}>{nm.reference}</span>
-                        {nm.priority && (
+                        <span className="text-[11.5px]" style={{ color: "#4A57B9", fontWeight: 700 }}>{ua.reference}</span>
+                        {ua.priority && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
-                            style={{ background: `${PRIORITY_COLOR[nm.priority] ?? "#64748B"}1A`,
-                              color: PRIORITY_COLOR[nm.priority] ?? "#64748B", fontWeight: 700 }}>
-                            {nm.priority}
+                            style={{ background: `${PRIORITY_COLOR[ua.priority] ?? "#64748B"}1A`,
+                              color: PRIORITY_COLOR[ua.priority] ?? "#64748B", fontWeight: 700 }}>
+                            {ua.priority}
                           </span>
                         )}
-                        {nm.is_hipo && (
+                        {ua.is_hipo && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                             style={{ background: "#FEE2E2", color: "#B91C1C", fontWeight: 700 }}>HiPo</span>
                         )}
-                        {nm.is_recurring && (
+                        {ua.is_recurring && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                             style={{ background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Recurring</span>
                         )}
-                        {nm.is_overdue && (
+                        {ua.is_overdue && (
                           <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                             style={{ background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Overdue</span>
                         )}
                       </div>
                       <p className="mt-0.5 truncate text-[12px]" style={{ color: "#1F2937" }}>
-                        {nm.description || "—"}
+                        {ua.description || "—"}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10.5px]" style={{ color: "#64748B" }}>
                         <span style={{ fontWeight: 700, color: "#334155" }}>
-                          {nm.stage_number ? `${String(nm.stage_number).padStart(2, "0")} ${nm.stage}` : "unmapped"}
+                          {ua.stage_number ? `${String(ua.stage_number).padStart(2, "0")} ${ua.stage}` : "unmapped"}
                         </span>
-                        <span>· {nm.action_count} actions</span>
-                        {nm.capa_total > 0 && (
-                          <span>· CAPA {nm.capa_total - nm.capa_open}/{nm.capa_total}</span>
+                        <span>· {ua.action_count} actions</span>
+                        {ua.capa_total > 0 && (
+                          <span>· CAPA {ua.capa_total - ua.capa_open}/{ua.capa_total}</span>
                         )}
-                        {nm.station_name && <span>· {nm.station_name}</span>}
+                        {ua.station_name && <span>· {ua.station_name}</span>}
                       </div>
-                      {(nm.reported_by_name || nm.supervisor_name) && (
+                      {(ua.reported_by_name || ua.supervisor_name) && (
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           <Users className="h-3 w-3" style={{ color: "#A3AEC6" }} />
-                          {nm.reported_by_name && (
+                          {ua.reported_by_name && (
                             <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                               style={{ background: "#F1F5F9", color: "#475569" }}
-                              title={`Reported by ${nm.reported_by_name}`}>
-                              {nm.reported_by_name}
+                              title={`Reported by ${ua.reported_by_name}`}>
+                              {ua.reported_by_name}
                             </span>
                           )}
-                          {nm.supervisor_name && (
+                          {ua.supervisor_name && (
                             <span className="rounded px-1.5 py-0.5 text-[9.5px]"
                               style={{ background: "#F1F5F9", color: "#475569" }}
-                              title={`Supervisor ${nm.supervisor_name}`}>
-                              {nm.supervisor_name}
+                              title={`Supervisor ${ua.supervisor_name}`}>
+                              {ua.supervisor_name}
                             </span>
                           )}
                         </div>
@@ -251,7 +251,7 @@ export function NearMissTrackingPage() {
             </div>
           ) : !trail ? (
             <p className="py-10 text-center text-[12px]" style={{ color: "#94A3B8" }}>
-              Select a near miss to see every action recorded against it.
+              Select an unsafe act to see every action recorded against it.
             </p>
           ) : (
             <>
@@ -277,11 +277,19 @@ export function NearMissTrackingPage() {
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: "#64748B" }}>
                   <span>Reported {formatDateTime(trail.record.reported_at)}</span>
                   <span>{trail.record.closed_at ? `Closed ${formatDateTime(trail.record.closed_at)}` : "Not closed"}</span>
-                  {trail.record.potential_consequence && (
-                    <span>Could have been: <strong>{trail.record.potential_consequence.replace(/_/g, " ")}</strong></span>
+                  {trail.record.rule_violated && (
+                    <span>Rule violated: <strong>{trail.record.rule_violated}</strong></span>
+                  )}
+                  {trail.record.person_observed && (
+                    <span>Observed: <strong>{trail.record.person_observed}</strong></span>
                   )}
                   <span style={{ fontWeight: 700, color: "#334155" }}>{trail.total_actions} actions tracked</span>
                 </div>
+                {trail.record.corrective_advice_given && (
+                  <p className="mt-1 text-[11px]" style={{ color: "#64748B" }}>
+                    Corrective advice given on the spot: <strong>{trail.record.corrective_advice_given}</strong>
+                  </p>
+                )}
               </div>
 
               {trail.skipped_stages.length > 0 && (
@@ -321,7 +329,7 @@ export function NearMissTrackingPage() {
 
                 {trail.people.length === 0 ? (
                   <p className="mt-2 text-[11.5px]" style={{ color: "#B45309" }}>
-                    No employee is recorded against any action on this near miss.
+                    No employee is recorded against any action on this unsafe act.
                   </p>
                 ) : (
                   <div className="mt-2.5 grid gap-2 md:grid-cols-2">

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import {
-  getTrackedNearMisses, type StageKey, type TrackedNearMiss,
-} from "../../services/near-miss-trail.service";
+  getTrackedUnsafeActs, type StageKey, type TrackedUnsafeAct,
+} from "../../services/unsafe-act-trail.service";
 import { PRIORITY_COLOR, STAGE_ORDER, formatDateTime } from "../components/tracking/lifecycle";
-import { NearMissTabBar } from "../components/audits/NearMissTabBar";
+import { UnsafeActTabBar } from "../components/audits/UnsafeActTabBar";
 import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -13,20 +13,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 
 /**
- * Near miss register for the admin.
+ * Unsafe act register for the admin.
  *
- * Reads `/near-miss-trail`, the same source the lifecycle tracker uses, which
- * reads the same `near_misses` table the mobile app writes to. A near miss
+ * Reads `/unsafe-act-trail`, the same source the lifecycle tracker uses, which
+ * reads the same `unsafe_acts` table the mobile app writes to. An unsafe act
  * reported on a phone appears here as soon as it is submitted.
  *
- * This page previously read the legacy `/near-misss/` CRUD router, whose
- * response carries neither `severity` nor `workflow_status`. The mapper filled
- * the gaps by hardcoding `Severity: 'Medium'` on every row and deriving Status
- * from `capa_escalation` — a checkbox the *worker* ticks at report time, not
- * the workflow state. So the severity filter matched nothing real, every record
- * read as Open or Under Investigation regardless of where it actually was, and
- * the Closed count was permanently zero even with 130 closed records in the
- * table. Severity, status and stage below are now the record's own.
+ * Mirrors NearMissPage.tsx — same register shape, same eight-stage workflow,
+ * same backend factory (report_trail_factory.py), a different table.
  */
 
 const STAGE_TINT: Record<string, { bg: string; fg: string }> = {
@@ -53,8 +47,8 @@ const STATUS_LABEL: Record<string, string> = {
   closed: "Closed",
 };
 
-export function NearMissPage() {
-  const [records, setRecords] = useState<TrackedNearMiss[]>([]);
+export function UnsafeActPage() {
+  const [records, setRecords] = useState<TrackedUnsafeAct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<StageKey | "all">("all");
@@ -64,9 +58,9 @@ export function NearMissPage() {
     if (records.length === 0) setLoading(true);
     setError(null);
     try {
-      setRecords((await getTrackedNearMisses({ limit: 300 })).items);
+      setRecords((await getTrackedUnsafeActs({ limit: 300 })).items);
     } catch {
-      setError("Failed to load near miss records. Ensure the backend is running.");
+      setError("Failed to load unsafe act records. Ensure the backend is running.");
     } finally {
       setLoading(false);
     }
@@ -94,13 +88,13 @@ export function NearMissPage() {
   return (
     <div className="space-y-6">
       <EventFamilyTabBar />
-      <NearMissTabBar />
+      <UnsafeActTabBar />
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Near Miss</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Unsafe Act</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Every near miss on the eight-stage workflow, including those reported from the mobile app.
+            Every unsafe act on the eight-stage workflow, including those reported from the mobile app.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
@@ -151,7 +145,7 @@ export function NearMissPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            Near Misses ({visible.length})
+            Unsafe Acts ({visible.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -188,10 +182,8 @@ export function NearMissPage() {
                             {r.description || "—"}
                           </p>
                           <div className="flex flex-wrap gap-1.5 mt-0.5">
-                            {r.potential_consequence && (
-                              <span className="text-xs text-muted-foreground">
-                                Risk: {r.potential_consequence.replace(/_/g, " ")}
-                              </span>
+                            {r.act_type && (
+                              <span className="text-xs text-muted-foreground">{r.act_type}</span>
                             )}
                             {r.is_hipo && (
                               <span className="text-[10px] font-bold text-red-600">HIGH POTENTIAL</span>

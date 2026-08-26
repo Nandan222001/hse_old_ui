@@ -13,6 +13,7 @@ import {
   type ChecklistTemplate,
 } from '../../services/checklists.service';
 import { useAuth } from '../context/AuthContext';
+import { SettingsFamilyTabBar } from '../components/audits/SettingsFamilyTabBar';
 
 const ROLE_OPTIONS = ['Admin', 'HSE Manager', 'Supervisor', 'Site Inspector', 'Site Engineer', 'Auditor'];
 
@@ -385,6 +386,7 @@ export function ChecklistPage() {
 
   return (
     <div className="space-y-6">
+      <SettingsFamilyTabBar />
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
