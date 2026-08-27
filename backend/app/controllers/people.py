@@ -142,11 +142,17 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     # the exact same tone as one scoring "Highly Effective".
     supervisor_tone = "green" if supervisor_score >= 90 else ("amber" if supervisor_score >= 70 else "red")
 
+    # Full 52-week history — the frontend's period toggle (10W/26W/52W) slices
+    # the tail of this same array client-side rather than re-querying, so
+    # switching windows is instant. Each point carries both a short display
+    # label and the real ISO date, so the frontend can build an exact range
+    # caption for whatever slice is selected.
+    FATIGUE_WEEKS = 52
     latest_shift_date = _of(db.query(func.max(ShiftSchedule.shift_date)), ShiftSchedule, org_id).scalar()
     fatigue_trend: list = []
     if latest_shift_date:
         window_end = latest_shift_date + timedelta(days=1)
-        window_start = window_end - timedelta(weeks=10)
+        window_start = window_end - timedelta(weeks=FATIGUE_WEEKS)
         shift_rows = (
             _of(
                 db.query(ShiftSchedule.shift_date, ShiftSchedule.actual_hours_worked)
@@ -165,19 +171,35 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             bucket = weekly.setdefault(week_index, {"normal": 0.0, "overtime": 0.0})
             bucket["normal"] += normal
             bucket["overtime"] += overtime
+        # Each point is labelled with the calendar date its week starts on
+        # (not a bare "1".."10" index) — the client flagged that a viewer had
+        # no way to tell whether "week 3" meant daily, weekly, or monthly
+        # buckets, let alone which weeks were being shown.
         fatigue_trend = [
             {
-                "week": str(i + 1),
+                "week": (window_start + timedelta(weeks=i)).strftime("%d %b"),
+                "week_start": (window_start + timedelta(weeks=i)).isoformat(),
                 "normal": round(weekly.get(i, {"normal": 0.0})["normal"]),
                 "overtime": round(weekly.get(i, {"overtime": 0.0})["overtime"]),
             }
-            for i in range(10)
+            for i in range(FATIGUE_WEEKS)
         ]
+    fatigue_trend_range = ""
+    if fatigue_trend:
+        last_week_end = date.fromisoformat(fatigue_trend[-1]["week_start"]) + timedelta(days=6)
+        fatigue_trend_range = (
+            f"Weekly · last {FATIGUE_WEEKS} weeks "
+            f"({fatigue_trend[0]['week_start']} – {last_week_end.isoformat()})"
+        )
 
 
+    # Full 12-month history — same client-side-slicing approach as
+    # fatigue_trend above (see comment there): the frontend's period toggle
+    # (6M/12M) slices the tail of this array rather than re-querying.
+    TOOLBOX_MONTHS = 12
     latest_walk_date = _of(db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id).scalar()
     walk_anchor = (latest_walk_date.date() if latest_walk_date else today)
-    eight_months_ago = _add_months(walk_anchor, -7)
+    months_ago = _add_months(walk_anchor, -(TOOLBOX_MONTHS - 1))
     toolbox_rows = (
         _of(
             db.query(
@@ -186,7 +208,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
                 func.count(SafetyWalk.id).label("cnt"),
             ).filter(
                 SafetyWalk.inspection_date_time.isnot(None),
-                SafetyWalk.inspection_date_time >= eight_months_ago,
+                SafetyWalk.inspection_date_time >= months_ago,
             ),
             SafetyWalk, org_id,
         )
@@ -196,12 +218,22 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
     )
     toolbox_counts = {(int(r.yr), int(r.mo)): r.cnt for r in toolbox_rows}
     toolbox_trend = []
-    for i in range(8):
-        bucket_date = _add_months(eight_months_ago, i)
+    for i in range(TOOLBOX_MONTHS):
+        bucket_date = _add_months(months_ago, i)
+        # "'26" suffix so a window spanning a year boundary (e.g. Nov-Feb)
+        # never reads as ambiguous — same client note as the fatigue chart:
+        # a bare month name doesn't say which year, or how many months.
         toolbox_trend.append({
-            "month": MONTH_NAMES[bucket_date.month - 1],
+            "month": f"{MONTH_NAMES[bucket_date.month - 1]} '{bucket_date.year % 100:02d}",
+            "month_start": bucket_date.isoformat(),
             "meetings": toolbox_counts.get((bucket_date.year, bucket_date.month), 0),
         })
+    first_bucket = _add_months(months_ago, 0)
+    last_bucket = _add_months(months_ago, TOOLBOX_MONTHS - 1)
+    toolbox_trend_range = (
+        f"Monthly · last {TOOLBOX_MONTHS} months ({MONTH_NAMES[first_bucket.month - 1]} {first_bucket.year} – "
+        f"{MONTH_NAMES[last_bucket.month - 1]} {last_bucket.year})"
+    )
 
     role_headcount = dict(
         db.query(Role.role_name, func.count(Employee.id))
@@ -375,7 +407,9 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             "change": f"{'▲' if supervisor_tone != 'red' else '▼'} {supervisor_score}%",
         },
         "fatigue_trend": fatigue_trend,
+        "fatigue_trend_range": fatigue_trend_range,
         "toolbox_trend": toolbox_trend,
+        "toolbox_trend_range": toolbox_trend_range,
         "high_risk_roles": high_risk_roles,
         "training_expiry": training_expiry,
         "expiring_soon_count": expiring_soon_count,

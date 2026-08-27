@@ -1,25 +1,14 @@
 import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer, PieChart, Pie, Cell,
+  ResponsiveContainer,
 } from "recharts";
-import { AlertTriangle, Sparkles, TrendingUp, Loader2 } from "lucide-react";
+import { AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   getVendorSummary,
   type VendorSummary,
-  type CapaItem,
-  type OpenAction,
 } from "../../services/vendors.service";
-
-// Same High/Medium/Low vocabulary the dashboard's contractor_risk_label
-// panel colors by (DashboardPage.tsx) — one severity mapping for both
-// screens instead of each page re-deriving its own numeric threshold.
-const RISK_LABEL_COLOR: Record<string, { text: string; bg: string; border: string }> = {
-  High:   { text: "#B91C1C", bg: "#FFF1F2", border: "#FCA5A5" },
-  Medium: { text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
-  Low:    { text: "#15803D", bg: "#F0FDF4", border: "#86EFAC" },
-};
 
 // ── Shared card wrapper ───────────────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -47,70 +36,38 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-// ── Status pill ───────────────────────────────────────────────────────────────
-type PillStatus = CapaItem["status"] | OpenAction["due"];
-
-function StatusPill({ status }: { status: PillStatus }) {
-  let bg = "#F1F5F9", color = "#64748B";
-  if (status === "Closed")                              { bg = "#DCFCE7"; color = "#15803D"; }
-  else if (status === "In Progress")                   { bg = "#FEF3C7"; color = "#B45309"; }
-  else if (status === "Due Today" || status === "Overdue") { bg = "#FEE2E2"; color = "#B91C1C"; }
-  else if (status === "Due Next Week" || status === "Due This Week") { bg = "#FEF3C7"; color = "#B45309"; }
-
-  return (
-    <span className="text-[10px] px-2.5 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap"
-      style={{ background: bg, color, fontWeight: 700 }}>
-      {status}
-    </span>
-  );
-}
-
-// ── Alert card (tinted, left border) ─────────────────────────────────────────
-function AlertCard({
-  title, tint, accent, children, ai = false,
+// ── Module 5 KPI card — client's own formula in the subtitle, not a
+// re-classification of it ("Needs Attention"-style labels caused the same
+// complaint on the Compliance page — see analytics.py's compliance_label). ──
+function KpiCard({
+  title, value, unit, note, tone,
 }: {
-  title: string; tint: string; accent: string;
-  children: React.ReactNode; ai?: boolean;
+  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral";
 }) {
+  const color = value === null ? "#9CA3AF"
+    : tone === "good" ? "#166534" : tone === "warn" ? "#B45309" : tone === "bad" ? "#B91C1C" : "#111827";
   return (
-    <div
-      className="rounded-2xl border p-4 shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
-      style={{ background: tint, borderColor: accent + "55", borderLeftWidth: 3, borderLeftColor: accent }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: accent }} />
-          <span className="text-[14px]" style={{ color: accent, fontWeight: 700 }}>{title}</span>
-        </div>
-        {ai && (
-          <div className="flex items-center gap-1 rounded-full px-2 py-0.5" style={{ background: "#EEF2FF" }}>
-            <Sparkles className="w-3 h-3" style={{ color: "#4F46E5" }} />
-            <span className="text-[9px]" style={{ color: "#4F46E5", fontWeight: 700 }}>AI</span>
-          </div>
-        )}
+    <Card>
+      <CardTitle>{title}</CardTitle>
+      <div className="text-[40px] leading-none" style={{ color, fontWeight: 700 }}>
+        {value === null ? "N/A" : `${value}${unit}`}
       </div>
-      {children}
-    </div>
+      <p className="mt-2 text-[11px] leading-snug" style={{ color: "#9CA3AF" }}>{note}</p>
+    </Card>
   );
 }
 
-function AlertRow({ left, right }: { left: string; right: string }) {
+function StatusPill({ text, tone }: { text: string; tone: "green" | "amber" | "red" | "slate" }) {
+  const map = {
+    green: { bg: "#DCFCE7", color: "#166534" },
+    amber: { bg: "#FEF3C7", color: "#B45309" },
+    red: { bg: "#FEE2E2", color: "#B91C1C" },
+    slate: { bg: "#F1F5F9", color: "#64748B" },
+  }[tone];
   return (
-    <div className="flex items-center justify-between py-1.5 border-b last:border-0"
-      style={{ borderColor: "rgba(0,0,0,0.06)" }}>
-      <span className="text-[12px] truncate mr-2" style={{ color: "#374151", fontWeight: 500 }}>{left}</span>
-      <span className="text-[11px] flex-shrink-0" style={{ color: "#6B7280" }}>{right}</span>
-    </div>
-  );
-}
-
-function TrackingRow({ label, status }: { label: string; status: PillStatus }) {
-  return (
-    <div className="flex items-center justify-between py-1.5 border-b last:border-0"
-      style={{ borderColor: "#F1F5F9" }}>
-      <span className="text-[12px] truncate mr-3" style={{ color: "#374151", fontWeight: 500 }}>{label}</span>
-      <StatusPill status={status} />
-    </div>
+    <span className="text-[10px] px-2.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: map.bg, color: map.color, fontWeight: 700 }}>
+      {text}
+    </span>
   );
 }
 
@@ -118,6 +75,13 @@ function TrackingRow({ label, status }: { label: string; status: PillStatus }) {
 function Skeleton({ h = "h-4" }: { h?: string }) {
   return <div className={`${h} rounded-lg animate-pulse`} style={{ background: "#F1F5F9" }} />;
 }
+
+const PREQUAL_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
+  approved: "green",
+  conditional: "amber",
+  barred: "red",
+  pending: "slate",
+};
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function VendorsPage() {
@@ -137,9 +101,9 @@ export function VendorsPage() {
     return (
       <div className="space-y-5">
         <div><Skeleton h="h-7" /><div className="mt-2"><Skeleton h="h-4" /></div></div>
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {[...Array(8)].map((_, i) => (
-            <Card key={i}><Skeleton h="h-32" /></Card>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}><Skeleton h="h-24" /></Card>
           ))}
         </div>
       </div>
@@ -151,11 +115,44 @@ export function VendorsPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertTriangle className="w-10 h-10 mx-auto mb-2" style={{ color: "#EF4444" }} />
-          <p className="text-[14px]" style={{ color: "#6B7280" }}>{error || "No data available"}</p>
+          <p className="text-[14px]" style={{ color: "#6B7280" }}>
+            {error || "No data available"}
+          </p>
         </div>
       </div>
     );
   }
+
+  const kpis = data.kpis ?? {
+    contractor_trir: {
+      value: null,
+      contractor_injuries: 0,
+      contractor_hours: 0,
+      note: "No KPI data available yet",
+    },
+    induction_compliance_pct: {
+      value: null,
+      valid: 0,
+      total: 0,
+      note: "No KPI data available yet",
+    },
+    incident_contribution_pct: {
+      value: null,
+      contractor_injuries: 0,
+      total_site_injuries: 0,
+      note: "No KPI data available yet",
+    },
+    safety_score: {
+      value: null,
+      company_count: 0,
+      note: "No KPI data available yet",
+    },
+  };
+  const exposureHours = data.exposure_hours ?? [];
+  const atRiskWorkers = data.at_risk_workers ?? [];
+  const register = data.register ?? [];
+  const totalContractors = data.total_contractors ?? 0;
+  const expiringSoonCount = data.expiring_soon_count ?? 0;
 
   return (
     <div className="space-y-5">
@@ -163,216 +160,144 @@ export function VendorsPage() {
       <div>
         <h1 className="text-[22px]" style={{ color: "#0A0A0A", fontWeight: 700 }}>Vendors</h1>
         <p className="mt-0.5 text-[13px]" style={{ color: "#6B7280" }}>
-          Welcome, {user?.name ?? "User"} — Contractor &amp; Vendor Safety Performance
+          Welcome, {user?.name ?? "User"} — Module 5: Contractors &amp; Vendors, {totalContractors} contractor{totalContractors !== 1 ? "s" : ""} registered
         </p>
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {/* Module 5 KPIs — same four the client's own spec defines */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="Contractor TRIR"
+          value={kpis.contractor_trir.value}
+          unit=""
+          note={`${kpis.contractor_trir.contractor_injuries} injuries × 200,000 ÷ ${kpis.contractor_trir.contractor_hours.toLocaleString()} hrs. ${kpis.contractor_trir.note}`}
+          tone={kpis.contractor_trir.value === null ? "neutral" : kpis.contractor_trir.value === 0 ? "good" : "warn"}
+        />
+        <KpiCard
+          title="Induction Compliance"
+          value={kpis.induction_compliance_pct.value}
+          unit="%"
+          note={`${kpis.induction_compliance_pct.valid} of ${kpis.induction_compliance_pct.total} inductions valid today. ${kpis.induction_compliance_pct.note}`}
+          tone={
+            kpis.induction_compliance_pct.value === null ? "neutral"
+              : kpis.induction_compliance_pct.value >= 90 ? "good"
+              : kpis.induction_compliance_pct.value >= 60 ? "warn" : "bad"
+          }
+        />
+        <KpiCard
+          title="Incident Contribution"
+          value={kpis.incident_contribution_pct.value}
+          unit="%"
+          note={`${kpis.incident_contribution_pct.contractor_injuries} of ${kpis.incident_contribution_pct.total_site_injuries} site injuries. ${kpis.incident_contribution_pct.note}`}
+          tone={kpis.incident_contribution_pct.value === null ? "neutral" : kpis.incident_contribution_pct.value > 30 ? "bad" : "good"}
+        />
+        <KpiCard
+          title="Contractor Safety Score"
+          value={kpis.safety_score.value}
+          unit="/100"
+          note={`Averaged across ${kpis.safety_score.company_count} companies. ${kpis.safety_score.note}`}
+          tone={
+            kpis.safety_score.value === null ? "neutral"
+              : kpis.safety_score.value >= 75 ? "good"
+              : kpis.safety_score.value >= 60 ? "warn" : "bad"
+          }
+        />
+      </div>
 
-        {/* ── LEFT COLUMN ── */}
-        <div className="space-y-5">
-          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>
-            Left Panel &amp; Compliance
-          </div>
-
-          {/* Risk Score */}
-          <Card>
-            <CardTitle>Contractor Risk Score</CardTitle>
-            <div className="flex items-end gap-3">
-              <span
-                className="text-[48px] leading-none"
-                style={{
-                  color: data.risk_score.has_contractors === false
-                    ? "#111827"
-                    : RISK_LABEL_COLOR[data.risk_score.label]?.text ?? "#111827",
-                  fontWeight: 700,
-                }}
-              >
-                {data.risk_score.has_contractors === false ? "N/A" : `${data.risk_score.value}/10`}
-              </span>
-              {data.risk_score.has_contractors !== false && (
-                <span
-                  className="mb-2 rounded-full px-2.5 py-1 text-[12px]"
-                  style={{
-                    background: RISK_LABEL_COLOR[data.risk_score.label]?.bg ?? "#F1F5F9",
-                    color: RISK_LABEL_COLOR[data.risk_score.label]?.text ?? "#475569",
-                    fontWeight: 700,
-                  }}
-                >
-                  {data.risk_score.label}
-                </span>
-              )}
-              {data.risk_score.delta !== null && (
-                <div className="mb-2 flex items-center gap-1 rounded-full px-2.5 py-1"
-                  style={{ background: data.risk_score.up ? "#DCFCE7" : "#FEE2E2" }}>
-                  <TrendingUp className="w-3.5 h-3.5" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444" }} />
-                  <span className="text-[13px]" style={{ color: data.risk_score.up ? "#16A34A" : "#EF4444", fontWeight: 700 }}>
-                    {data.risk_score.delta > 0 ? "+" : ""}{data.risk_score.delta}
-                  </span>
-                </div>
-              )}
-            </div>
-            <p className="mt-1 text-[12px]" style={{ color: "#6B7280" }}>
-              Based on {data.total_contractors} contractor{data.total_contractors !== 1 ? "s" : ""} tracked
-            </p>
-            <p className="mt-1 text-[11px]" style={{ color: "#9CA3AF" }}>
-              Estimate derived from the Employment_Type field, not an audited contractor safety record — treat as indicative only.
-            </p>
-          </Card>
-
-          {/* Compliance donut */}
-          <Card>
-            <CardTitle>Contractor Compliance</CardTitle>
-            {data.total_contractors === 0 ? (
-              <EmptyState text="No contractor employees found" />
-            ) : (
-              <div className="flex items-center gap-4">
-                <div className="relative flex-shrink-0">
-                  <PieChart width={120} height={120}>
-                    <Pie data={data.compliance} cx={55} cy={55}
-                      innerRadius={36} outerRadius={55} dataKey="value" strokeWidth={0}>
-                      {data.compliance.map((e, i) => <Cell key={i} fill={e.color} />)}
-                    </Pie>
-                  </PieChart>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-[18px] leading-none" style={{ color: "#111827", fontWeight: 700 }}>
-                      {data.total_contractors}
-                    </span>
-                    <span className="text-[9px] text-center leading-tight mt-0.5" style={{ color: "#6B7280" }}>
-                      Total<br />contractors
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2.5 flex-1">
-                  {data.compliance.map((item) => (
-                    <div key={item.name} className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: item.color }} />
-                      <span className="text-[12px] flex-1" style={{ color: "#374151" }}>{item.name}</span>
-                      <span className="text-[12px]" style={{ color: "#111827", fontWeight: 600 }}>{item.value}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="mt-2 text-[11px]" style={{ color: "#9CA3AF" }}>
-              Based on induction date and incident history — not a formal induction/compliance audit.
-            </p>
-          </Card>
-
-          {/* Exposure Hours bar chart */}
-          <Card>
-            <CardTitle>Contractor Exposure Hours</CardTitle>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data.exposure_hours} margin={{ top: 16, right: 8, bottom: 0, left: -16 }}>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.4fr_1fr]">
+        {/* Exposure Hours */}
+        <Card>
+          <CardTitle>Contractor Exposure Hours</CardTitle>
+          {exposureHours.length === 0 ? (
+            <EmptyState text="No contractor hours logged" />
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={exposureHours} margin={{ top: 16, right: 8, bottom: 0, left: -16 }}>
                 <CartesianGrid stroke="#E2E8F0" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: "#475569", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#475569", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12 }}
-                  labelStyle={{ fontWeight: 600, color: "#111827" }}
-                />
-                <ReferenceLine
-                  y={data.threshold}
-                  stroke="#EF4444"
-                  strokeDasharray="5 3"
-                  strokeWidth={1.5}
-                  label={{ value: "Threshold", position: "insideTopRight", fontSize: 10, fill: "#EF4444", fontWeight: 600, dy: -4 }}
-                />
+                <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12 }} labelStyle={{ fontWeight: 600, color: "#111827" }} />
                 <Bar dataKey="hours" fill="#64748B" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </Card>
+          )}
+          <p className="mt-2 text-[11px]" style={{ color: "#9CA3AF" }}>
+            Trailing 12 months, real logged hours per contractor company.
+          </p>
+        </Card>
 
-          {/* Certifications */}
-          <Card>
-            <CardTitle>Competency / Certifications</CardTitle>
-            {data.certifications.every(c => c.pct === 0) ? (
-              <EmptyState text="No training program data available" />
-            ) : (
-              <div className="space-y-3">
-                {data.certifications.map((item) => (
-                  <div key={item.label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[12px]" style={{ color: "#374151", fontWeight: 500 }}>{item.label}</span>
-                      <span className="text-[12px]" style={{ color: "#111827", fontWeight: 700 }}>{item.pct}%</span>
-                    </div>
-                    <div className="h-2 rounded-full" style={{ background: "#E2E8F0" }}>
-                      <div
-                        className="h-2 rounded-full"
-                        style={{ width: `${item.pct}%`, background: "linear-gradient(90deg,#4F46E5,#818CF8)" }}
-                      />
+        {/* Induction status */}
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <CardTitle>Inductions Needing Attention</CardTitle>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" style={{ color: "#94A3B8" }} />
+              <span className="text-[11px]" style={{ color: "#94A3B8" }}>{expiringSoonCount} expiring within 30 days</span>
+            </div>
+          </div>
+          {atRiskWorkers.length === 0 ? (
+            <EmptyState text="No expired or soon-to-expire inductions" />
+          ) : (
+            <div className="space-y-2">
+              {atRiskWorkers.map((w, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border px-3 py-2" style={{ borderColor: "#EEF2F7", background: "#FBFCFE" }}>
+                  <div className="min-w-0">
+                    <div className="text-[12px] truncate" style={{ color: "#0F172A", fontWeight: 600 }}>{w.full_name}</div>
+                    <div className="text-[11px] truncate" style={{ color: "#6B7280" }}>{w.company_name}{w.badge_no ? ` · ${w.badge_no}` : ""}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <StatusPill text={w.status} tone={w.status === "Expired" ? "red" : "amber"} />
+                    <div className="mt-1 text-[10px]" style={{ color: "#9CA3AF" }}>
+                      {w.induction_valid_until ? new Date(w.induction_valid_until).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/* ── RIGHT COLUMN ── */}
-        <div className="space-y-5">
-          <div className="text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>
-            Breaches &amp; Tracking
-          </div>
-
-          {/* High Risk Contractors */}
-          <AlertCard title="High Risk Contractors (Predictive)" tint="#FEF2F2" accent="#EF4444" ai>
-            {data.high_risk.length === 0
-              ? <EmptyState text="No high-risk contractors found" />
-              : data.high_risk.map((c) => (
-                  <AlertRow key={c.name} left={c.name} right={`${c.risk}% Risk`} />
-                ))}
-          </AlertCard>
-
-          {/* Permit Violations */}
-          <AlertCard title="Permit Violations" tint="#FFFBEB" accent="#F59E0B">
-            {data.permit_violations.length === 0
-              ? <EmptyState text="No permit violations found" />
-              : data.permit_violations.map((c, i) => (
-                  <AlertRow key={i} left={`${c.name}: ${c.desc}`} right={c.time} />
-                ))}
-          </AlertCard>
-
-          {/* Repeat Breaches */}
-          <AlertCard title="Repeat Breaches" tint="#FFFBEB" accent="#F59E0B">
-            {data.repeat_breaches.length === 0
-              ? <EmptyState text="No repeat breaches found" />
-              : data.repeat_breaches.map((c) => (
-                  <AlertRow key={c.name} left={c.name} right={c.breach} />
-                ))}
-          </AlertCard>
-
-          {/* Watchlist */}
-          <AlertCard title="Contractor Watchlist" tint="#FEF2F2" accent="#EF4444">
-            {data.watchlist.length === 0
-              ? <EmptyState text="No contractors on watchlist" />
-              : data.watchlist.map((c) => (
-                  <AlertRow key={c.name} left={c.name} right={`${c.risk}% Risk`} />
-                ))}
-          </AlertCard>
-
-          {/* CAPA Closure */}
-          <Card>
-            <CardTitle>Contractor CAPA Closure</CardTitle>
-            {data.capa_items.length === 0
-              ? <EmptyState text="No CAPA actions found" />
-              : data.capa_items.map((item) => (
-                  <TrackingRow key={item.label} label={item.label} status={item.status} />
-                ))}
-          </Card>
-
-          {/* Open Actions */}
-          <Card>
-            <CardTitle>Open Actions</CardTitle>
-            {data.open_actions.length === 0
-              ? <EmptyState text="No open actions" />
-              : data.open_actions.map((item, i) => (
-                  <TrackingRow key={i} label={item.label} status={item.due} />
-                ))}
-          </Card>
-        </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
+
+        {/* Contractor Register */}
+        <Card>
+          <CardTitle>Contractor Register</CardTitle>
+          {register.length === 0 ? (
+            <EmptyState text="No contractor companies registered" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+              <thead>
+                <tr style={{ background: "#F8FAFC" }}>
+                  {["Company", "Service Type", "Prequalification", "ISO 45001", "Safety Score", "Contract", "Status"].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-[11px] uppercase" style={{ color: "#64748B", fontWeight: 700 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {register.map((c) => (
+                  <tr key={c.id} style={{ borderTop: "1px solid #E2E8F0" }}>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: "#0F172A", fontWeight: 600 }}>{c.company_name}</td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: "#334155" }}>{c.service_type ?? "—"}</td>
+                    <td className="px-3 py-2"><StatusPill text={c.prequalification_status} tone={PREQUAL_TONE[c.prequalification_status] ?? "slate"} /></td>
+                    <td className="px-3 py-2">
+                      <StatusPill text={c.iso_45001_certified ? "Certified" : "Not Certified"} tone={c.iso_45001_certified ? "green" : "slate"} />
+                    </td>
+                    <td className="px-3 py-2 text-[13px]" style={{ color: "#0F172A", fontWeight: 600 }}>
+                      {c.safety_score !== null ? `${c.safety_score}/100` : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-[12px]" style={{ color: "#6B7280" }}>
+                      {c.contract_start_date ?? "—"} → {c.contract_end_date ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusPill text={c.active ? "Active" : "Suspended"} tone={c.active ? "green" : "red"} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

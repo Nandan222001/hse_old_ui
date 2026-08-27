@@ -22,6 +22,7 @@ from app.models.policy import Policy
 from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
 from app.models.working_station import WorkingStation
+from app.services.audit_readiness import compute_audit_readiness
 from app.services.rating_labels import get_rating_labels, label_and_tone
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
@@ -520,9 +521,9 @@ def get_all_permits(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Paginated permit list backing the Equipment Certification page's
-    "Active Permit Watchlist" table — every permit for this org, not a
-    client-side-fabricated row count. See EquipmentCertificationPage.tsx."""
+    """Paginated permit list backing the "Total Permit List" table on both
+    ActionsPage.tsx and EquipmentCertificationPage.tsx — every permit for
+    this org, not a client-side-fabricated row count."""
     org_id = current_user.org_id
 
     base = (
@@ -1066,30 +1067,10 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         if distinct_hazard_categories else 0
     )
 
-    # Blends the legacy SafetyWalk.compliance_rating (0-5, web/Excel-imported) with
-    # the mobile Auditor app's submitted Audit.compliance_score (already 0-100) —
-    # the only source mobile ever writes to. See dashboard.py's leading-indicators
-    # for the same formula.
-    avg_compliance = _org_filter(
-        db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id
-    ).scalar()
-    walk_count_with_rating = _org_filter(
-        db.query(SafetyWalk).filter(SafetyWalk.compliance_rating.isnot(None)), SafetyWalk, org_id
-    ).count()
-    avg_audit_compliance = (
-        _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
-        .filter(Audit.compliance_score.isnot(None))
-        .scalar()
-    )
-    audit_count_with_score = (
-        _org_filter(db.query(Audit), Audit, org_id).filter(Audit.compliance_score.isnot(None)).count()
-    )
-    readiness_components = []
-    if avg_compliance is not None:
-        readiness_components.append(float(avg_compliance) / 5 * 100)
-    if avg_audit_compliance is not None:
-        readiness_components.append(float(avg_audit_compliance))
-    audit_readiness_pct = round(sum(readiness_components) / len(readiness_components)) if readiness_components else 0
+    # Single shared implementation, see app/services/audit_readiness.py (same
+    # score dashboard.py's leading-indicators panel shows).
+    audit_readiness = compute_audit_readiness(db, org_id)
+    audit_readiness_pct = audit_readiness.score
 
     compliance_score = round((permit_compliance_pct + legal_register_pct + audit_readiness_pct) / 3)
     legal_label = "High" if legal_register_pct >= 85 else ("Medium" if legal_register_pct >= 60 else "Low")
@@ -1103,11 +1084,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
         f"Blend of permit closure ({permit_compliance_pct}%), policy coverage "
         f"({legal_register_pct}%) & audit readiness ({audit_readiness_pct}%)"
     )
-    audit_label = (
-        f"From {walk_count_with_rating} rated safety walk{'s' if walk_count_with_rating != 1 else ''} "
-        f"and {audit_count_with_score} scored audit{'s' if audit_count_with_score != 1 else ''}"
-        if (walk_count_with_rating or audit_count_with_score) else "No rated safety walks or scored audits yet"
-    )
+    audit_label = audit_readiness.note
 
     # ── Previous-period comparison ───────────────────────────────────────────
     # Client correction: "not previous year, previous period" — the preceding

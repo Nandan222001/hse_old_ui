@@ -225,12 +225,16 @@ def _fetch_vendor(current_user: CurrentUser) -> Optional[str]:
     db = SessionLocal()
     try:
         vendor = get_vendor_summary(db=db, current_user=current_user)
-        rscore = vendor["risk_score"]
-        rscore_text = "N/A (no contractors)" if not rscore.get("has_contractors", True) else f"{rscore['value']}/10"
+        k = vendor["kpis"]
+        safety_score = k["safety_score"]["value"]
+        induction_pct = k["induction_compliance_pct"]["value"]
+        trir = k["contractor_trir"]["value"]
         return (
             "\n[Contractors]\n"
-            f"Contractors tracked: {vendor['total_contractors']} | Contractor risk score: {rscore_text}\n"
-            f"Compliance breakdown: " + ", ".join(f"{c['name']} {c['value']}%" for c in vendor.get("compliance", []))
+            f"Contractors registered: {vendor['total_contractors']} | "
+            f"Safety score: {'N/A' if safety_score is None else f'{safety_score}/100'} | "
+            f"Induction compliance: {'N/A' if induction_pct is None else f'{induction_pct}%'} | "
+            f"Contractor TRIR: {'N/A' if trir is None else trir}"
         )
     except Exception as exc:
         logger.warning("Briefing: vendor summary failed: %s", exc)

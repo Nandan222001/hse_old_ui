@@ -1,5 +1,4 @@
-import re
-from typing import List, Dict, Tuple, Set, Optional
+from typing import List, Optional
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
@@ -7,58 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, CurrentUser
-from app.models.capa_action import CapaAction
+from app.models.contractor import ContractorCompany, ContractorHours, ContractorScorecard, ContractorWorker
 from app.models.employee import Employee
 from app.models.incident import Incident
-from app.models.permit_to_work import PermitToWork
-from app.models.training_program import TrainingProgram
-from app.models.competence import TrainingRecord
-from app.services.contractor_risk import compute_contractor_risk
-from app.utils.tenant import org_scoped_join
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
 
-MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def _due_label(d: Optional[date], today: date) -> str:
-    if d is None:
-        return "No Due Date"
-    delta = (d - today).days
-    if delta < 0:
-        return "Overdue"
-    if delta == 0:
-        return "Due Today"
-    if delta <= 7:
-        return "Due This Week"
-    if delta <= 14:
-        return "Due Next Week"
-    return f"Due {d.strftime('%d %b')}"
-
-
-def _capa_status(s: Optional[str]) -> str:
-    if s in ("Closed", "Completed", "Resolved"):
-        return "Closed"
-    return "In Progress"
-
-
-_FAKE_INCIDENT_REF_RE = re.compile(r"\s*\b(for|addressing)\s+INC-?\d+\b\.?", re.IGNORECASE)
-
-
-def _capa_label(capa) -> str:
-    """{capa_ref}: {description}, with the real incident reference in front when
-    known. Seed/legacy descriptions embed a made-up "INC00018"-style number
-    unrelated to the real incident_id — see DashboardPage.tsx for the same fix
-    on the web dashboard. Stripped here so it can't be mistaken for real data.
-
-    Uses the CAPA's own stored capa_ref rather than re-deriving "CAPA-{id}"
-    here — the two disagree once the id needs padding, which is how the same
-    action ends up shown under two different numbers on two screens."""
-    desc = (capa.description or "Action")
-    desc = _FAKE_INCIDENT_REF_RE.sub("", desc).strip() or "Action"
-    ref = f"INC-{capa.incident_id:05d} " if capa.incident_id else ""
-    capa_ref = capa.capa_ref or f"CAPA-{capa.id:06d}"
-    return f"{capa_ref}: {ref}{desc[:30]}"
+def _org_filter(query, model, org_id):
+    if org_id is not None:
+        return query.filter(model.organisation_id == org_id)
+    return query
 
 
 @router.get("/summary")
@@ -66,314 +26,195 @@ def get_vendor_summary(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
+    """Module 5 (Contractors & Vendors) — client's own KPI spec:
+
+        Contractor TRIR                    = contractor injuries x 200,000 / contractor hours
+        Contractor Induction Compliance %  = valid inductions / total inductions x 100
+        Contractor Incident Contribution % = contractor injuries / total site injuries x 100
+        Contractor Safety Score            = average of each company's own score (0-100)
+
+    Sourced from the real WF-08 contractor registry (contractor_companies /
+    contractor_workers / contractor_hours / contractor_scorecards,
+    app/models/contractor.py) rather than inferring "contractor" from an
+    Employee's employment_type field — that heuristic is still the only real
+    signal this app has for attributing an *incident* to a contractor (see
+    the TRIR/incident-contribution note below), but company-level facts
+    (register, inductions, hours, safety score) now come from the registry
+    that was actually built for them.
+
+    NOTE: the registry itself is currently the client's own Module 5 sample
+    data (SD_ContractorRegister / SD_ContractorInductions / SD_ContractorHours
+    in HSEIQ_Full_KPI_with_SampleData.xlsx), imported identically into every
+    org by backend/scripts/import_module5_contractor_sample.py. It is not yet
+    per-org real data — flag that to the client when demoing this page; once
+    a real contractor register is imported per org, these same queries will
+    reflect it with no code changes needed.
+    """
     org_id = current_user.org_id
     today = date.today()
-    nine_months_ago = today - timedelta(days=270)
 
-    # ── Contractors ──────────────────────────────────────────────────────────
-    contractors = (
-        db.query(Employee)
-        .filter(
+    companies = (
+        _org_filter(db.query(ContractorCompany), ContractorCompany, org_id)
+        .order_by(ContractorCompany.company_name)
+        .all()
+    )
+    company_ids = [c.id for c in companies]
+
+    # ── Contractor Safety Score — average of each company's latest scorecard ──
+    latest_scores: dict[int, float] = {}
+    if company_ids:
+        scorecard_rows = (
+            _org_filter(db.query(ContractorScorecard), ContractorScorecard, org_id)
+            .filter(ContractorScorecard.contractor_company_id.in_(company_ids))
+            .order_by(ContractorScorecard.period_year.desc(), ContractorScorecard.period_quarter.desc())
+            .all()
+        )
+        for row in scorecard_rows:
+            latest_scores.setdefault(row.contractor_company_id, float(row.score))
+    safety_score = (
+        round(sum(latest_scores.values()) / len(latest_scores), 1) if latest_scores else None
+    )
+
+    # ── Contractor Induction Compliance % ────────────────────────────────────
+    # Genuinely time-sensitive, unlike this app's "no incidents in the last 90
+    # days" class of bug elsewhere: an induction really does lapse the day its
+    # induction_valid_until passes, so literal today is the correct anchor —
+    # not a "latest activity in the data" one.
+    workers = _org_filter(db.query(ContractorWorker), ContractorWorker, org_id).all()
+    total_inductions = len(workers)
+    valid_inductions = sum(1 for w in workers if w.induction_valid_until and w.induction_valid_until >= today)
+    induction_compliance_pct = (
+        round(valid_inductions / total_inductions * 100, 1) if total_inductions else None
+    )
+    expiring_soon = [
+        w for w in workers
+        if w.induction_valid_until and today <= w.induction_valid_until <= today + timedelta(days=30)
+    ]
+    company_name_by_id = {c.id: c.company_name for c in companies}
+    # Most-recently-expired / soonest-to-expire first — the most actionable
+    # ones — not the longest-expired, which sorting purely ascending would surface.
+    at_risk_workers = sorted(
+        (w for w in workers if w.induction_valid_until and w.induction_valid_until < today + timedelta(days=30)),
+        key=lambda w: w.induction_valid_until,
+        reverse=True,
+    )[:6]
+    at_risk_rows = [
+        {
+            "full_name": w.full_name,
+            "company_name": company_name_by_id.get(w.contractor_company_id, "—"),
+            "badge_no": w.badge_no,
+            "induction_valid_until": w.induction_valid_until.isoformat() if w.induction_valid_until else None,
+            "status": "Expired" if w.induction_valid_until and w.induction_valid_until < today else "Expiring Soon",
+        }
+        for w in at_risk_workers
+    ]
+
+    # ── Contractor TRIR & Incident Contribution % ────────────────────────────
+    # The registry above has no link from a ContractorWorker to this app's
+    # Employee/Incident model (contractor_workers.badge_no is the client's own
+    # sample employee code, not a real employees.id) — same gap the client's
+    # own KPI spec flags ("recommend adding Contractor_Y_N flag to Incidents
+    # schema"). Employment_type is the only real signal this app has for
+    # attributing an incident to a contractor; contractor_hours (real, from
+    # the register) is the denominator instead of the old permit-derived guess.
+    contractor_employee_ids = [
+        r[0] for r in
+        db.query(Employee.id).filter(
             Employee.organisation_id == org_id,
             Employee.employment_type.ilike("%contractor%"),
-        )
+        ).all()
+    ]
+    contractor_injuries = (
+        db.query(Incident)
+        .filter(Incident.organisation_id == org_id, Incident.reported_by.in_(contractor_employee_ids))
+        .count()
+        if contractor_employee_ids else 0
+    )
+    total_site_injuries = _org_filter(db.query(Incident), Incident, org_id).count()
+
+    total_contractor_hours = int(
+        _org_filter(db.query(func.sum(ContractorHours.hours_worked)), ContractorHours, org_id)
+        .filter(ContractorHours.contractor_company_id.in_(company_ids) if company_ids else False)
+        .scalar() or 0
+    )
+    contractor_trir = (
+        round(contractor_injuries * 200_000 / total_contractor_hours, 2) if total_contractor_hours else None
+    )
+    incident_contribution_pct = (
+        round(contractor_injuries / total_site_injuries * 100, 1) if total_site_injuries else None
+    )
+
+    # ── Exposure Hours — trailing 12 months of real logged hours ────────────
+    hours_rows = (
+        _org_filter(db.query(ContractorHours), ContractorHours, org_id)
+        .filter(ContractorHours.contractor_company_id.in_(company_ids) if company_ids else False)
         .all()
     )
-    total = len(contractors)
-    contractor_ids = [c.id for c in contractors]
-
-    # ── Compliance breakdown ─────────────────────────────────────────────────
-    if total == 0:
-        compliant_pct = non_compliant_pct = pending_pct = 0
-    else:
-        # Non-compliant = contractors with incidents reported (all time, not just last 90 days)
-        # since incident data spans 2024-2025 and today is 2026 — using 90-day window would
-        # show 0 non-compliant because no recent incidents exist.
-        nc_ids: Set[int] = set()
-        if contractor_ids:
-            rows = (
-                db.query(Incident.reported_by)
-                .filter(
-                    Incident.organisation_id == org_id,
-                    Incident.reported_by.in_(contractor_ids),
-                )
-                .distinct()
-                .all()
-            )
-            nc_ids = {r[0] for r in rows}
-
-        # Pending = not inducted
-        pending_ids = {c.id for c in contractors if c.induction_date is None}
-        # Compliant = inducted AND no incident on record
-        compliant_ids = {
-            c.id for c in contractors
-            if c.id not in nc_ids and c.id not in pending_ids
-        }
-        compliant_pct     = round(len(compliant_ids) / total * 100)
-        non_compliant_pct = round(len(nc_ids)        / total * 100)
-        pending_pct       = max(0, 100 - compliant_pct - non_compliant_pct)
-
-    compliance = [
-        {"name": "Compliant",     "value": compliant_pct,     "color": "#22C55E"},
-        {"name": "Non-Compliant", "value": non_compliant_pct, "color": "#F59E0B"},
-        {"name": "Pending",       "value": pending_pct,       "color": "#CBD5E1"},
-    ]
-
-    # Risk score is computed below via the shared contractor_risk service.
-
-    # ── Exposure Hours per month (permits issued to contractors only) ───────
-    # Scoped to contractor_ids — an org-wide query here would title the chart
-    # "Contractor Exposure Hours" while actually counting every permit,
-    # contractor or not.
-    permit_rows = (
-        db.query(
-            func.month(PermitToWork.date_issued).label("m"),
-            func.sum(
-                func.coalesce(PermitToWork.number_of_workers, 1)
-                * func.coalesce(PermitToWork.duration_requested_hours, 8)
-            ).label("hours"),
-        )
-        .filter(
-            PermitToWork.organisation_id == org_id,
-            PermitToWork.date_issued >= nine_months_ago,
-            PermitToWork.issued_by.in_(contractor_ids) if contractor_ids else False,
-        )
-        .group_by(func.month(PermitToWork.date_issued))
-        .order_by(func.month(PermitToWork.date_issued))
-        .all()
-    )
-    exposure_hours = [
-        {"month": MONTH_ABBR[r.m - 1], "hours": int(r.hours or 0)}
-        for r in permit_rows
-    ]
-    if not exposure_hours:
-        exposure_hours = [{"month": m, "hours": 0} for m in MONTH_ABBR[:9]]
-
-    avg_h = sum(r["hours"] for r in exposure_hours) / max(len(exposure_hours), 1)
-    threshold = max(int(avg_h * 1.2), 100)
-
-    # ── Certifications — % of contractors with a valid pass on record ───────
-    # Previously this counted TrainingProgram *catalog* rows (org_id, name,
-    # duration...) grouped by name — since a program is defined once, count
-    # was always 1 and every bar always rendered exactly 100%, regardless of
-    # whether anyone had actually completed anything. TrainingRecord is the
-    # real per-employee completion table (employee_id, result, expires_at);
-    # this now measures the thing the card claims to measure.
-    certifications = []
-    if contractor_ids:
-        programs = (
-            db.query(TrainingProgram)
-            .filter(TrainingProgram.organisation_id == org_id)
-            .order_by(TrainingProgram.training_name)
-            .limit(4)
-            .all()
-        )
-        for prog in programs:
-            valid_count = (
-                db.query(func.count(func.distinct(TrainingRecord.employee_id)))
-                .filter(
-                    TrainingRecord.organisation_id == org_id,
-                    TrainingRecord.training_program_id == prog.id,
-                    TrainingRecord.employee_id.in_(contractor_ids),
-                    TrainingRecord.result == "pass",
-                    (TrainingRecord.expires_at.is_(None)) | (TrainingRecord.expires_at >= today),
-                )
-                .scalar() or 0
-            )
-            certifications.append({
-                "label": prog.training_name[:28],
-                "pct": round(valid_count / total * 100) if total else 0,
+    by_period: dict[tuple[int, int], int] = {}
+    for h in hours_rows:
+        key = (h.period_year, h.period_month)
+        by_period[key] = by_period.get(key, 0) + h.hours_worked
+    exposure_hours = []
+    if by_period:
+        latest_period = max(by_period)
+        for i in range(11, -1, -1):
+            month_index = latest_period[1] - 1 - i
+            year = latest_period[0] + month_index // 12
+            month = month_index % 12 + 1
+            if month <= 0:
+                year -= 1
+                month += 12
+            exposure_hours.append({
+                "month": MONTH_ABBR[month - 1],
+                "hours": by_period.get((year, month), 0),
             })
 
-    # ── High Risk Contractors ────────────────────────────────────────────────
-    high_risk: List[dict] = []
-    if contractor_ids:
-        hr_rows = (
-            db.query(
-                Employee.full_name,
-                func.count(Incident.id).label("cnt"),
-            )
-            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
-            .filter(
-                Employee.organisation_id == org_id,
-                Employee.id.in_(contractor_ids),
-                # All-time incidents — 90-day window gives 0 results for historical data
-            )
-            .group_by(Employee.id, Employee.full_name)
-            .order_by(func.count(Incident.id).desc())
-            .limit(5)
-            .all()
-        )
-        top = hr_rows[0].cnt if hr_rows else 1
-        high_risk = [
-            {"name": r.full_name, "risk": min(99, round(50 + r.cnt / max(top, 1) * 49))}
-            for r in hr_rows
-        ]
-
-    # ── Permit Violations (contractor-issued permits with deviation_reported = "Yes") ─
-    # Must stay scoped to contractor_ids — this is what feeds the Risk Score's
-    # violation penalty (see contractor_risk.py), so an unscoped org-wide list here
-    # let the widget show violations from non-contractor permits while the score
-    # (correctly counting 0 contractor violations) still read 10/10 — a perfect
-    # score displayed next to a violations list that didn't actually belong to it.
-    permit_violations: List[dict] = []
-    if contractor_ids:
-        pv_rows = (
-            db.query(Employee.full_name, PermitToWork.date_issued, PermitToWork.id)
-            .join(Employee, PermitToWork.issued_by == Employee.id)
-            .filter(
-                PermitToWork.organisation_id == org_id,
-                PermitToWork.deviation_reported == "Yes",
-                PermitToWork.issued_by.in_(contractor_ids),
-            )
-            .order_by(PermitToWork.date_issued.desc())
-            .limit(5)
-            .all()
-        )
-        permit_violations = [
-            {
-                "name": r.full_name,
-                "desc": f"PTW-{r.id:04d}: Deviation Reported",
-                "time": r.date_issued.strftime("%d %b %Y") if r.date_issued else "—",
-            }
-            for r in pv_rows
-        ]
-
-    # ── Risk Score — single shared implementation, see app/services/contractor_risk.py
-    # Guarantees the Vendors page always matches the Dashboard leading-indicators panel.
-    contractor_risk = compute_contractor_risk(db, org_id)
-    risk_score = contractor_risk.score_10
-    # Previous-period trend is not tracked yet. This used to be stamped 0.0,
-    # which reads as "unchanged" but rendered as a green "+0 / trending up"
-    # badge regardless of how bad the score actually was — a score of 0/10
-    # (the worst this scale produces) showed green here while the dashboard's
-    # own panel showed the same 0 as Extreme Risk. None here means the client
-    # hides the badge entirely instead of drawing a fabricated trend.
-    delta = None
-
-    # ── Repeat Breaches ──────────────────────────────────────────────────────
-    repeat_breaches: List[dict] = []
-    if contractor_ids:
-        rb_rows = (
-            db.query(
-                Employee.full_name,
-                func.count(Incident.id).label("cnt"),
-            )
-            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
-            .filter(
-                Employee.organisation_id == org_id,
-                Employee.id.in_(contractor_ids),
-            )
-            .group_by(Employee.id, Employee.full_name)
-            .having(func.count(Incident.id) > 1)
-            .order_by(func.count(Incident.id).desc())
-            .limit(5)
-            .all()
-        )
-        repeat_breaches = [
-            {"name": r.full_name, "breach": f"{r.cnt} Breach{'es' if r.cnt > 1 else ''}"}
-            for r in rb_rows
-        ]
-
-    # ── Watchlist (contractors with high-severity incidents) ─────────────────
-    watchlist: List[dict] = []
-    if contractor_ids:
-        wl_rows = (
-            db.query(
-                Employee.full_name,
-                func.count(Incident.id).label("cnt"),
-            )
-            .join(Incident, org_scoped_join(Incident.reported_by == Employee.id, Incident.organisation_id, org_id))
-            .filter(
-                Employee.organisation_id == org_id,
-                Employee.id.in_(contractor_ids),
-                # Match actual DB severity values: Fatal, Significant, Serious
-                func.lower(Incident.severity).in_(["fatal", "significant", "serious", "high", "critical", "major"]),
-            )
-            .group_by(Employee.id, Employee.full_name)
-            .order_by(func.count(Incident.id).desc())
-            .limit(5)
-            .all()
-        )
-        top_wl = wl_rows[0].cnt if wl_rows else 1
-        watchlist = [
-            {"name": r.full_name, "risk": min(99, round(70 + r.cnt / max(top_wl, 1) * 29))}
-            for r in wl_rows
-        ]
-
-    # ── CAPA Items ───────────────────────────────────────────────────────────
-    # Show CAPAs assigned to contractor employees first, then fall back to all org CAPAs
-    capa_q = db.query(CapaAction).filter(CapaAction.organisation_id == org_id)
-    if contractor_ids:
-        capa_q = capa_q.filter(CapaAction.responsible_person_id.in_(contractor_ids))
-    capa_rows = (
-        capa_q
-        .order_by(CapaAction.due_date.desc())
-        .limit(5)
-        .all()
-    )
-    # Fall back to all org CAPAs if no contractor-specific ones found
-    if not capa_rows:
-        capa_rows = (
-            db.query(CapaAction)
-            .filter(CapaAction.organisation_id == org_id)
-            .order_by(CapaAction.due_date.desc())
-            .limit(5)
-            .all()
-        )
-    capa_items = [
-        {"label": c.capa_ref or f"CAPA-{c.id:06d}", "status": _capa_status(c.status)}
-        for c in capa_rows
-    ]
-
-    # ── Open Actions ─────────────────────────────────────────────────────────
-    open_q = db.query(CapaAction).filter(
-        CapaAction.organisation_id == org_id,
-        CapaAction.status.notin_(["Closed", "Completed", "Resolved"]),
-    )
-    if contractor_ids:
-        open_q = open_q.filter(CapaAction.responsible_person_id.in_(contractor_ids))
-    open_rows_list = open_q.order_by(CapaAction.due_date).limit(5).all()
-    # Fall back to all org open actions if no contractor-specific ones
-    if not open_rows_list:
-        open_rows_list = (
-            db.query(CapaAction)
-            .filter(
-                CapaAction.organisation_id == org_id,
-                CapaAction.status.notin_(["Closed", "Completed", "Resolved"]),
-            )
-            .order_by(CapaAction.due_date)
-            .limit(5)
-            .all()
-        )
-    open_actions = [
+    # ── Register table ────────────────────────────────────────────────────────
+    register = [
         {
-            "label": _capa_label(r),
-            "due": _due_label(r.due_date, today),
+            "id": c.id,
+            "company_name": c.company_name,
+            "service_type": c.service_type,
+            "prequalification_status": c.prequalification_status,
+            "iso_45001_certified": bool(c.iso_45001_certified),
+            "active": not bool(c.suspended),
+            "contract_start_date": c.contract_start_date.isoformat() if c.contract_start_date else None,
+            "contract_end_date": c.contract_end_date.isoformat() if c.contract_end_date else None,
+            "last_safety_audit_date": c.last_safety_audit_date.isoformat() if c.last_safety_audit_date else None,
+            "safety_score": latest_scores.get(c.id),
         }
-        for r in open_rows_list
+        for c in companies
     ]
 
     return {
-        "risk_score":        {
-            "value": risk_score,
-            "delta": delta,
-            "up": None,
-            # High/Medium/Low from the same thresholds contractor_risk_label
-            # uses on the dashboard panel — the number no longer has to be
-            # re-interpreted per screen to know whether it's bad.
-            "label": contractor_risk.label,
-            "has_contractors": contractor_risk.has_contractors,
+        "total_contractors": len(companies),
+        "kpis": {
+            "contractor_trir": {
+                "value": contractor_trir,
+                "contractor_injuries": contractor_injuries,
+                "contractor_hours": total_contractor_hours,
+                "note": "Target: at or below site TRIR",
+            },
+            "induction_compliance_pct": {
+                "value": induction_compliance_pct,
+                "valid": valid_inductions,
+                "total": total_inductions,
+                "note": "Target: 100% at all times — an expired induction means the worker isn't permitted on site",
+            },
+            "incident_contribution_pct": {
+                "value": incident_contribution_pct,
+                "contractor_injuries": contractor_injuries,
+                "total_site_injuries": total_site_injuries,
+                "note": "Attributed via Employee.employment_type — the registry has no incident linkage yet",
+            },
+            "safety_score": {
+                "value": safety_score,
+                "company_count": len(latest_scores),
+                "note": "Target: 75+ average; any company below 60 needs review",
+            },
         },
-        "total_contractors": total,
-        "compliance":        compliance,
-        "exposure_hours":    exposure_hours,
-        "threshold":         threshold,
-        "certifications":    certifications,
-        "high_risk":         high_risk,
-        "permit_violations": permit_violations,
-        "repeat_breaches":   repeat_breaches,
-        "watchlist":         watchlist,
-        "capa_items":        capa_items,
-        "open_actions":      open_actions,
+        "exposure_hours": exposure_hours,
+        "expiring_soon_count": len(expiring_soon),
+        "at_risk_workers": at_risk_rows,
+        "register": register,
     }

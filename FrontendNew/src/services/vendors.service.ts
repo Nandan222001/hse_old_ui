@@ -1,68 +1,48 @@
 import axiosInstance from '../api/axiosInstance';
 
-export interface ComplianceSegment {
-  name: string;
-  value: number;
-  color: string;
-}
-
 export interface ExposureMonth {
   month: string;
   hours: number;
 }
 
-export interface Certification {
-  label: string;
-  pct: number;
+export interface ContractorKpi {
+  value: number | null;
+  note: string;
 }
 
-export interface ContractorRisk {
-  name: string;
-  risk: number;
+export interface AtRiskWorker {
+  full_name: string;
+  company_name: string;
+  badge_no: string | null;
+  induction_valid_until: string | null;
+  status: 'Expired' | 'Expiring Soon';
 }
 
-export interface PermitViolation {
-  name: string;
-  desc: string;
-  time: string;
-}
-
-export interface RepeatBreach {
-  name: string;
-  breach: string;
-}
-
-export interface CapaItem {
-  label: string;
-  status: 'Closed' | 'In Progress';
-}
-
-export interface OpenAction {
-  label: string;
-  due: 'Due Today' | 'Due This Week' | 'Due Next Week' | 'Overdue' | 'No Due Date' | string;
+export interface ContractorRegisterRow {
+  id: number;
+  company_name: string;
+  service_type: string | null;
+  prequalification_status: string;
+  iso_45001_certified: boolean;
+  active: boolean;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  last_safety_audit_date: string | null;
+  safety_score: number | null;
 }
 
 export interface VendorSummary {
-  risk_score: {
-    value: number;
-    delta: number | null;
-    up: boolean | null;
-    // Same High/Medium/Low/No Contractors thresholds the dashboard's
-    // contractor_risk_label uses — one severity vocabulary for both screens.
-    label: string;
-    has_contractors?: boolean;
-  };
   total_contractors: number;
-  compliance: ComplianceSegment[];
+  kpis: {
+    contractor_trir: ContractorKpi & { contractor_injuries: number; contractor_hours: number };
+    induction_compliance_pct: ContractorKpi & { valid: number; total: number };
+    incident_contribution_pct: ContractorKpi & { contractor_injuries: number; total_site_injuries: number };
+    safety_score: ContractorKpi & { company_count: number };
+  };
   exposure_hours: ExposureMonth[];
-  threshold: number;
-  certifications: Certification[];
-  high_risk: ContractorRisk[];
-  permit_violations: PermitViolation[];
-  repeat_breaches: RepeatBreach[];
-  watchlist: ContractorRisk[];
-  capa_items: CapaItem[];
-  open_actions: OpenAction[];
+  expiring_soon_count: number;
+  at_risk_workers: AtRiskWorker[];
+  register: ContractorRegisterRow[];
 }
 
 export const getVendorSummary = () =>

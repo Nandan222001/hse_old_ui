@@ -213,12 +213,14 @@ export function DashboardPage() {
       trendDown: false,
     },
     {
-      title: "Contractor Risk Score",
-      value: "0/10",
-      sub: "No contractor workforce recorded",
-      // Plain box like every other card. The High/Medium/Low label text is
-      // still the same one Vendors shows (RISK_LABEL_COLOR there) — only the
-      // background/border tint is gone, not the underlying consistency fix.
+      title: "Contractor Safety Score",
+      // Same shared formula as the Vendors page's Safety Score KPI
+      // (compute_contractor_safety_score) — average of each contractor
+      // company's latest scorecard, 0-100.
+      value: leading.contractor_safety_score != null ? `${leading.contractor_safety_score}/100` : "N/A",
+      sub: leading.contractor_safety_company_count
+        ? `Averaged across ${leading.contractor_safety_company_count} companies`
+        : "No contractor scorecards recorded",
       accent: "#FFFFFF",
       border: "#E5E7EB",
       inline: "",
@@ -235,7 +237,7 @@ export function DashboardPage() {
           {/* One compact KPI strip, not two rows split by a divider — a
               single grid is what makes "auto-rows-fr" hold all eight cards to
               one identical height (a short card like FAR and a two-line title
-              like "Contractor Risk Score" would otherwise diverge). No
+              like "Contractor Safety Score" would otherwise diverge). No
               "Leading/Limiting Indicator" heading per the client's review:
               the metric name and value are the point. */}
           <div className="grid grid-cols-1 auto-rows-fr gap-4 md:grid-cols-2 lg:grid-cols-4">

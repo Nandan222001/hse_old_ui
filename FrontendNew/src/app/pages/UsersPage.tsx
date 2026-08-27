@@ -145,6 +145,38 @@ function RingStat({ value, color }: { value: number; color: string }) {
   );
 }
 
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatMonthYear(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+}
+
+// Period toggle for a trend chart — picking a longer window doesn't refetch,
+// it slices more of the same already-fetched array (see PeopleDashboardSection).
+function PeriodToggle<T extends number>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded-full p-0.5" style={{ background: "#F1F5F9" }}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className="rounded-full px-2.5 py-1 text-[11px] transition-colors"
+          style={{
+            background: value === opt.value ? "#3957C5" : "transparent",
+            color: value === opt.value ? "#FFFFFF" : "#64748B",
+            fontWeight: 600,
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── People Dashboard section ──────────────────────────────────────────────────
 
 function PeopleDashboardSection({ currentUserName, overview }: { currentUserName?: string; overview: PeopleOverview | null }) {
@@ -180,6 +212,28 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
 
   const fatigueTrend      = overview?.fatigue_trend      ?? [];
   const toolboxTrend      = overview?.toolbox_trend      ?? [];
+
+  // ── Period toggle — the chart box stays a fixed size; a short window
+  // (10W / 6M) fits inside it with no scrolling, a long one (52W / 12M)
+  // renders wider than the box and scrolls left/right inside it. ──────────
+  const [fatiguePeriod, setFatiguePeriod] = useState<10 | 26 | 52>(10);
+  const [toolboxPeriod, setToolboxPeriod] = useState<6 | 12>(6);
+  const slicedFatigue = fatigueTrend.slice(-fatiguePeriod);
+  const slicedToolbox = toolboxTrend.slice(-toolboxPeriod);
+  const fatigueRangeLabel = useMemo(() => {
+    if (slicedFatigue.length === 0) return "";
+    const start = formatShortDate(slicedFatigue[0].week_start);
+    const endDate = new Date(slicedFatigue[slicedFatigue.length - 1].week_start);
+    endDate.setDate(endDate.getDate() + 6);
+    return `Weekly · last ${slicedFatigue.length} weeks (${start} – ${formatShortDate(endDate.toISOString())})`;
+  }, [slicedFatigue]);
+  const toolboxRangeLabel = useMemo(() => {
+    if (slicedToolbox.length === 0) return "";
+    const start = formatMonthYear(slicedToolbox[0].month_start);
+    const end = formatMonthYear(slicedToolbox[slicedToolbox.length - 1].month_start);
+    return `Monthly · last ${slicedToolbox.length} months (${start} – ${end})`;
+  }, [slicedToolbox]);
+
   const highRiskRoles     = overview?.high_risk_roles    ?? [];
   const trainingExpiry    = overview?.training_expiry    ?? [];
   const behaviourBreakdown = overview?.behaviour_breakdown ?? [];
@@ -257,27 +311,39 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
                 <span className="inline-flex items-center gap-1"><span className="h-0.5 w-4 rounded-full" style={{ background: "#C9A246" }} /> Overtime</span>
               </div>
             </div>
-            <div className="rounded-full px-3 py-1 text-[12px]" style={{ background: "#EEF4FF", color: "#3957C5", fontWeight: 600 }}>Weekly trend</div>
+            <PeriodToggle
+              options={[{ value: 10, label: "10W" }, { value: 26, label: "26W" }, { value: 52, label: "52W" }]}
+              value={fatiguePeriod}
+              onChange={setFatiguePeriod}
+            />
           </div>
-          <div className="mt-4 h-[280px]">
-            {fatigueTrend.length === 0 ? (
+          <div className="mt-1.5 text-[11px]" style={{ color: "#9CA3AF" }}>{fatigueRangeLabel}</div>
+          <div className="mt-3 h-[280px]">
+            {slicedFatigue.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed" style={{ borderColor: "#D1D5DB" }}>
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>
                 <p className="text-[13px] font-medium" style={{ color: "#6B7280" }}>No shift schedule data uploaded</p>
                 <p className="text-[11px]" style={{ color: "#9CA3AF" }}>Upload shift schedule via Data Management to see fatigue trends</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={fatigueTrend}>
-                  <CartesianGrid stroke="#EEF2F7" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
-                  <Line yAxisId="left" type="monotone" dataKey="normal" stroke="#66708E" strokeWidth={3} dot={{ r: 2.5, fill: "#66708E" }} activeDot={{ r: 4 }} />
-                  <Line yAxisId="right" type="monotone" dataKey="overtime" stroke="#C9A246" strokeWidth={3} dot={{ r: 2.5, fill: "#C9A246" }} activeDot={{ r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              // The box (this outer div) stays a fixed size; the inner chart
+              // widens with point count, so 10W fits with no scrollbar while
+              // 52W renders wider than the box and scrolls left/right inside it.
+              <div className="h-full overflow-x-auto">
+                <div className="h-full" style={{ minWidth: slicedFatigue.length * 55 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={slicedFatigue}>
+                      <CartesianGrid stroke="#EEF2F7" vertical={false} />
+                      <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
+                      <Line yAxisId="left" type="monotone" dataKey="normal" stroke="#66708E" strokeWidth={3} dot={{ r: 2.5, fill: "#66708E" }} activeDot={{ r: 4 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="overtime" stroke="#C9A246" strokeWidth={3} dot={{ r: 2.5, fill: "#C9A246" }} activeDot={{ r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -292,22 +358,30 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
                 {toolboxMoM === null ? "Not enough data yet" : `${toolboxMoM >= 0 ? "Increased" : "Decreased"} ${Math.abs(toolboxMoM)}% MoM`}
               </div>
             </div>
+            <PeriodToggle
+              options={[{ value: 6, label: "6M" }, { value: 12, label: "12M" }]}
+              value={toolboxPeriod}
+              onChange={setToolboxPeriod}
+            />
           </div>
-          <div className="mt-4 h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={toolboxTrend}>
-                <defs>
-                  <linearGradient id="toolboxFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#66708E" stopOpacity={0.7} />
-                    <stop offset="100%" stopColor="#66708E" stopOpacity={0.08} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="month" interval={0} tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
-                <Area type="monotone" dataKey="meetings" stroke="#66708E" strokeWidth={3} fill="url(#toolboxFill)" />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="mt-1.5 text-[11px]" style={{ color: "#9CA3AF" }}>{toolboxRangeLabel}</div>
+          <div className="mt-3 h-[280px] overflow-x-auto">
+            <div className="h-full" style={{ minWidth: slicedToolbox.length * 65 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={slicedToolbox}>
+                  <defs>
+                    <linearGradient id="toolboxFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#66708E" stopOpacity={0.7} />
+                      <stop offset="100%" stopColor="#66708E" stopOpacity={0.08} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="month" interval={0} tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="meetings" stroke="#66708E" strokeWidth={3} fill="url(#toolboxFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
