@@ -28,7 +28,9 @@ import { incidentWorkflowService } from '../../../services/incidentWorkflowServi
  * they are not entries.
  */
 
-type FamilyKey = 'incident' | 'near_miss' | 'unsafe_act' | 'risk' | 'hazard';
+// `hazard` is the Unsafe Act register. The separate 'unsafe_act' family went
+// away with migration 080 — the two were one thing under two names.
+type FamilyKey = 'incident' | 'near_miss' | 'risk' | 'hazard';
 
 function cellColor(v: number, max: number) {
   if (max <= 0) return '#DBEAFE';
@@ -43,7 +45,7 @@ export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
   const [zones, setZones] = useState<{ zone: string; value: number }[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<FamilyKey, number>>({
-    incident: 0, near_miss: 0, unsafe_act: 0, risk: 0, hazard: 0,
+    incident: 0, near_miss: 0, risk: 0, hazard: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -61,13 +63,11 @@ export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
     Promise.all([
       incidentWorkflowService.getNextActions(true).catch(() => zero),
       reportWorkflowService('near_miss').getNextActions(true, 100).catch(() => zero),
-      reportWorkflowService('unsafe_act').getNextActions(true, 100).catch(() => zero),
       reportWorkflowService('risk').getNextActions(true, 100).catch(() => zero),
       hazardRegisterService.getNextActions(true).catch(() => zero),
-    ]).then(([inc, nm, ua, rk, hz]) => setCounts({
+    ]).then(([inc, nm, rk, hz]) => setCounts({
       incident: inc.mine_count ?? 0,
       near_miss: nm.mine_count ?? 0,
-      unsafe_act: ua.mine_count ?? 0,
       risk: rk.mine_count ?? 0,
       hazard: hz.mine_count ?? 0,
     }));
@@ -95,16 +95,6 @@ export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
       key: 'near_miss', label: 'Near Misses', blurb: 'The warning before the injury',
       icon: TriangleAlert, color: '#F97316', bg: '#FFF7ED',
       go: () => openReports('near_miss'),
-    },
-    // Pre-merge rows only. Unsafe acts and the hazard register were the same
-    // family under two names; the register won and took the name, so anything
-    // reported from here on lands there. This card stays until migration 080
-    // has folded the old `unsafe_acts` rows across, then it goes.
-    {
-      key: 'unsafe_act', label: 'Unsafe Acts (reported before merge)',
-      blurb: 'Older reports not yet on the register',
-      icon: AlertCircle, color: '#8B5CF6', bg: '#FAF5FF',
-      go: () => openReports('unsafe_act'),
     },
     {
       key: 'risk', label: 'Risk Observations', blurb: 'A risk a worker saw in the field',

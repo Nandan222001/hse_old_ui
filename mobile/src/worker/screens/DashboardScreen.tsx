@@ -226,10 +226,6 @@ export default function DashboardScreen({ navigation }: any) {
             <Icon name="tool" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Log Unsafe Act</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('ReportUnsafeAct')}>
-            <Icon name="octagon" style={styles.quickActionIcon} />
-            <Text style={styles.quickActionLabel}>Unsafe Act</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionBtn} onPress={() => navigation.navigate('SafetyTraining')}>
             <Icon name="award" style={styles.quickActionIcon} />
             <Text style={styles.quickActionLabel}>Training</Text>

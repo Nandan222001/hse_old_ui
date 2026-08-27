@@ -18,7 +18,7 @@ const FAMILIES = [
  * Unsafe Act, Permits, Near Miss. Mounted on every page in all four families
  * (not just Incidents') so it stays on screen across the switch instead of
  * disappearing the moment you leave Incidents; each family's own
- * Overview/Lifecycle-Tracking split (IncidentsTabBar, UnsafeActTabBar,
+ * Overview/Lifecycle-Tracking split (IncidentsTabBar, HazardsTabBar,
  * NearMissTabBar) sits in its own row underneath this one.
  */
 export function EventFamilyTabBar() {

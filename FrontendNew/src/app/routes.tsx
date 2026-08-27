@@ -12,8 +12,6 @@ import { IncidentTrackingPage } from "./pages/IncidentTrackingPage";
 import { HazardRegisterPage } from "./pages/HazardRegisterPage";
 import { HazardTrackingPage } from "./pages/HazardTrackingPage";
 import { NearMissTrackingPage } from "./pages/NearMissTrackingPage";
-import { UnsafeActPage } from "./pages/UnsafeActPage";
-import { UnsafeActTrackingPage } from "./pages/UnsafeActTrackingPage";
 import { RegisterIncidentPage } from "./pages/RegisterIncidentPage";
 import { PermitTrackingPage } from "./pages/PermitTrackingPage";
 import { RiskTrackingPage } from "./pages/RiskTrackingPage";
@@ -124,7 +122,6 @@ const SitesZonesRoute = SitesZonesPage;
 const AIAgentRoute = AIAgentPage;
 const AnalyticsRoute = AnalyticsPage;
 const NearMissRoute = NearMissPage;
-const UnsafeActRoute = UnsafeActPage;
 const RootCauseAnalysisRoute = RiskPage;
 const EquipmentCertificationRoute = EquipmentCertificationPage;
 
@@ -241,11 +238,6 @@ export const router = createBrowserRouter([
       // register with its stage forms) and took the Unsafe Act name.
       { path: "unsafe-acts", Component: HazardRegisterPage },
       { path: "unsafe-acts/tracking", Component: HazardTrackingPage },
-      // The old unsafe-act register, which read the separate `unsafe_acts`
-      // table. Kept reachable while that table's rows are being folded into
-      // the register, so nothing reported before the merge goes dark.
-      { path: "unsafe-acts/reported", Component: UnsafeActRoute },
-      { path: "unsafe-acts/reported/tracking", Component: UnsafeActTrackingPage },
       { path: "permits/tracking", Component: PermitTrackingPage },
       { path: "root-cause-analysis", Component: RootCauseAnalysisRoute },
       // The Risk section's second tab. Its own top-level path rather than

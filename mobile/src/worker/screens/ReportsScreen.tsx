@@ -48,8 +48,7 @@ const REPORT_TYPES = [
   // "Hazard Register" were the same family under two names — an unsafe act IS
   // a hazard — so the register flow survived (it runs all eight stages and the
   // worker can follow it) and took the Unsafe Act name and its blue/eye
-  // identity. ReportUnsafeAct stays routed for deep links until migration 080
-  // has folded the old `unsafe_acts` rows onto the register.
+  // identity.
   { id: 'hazard',     icon: 'eye',            title: 'Unsafe Act',      desc: 'Log an unsafe act that needs controlling', tint: '#DBEAFE', screen: 'LogHazard'  },
 ];
 
