@@ -57,7 +57,7 @@ const FAMILIES: FamilyCard[] = [
     icon: 'alert-circle-outline', color: '#8B5CF6', bg: '#FAF5FF', route: 'RiskManagement',
   },
   {
-    key: 'hazard', label: 'Hazard Register', blurb: 'A hazard logged against the register',
+    key: 'hazard', label: 'Unsafe Act Register', blurb: 'An unsafe act logged against the register',
     icon: 'shield-half-outline', color: '#0891B2', bg: '#ECFEFF', route: 'HazardRegisterManagement',
   },
 ];

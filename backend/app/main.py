@@ -183,8 +183,14 @@ def create_app() -> FastAPI:
     app.include_router(risk_workflow_controller.router, prefix=prefix)
     # Permit to Work (flow 6) and Hazard register (flow 5) role workflows.
     app.include_router(permit_workflow_controller.router, prefix=prefix)
-    app.include_router(hazard_register_controller.router, prefix=prefix)
-    app.include_router(hazard_trail_controller.router, prefix=prefix)
+    # The Unsafe Act register (flow 5). Mounted twice on purpose: the family
+    # was renamed from "Hazard" when the two merged in 080, and the /hazard-*
+    # paths stay so already-shipped mobile builds and old bookmarks keep
+    # resolving. Same router, same handlers — only the path differs.
+    app.include_router(hazard_register_controller.router, prefix=f"{prefix}/unsafe-act-register")
+    app.include_router(hazard_trail_controller.router, prefix=f"{prefix}/unsafe-act-register-trail")
+    app.include_router(hazard_register_controller.router, prefix=f"{prefix}/hazard-register")
+    app.include_router(hazard_trail_controller.router, prefix=f"{prefix}/hazard-trail")
 
     # ── WF-06 … WF-09 · competence gates the permit, so it registers first ────
     app.include_router(competence_controller.router, prefix=prefix)

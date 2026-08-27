@@ -17,7 +17,7 @@ import { WORKFLOW_STAGES, type WorkflowStageKey } from "../../services/workflowS
 import { KeyboardAvoider, SafeAreaScreen } from "../../components/layout/KeyboardAvoider";
 
 /**
- * The hazard register, driven by the eight-stage workflow engine.
+ * The unsafe act register, driven by the eight-stage workflow engine.
  *
  * Previously this screen was a flat list plus an "add" form: it knew four
  * statuses, rendered no stage, and offered no way to move a hazard along. The
@@ -163,7 +163,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
 
   const submitNew = async () => {
     if (!hazardName.trim()) {
-      Alert.alert("Required", "Enter a hazard name.");
+      Alert.alert("Required", "Enter an unsafe act name.");
       return;
     }
     setSaving(true);
@@ -178,13 +178,13 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
         controls: controls.trim() || undefined,
         persons_exposed: personsExposed ? Number(personsExposed) : undefined,
       });
-      showToast?.(`Hazard "${hazardName.trim()}" logged — awaiting assessment`);
+      showToast?.(`Unsafe act "${hazardName.trim()}" logged — awaiting assessment`);
       setFormVisible(false);
       setHazardName(""); setDescription(""); setControls("");
       setSeverity("Medium"); setProbability("Possible"); setPersonsExposed("");
       load();
     } catch (e: any) {
-      Alert.alert("Save Failed", e?.response?.data?.detail || "Could not log the hazard.");
+      Alert.alert("Save Failed", e?.response?.data?.detail || "Could not log the unsafe act.");
     } finally {
       setSaving(false);
     }
@@ -224,8 +224,8 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
               placeholderTextColor="#A0AEC0" value={personsExposed} onChangeText={setPersonsExposed}
             />
             <Toggle
-              label="Work stopped because of this hazard"
-              hint="Stopping the job routes the hazard to RESPOND so containment is recorded before the review."
+              label="Work stopped because of this unsafe act"
+              hint="Stopping the job routes the unsafe act to RESPOND so containment is recorded before the review."
               value={workStopped}
               onChange={setWorkStopped}
             />
@@ -244,7 +244,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
                   work_stopped: workStopped,
                   assessment_notes: freeText.trim() || undefined,
                 }),
-                "Hazard assessed",
+                "Unsafe act assessed",
               )}
             />
           </>
@@ -258,7 +258,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             <TextInput
               style={[styles.input, styles.multiline]} multiline value={freeText}
               onChangeText={setFreeText}
-              placeholder="What is holding this hazard right now? e.g. isolated and barriered"
+              placeholder="What is holding this unsafe act right now? e.g. isolated and barriered"
               placeholderTextColor="#A0AEC0"
             />
             <View style={styles.btnRow}>
@@ -291,7 +291,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             <TextInput
               style={[styles.input, styles.multiline]} multiline value={freeText}
               onChangeText={setFreeText}
-              placeholder="Why does this hazard exist? Not what it is — why it is here."
+              placeholder="Why does this unsafe act exist? Not what it is — why it is here."
               placeholderTextColor="#A0AEC0"
             />
             {!!selected.root_cause && (
@@ -312,7 +312,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             <TextInput
               style={[styles.input, styles.multiline]} multiline value={ppeJustification}
               onChangeText={setPpeJustification}
-              placeholder="What will remove or reduce the hazard for good?"
+              placeholder="What will remove or reduce the unsafe act for good?"
               placeholderTextColor="#A0AEC0"
             />
             <Text style={styles.fieldLabel}>HIERARCHY OF CONTROL</Text>
@@ -435,7 +435,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             <TextInput
               style={[styles.input, styles.multiline]} multiline value={freeText}
               onChangeText={setFreeText}
-              placeholder="What should change elsewhere so this hazard does not recur?"
+              placeholder="What should change elsewhere so this unsafe act does not recur?"
               placeholderTextColor="#A0AEC0"
             />
             {!!selected.lessons_learned && (
@@ -453,12 +453,12 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
                 }}
               />
               <PrimaryButton
-                busy={acting} label="Close hazard"
+                busy={acting} label="Close unsafe act"
                 onPress={() => runStage(
                   () => hazardRegisterService.close(id, {
                     lessons_learned: freeText.trim() || undefined,
                   }),
-                  "Hazard closed",
+                  "Unsafe act closed",
                 )}
               />
             </View>
@@ -477,7 +477,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
         <TouchableOpacity style={styles.backButton} onPress={() => setCurrentScreen("app")}>
           <ArrowLeft size={22} color="#0B3D91" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hazard Register</Text>
+        <Text style={styles.headerTitle}>Unsafe Act Register</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => setFormVisible(true)}>
           <Plus size={20} color="#0B3D91" />
         </TouchableOpacity>
@@ -522,8 +522,8 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             <Text style={styles.emptyTitle}>Nothing here</Text>
             <Text style={styles.emptyText}>
               {stageFilter === "ALL"
-                ? "No hazards have been logged yet."
-                : `No hazards are at ${stageFilter}.`}
+                ? "No unsafe acts have been logged yet."
+                : `No unsafe acts are at ${stageFilter}.`}
             </Text>
           </View>
         ) : (
@@ -532,7 +532,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
             return (
               <TouchableOpacity key={h.id} style={styles.card} onPress={() => open(h)}>
                 <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{h.hazard_name || `Hazard ${h.id}`}</Text>
+                  <Text style={styles.cardTitle}>{h.hazard_name || `Unsafe act ${h.id}`}</Text>
                   <ChevronRight size={18} color="#94A3B8" />
                 </View>
 
@@ -625,13 +625,13 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
       <Modal visible={formVisible} transparent animationType="slide" onRequestClose={() => setFormVisible(false)}>
         <KeyboardAvoider style={styles.modalOverlay}>
           <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>New Hazard Entry</Text>
+            <Text style={styles.sheetTitle}>New Unsafe Act Entry</Text>
             <Text style={styles.sheetRef}>
               Logging records the hazard at stage 02 ASSESS. Scoring and control happen from
               the hazard itself.
             </Text>
             <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
-              <Text style={styles.fieldLabel}>HAZARD NAME *</Text>
+              <Text style={styles.fieldLabel}>UNSAFE ACT NAME *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Unguarded conveyor pinch point"
@@ -674,7 +674,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
               <Text style={styles.fieldLabel}>DESCRIPTION</Text>
               <TextInput
                 style={[styles.input, styles.multiline]}
-                placeholder="What is the hazard and who is exposed?"
+                placeholder="What is the unsafe act and who is exposed?"
                 placeholderTextColor="#A0AEC0"
                 multiline
                 value={description}
@@ -713,7 +713,7 @@ export function HazardRegisterScreen({ setCurrentScreen, showToast }: ScreenProp
                 <TouchableOpacity style={styles.saveBtn} onPress={submitNew} disabled={saving}>
                   {saving
                     ? <ActivityIndicator color="#FFFFFF" />
-                    : <Text style={styles.saveBtnText}>Log Hazard</Text>}
+                    : <Text style={styles.saveBtnText}>Log Unsafe Act</Text>}
                 </TouchableOpacity>
               </View>
               <View style={{ height: 24 }} />

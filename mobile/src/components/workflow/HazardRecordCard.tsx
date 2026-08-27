@@ -50,7 +50,7 @@ const asArray = (raw: unknown): any[] => {
 };
 
 const HIERARCHY_LABEL: Record<string, string> = {
-  eliminate: 'Eliminate the hazard',
+  eliminate: 'Eliminate the unsafe act',
   substitute: 'Substitute something safer',
   engineering: 'Engineering control',
   administrative: 'Administrative control',
@@ -253,7 +253,7 @@ export function HazardRecordCard({ hazard }: { hazard: HazardRegisterItem | any 
             </Text>
           )}
           {String(h.control_hierarchy) === 'ppe' && (
-            <Text style={styles.flag}>PPE only — the hazard itself is still there</Text>
+            <Text style={styles.flag}>PPE only — the unsafe act itself is still there</Text>
           )}
         </View>
       )}

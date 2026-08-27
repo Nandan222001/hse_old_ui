@@ -200,7 +200,7 @@ export function AuditRegisterPage() {
                         <td className="px-4 py-3"><StepStrip steps={a.steps} compact /></td>
                         <td className="px-4 py-3">
                           {isStopped ? (
-                            <span className="text-[11.5px] font-bold text-red-700">Stopped — contain the hazard</span>
+                            <span className="text-[11.5px] font-bold text-red-700">Stopped — contain the unsafe act</span>
                           ) : step ? (
                             <>
                               <p className="text-[11.5px] font-semibold text-slate-800">

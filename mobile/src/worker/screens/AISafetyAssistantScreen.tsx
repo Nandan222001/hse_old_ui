@@ -199,8 +199,8 @@ export default function AISafetyAssistantScreen({ navigation }: any) {
 
         {/* Suggestion pills */}
         <View style={styles.suggestions}>
-          <TouchableOpacity style={styles.pill} onPress={() => setInputText('How to report a hazard?')}>
-            <Text style={styles.pillText}>How to report a hazard?</Text>
+          <TouchableOpacity style={styles.pill} onPress={() => setInputText('How to report an unsafe act?')}>
+            <Text style={styles.pillText}>How to report an unsafe act?</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.pill} onPress={() => setInputText('Permit guidance')}>
             <Text style={styles.pillText}>Permit guidance</Text>

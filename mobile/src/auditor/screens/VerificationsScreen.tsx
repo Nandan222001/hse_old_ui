@@ -85,7 +85,7 @@ export function VerificationsScreen({ navigation }: any) {
           onPress={() => setTab('hazards')}
         >
           <Text style={[styles.tabText, tab === 'hazards' && styles.tabTextActive]}>
-            Hazards ({pendingHazards})
+            Unsafe Acts ({pendingHazards})
           </Text>
         </TouchableOpacity>
       </View>
@@ -129,7 +129,7 @@ export function VerificationsScreen({ navigation }: any) {
               ))
         ) : (
           hazards.length === 0
-            ? <Text style={styles.empty}>No hazards awaiting verification.</Text>
+            ? <Text style={styles.empty}>No unsafe acts awaiting verification.</Text>
             : hazards.map(h => (
                 <View key={h.id} style={styles.card}>
                   <View style={styles.cardTop}>
@@ -154,7 +154,7 @@ export function VerificationsScreen({ navigation }: any) {
                       style={styles.verifyBtn}
                       onPress={() => openVerify('hazards', h.id, h.hazard_name || `Hazard ${h.id}`)}
                     >
-                      <Text style={styles.verifyBtnText}>Verify Hazard</Text>
+                      <Text style={styles.verifyBtnText}>Verify Unsafe Act</Text>
                     </TouchableOpacity>
                   )}
                 </View>

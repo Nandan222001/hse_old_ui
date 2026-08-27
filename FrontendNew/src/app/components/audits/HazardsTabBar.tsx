@@ -2,12 +2,18 @@ import { useLocation, useNavigate } from "react-router";
 import { GitBranch, ListChecks } from "lucide-react";
 
 const TABS = [
-  { name: "Register", icon: ListChecks, path: "/hazards" },
-  { name: "Lifecycle Tracking", icon: GitBranch, path: "/hazards/tracking" },
+  { name: "Register", icon: ListChecks, path: "/unsafe-acts" },
+  { name: "Lifecycle Tracking", icon: GitBranch, path: "/unsafe-acts/tracking" },
 ];
 
-/** Sub-navigation for the Hazards section, shown at the top of each
- *  hazards page instead of as a sidebar submenu. */
+/** Sub-navigation for the Unsafe Act section, shown at the top of each of its
+ *  pages instead of as a sidebar submenu.
+ *
+ *  Still named HazardsTabBar after the flow's own filenames — this is the
+ *  register that used to be called "Hazards" and is now the Unsafe Act
+ *  family. The tabs point at /unsafe-acts so the active state matches the
+ *  path the EventFamilyTabBar chip navigates to; /hazards still resolves for
+ *  old links but no longer lights a tab. */
 export function HazardsTabBar() {
   const navigate = useNavigate();
   const location = useLocation();

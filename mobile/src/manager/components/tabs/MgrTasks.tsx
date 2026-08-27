@@ -96,8 +96,13 @@ export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
       icon: TriangleAlert, color: '#F97316', bg: '#FFF7ED',
       go: () => openReports('near_miss'),
     },
+    // Pre-merge rows only. Unsafe acts and the hazard register were the same
+    // family under two names; the register won and took the name, so anything
+    // reported from here on lands there. This card stays until migration 080
+    // has folded the old `unsafe_acts` rows across, then it goes.
     {
-      key: 'unsafe_act', label: 'Unsafe Acts', blurb: 'A behaviour seen before anything went wrong',
+      key: 'unsafe_act', label: 'Unsafe Acts (reported before merge)',
+      blurb: 'Older reports not yet on the register',
       icon: AlertCircle, color: '#8B5CF6', bg: '#FAF5FF',
       go: () => openReports('unsafe_act'),
     },
@@ -107,7 +112,7 @@ export function MgrTasks({ setCurrentScreen, setReportFamily }: ScreenProps) {
       go: () => openReports('risk'),
     },
     {
-      key: 'hazard', label: 'Hazard Register', blurb: 'Hazards logged against the register',
+      key: 'hazard', label: 'Unsafe Act Register', blurb: 'Unsafe acts logged against the register',
       icon: ShieldAlert, color: '#0891B2', bg: '#ECFEFF',
       go: () => setCurrentScreen('hazard_register'),
     },

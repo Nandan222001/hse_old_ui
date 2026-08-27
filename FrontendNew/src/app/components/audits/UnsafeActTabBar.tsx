@@ -2,12 +2,13 @@ import { useLocation, useNavigate } from "react-router";
 import { GitBranch, ListChecks } from "lucide-react";
 
 const TABS = [
-  { name: "Overview", icon: ListChecks, path: "/unsafe-acts" },
-  { name: "Lifecycle Tracking", icon: GitBranch, path: "/unsafe-acts/tracking" },
+  { name: "Overview", icon: ListChecks, path: "/unsafe-acts/reported" },
+  { name: "Lifecycle Tracking", icon: GitBranch, path: "/unsafe-acts/reported/tracking" },
 ];
 
-/** Sub-navigation for the Unsafe Act section, matching Near Miss, Incidents
- *  and Hazards rather than adding a sidebar submenu. */
+/** Sub-navigation for the pages that read the separate `unsafe_acts` table.
+ *  Those moved under /unsafe-acts/reported when the hazard register took over
+ *  the Unsafe Act name, so this row no longer collides with HazardsTabBar. */
 export function UnsafeActTabBar() {
   const navigate = useNavigate();
   const location = useLocation();

@@ -577,7 +577,7 @@ export function AuditChecklistScreen({ route, navigation }: any) {
             <Text style={styles.alertTitle}>Critical finding</Text>
             <Text style={styles.alertText}>{alertText}</Text>
             <PrimaryButton
-              label="Understood — the hazard is contained"
+              label="Understood — the unsafe act is contained"
               tone="danger"
               onPress={async () => {
                 setAlertText(null);

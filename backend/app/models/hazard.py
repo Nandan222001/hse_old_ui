@@ -20,6 +20,18 @@ class Hazard(Base):
     existing_controls = Column(Text, nullable=True)
     reported_persons_exposed = Column(Integer, nullable=True)
 
+    # ── The behavioural half (migration 080) ─────────────────────────────────
+    # An unsafe act IS a hazard, so the two families merged and this table is
+    # the survivor. These four are what the old `unsafe_acts` table carried and
+    # this one did not: a physical condition has a severity and a control, a
+    # behaviour has a person and a rule. Both halves live here now.
+    act_type = Column(String(100), nullable=True)
+    person_observed = Column(String(255), nullable=True)
+    rule_violated = Column(String(255), nullable=True)
+    corrective_advice_given = Column(String(10), nullable=True)
+    # Traceability for the fold-in, and what makes 080 safe to re-run.
+    merged_from_unsafe_act_id = Column(Integer, nullable=True)
+
     # ── Hazard register lifecycle (migration 031) ────────────────────────────
     # Additive: the website reads hazard_name/severity/probability as catalog data;
     # these columns let a worker log a field hazard and carry it through control.

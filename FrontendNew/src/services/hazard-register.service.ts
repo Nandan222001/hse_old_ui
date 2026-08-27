@@ -7,8 +7,11 @@ import type { StageKey } from './incident-trail.service';
  *
  * Two backends sit behind this file and they answer different questions:
  *
- *   /hazard-register   the live register — what is owed, and the verbs to do it
- *   /hazard-trail      the audit view — what happened, by whom, when
+ *   /unsafe-act-register        the live register — what is owed, and the verbs to do it
+ *   /unsafe-act-register-trail  the audit view — what happened, by whom, when
+ *
+ * The file and its symbols keep the hazard_* names the table still uses. The
+ * family is called Unsafe Act everywhere a user can read it (080).
  *
  * `StageKey` and `STAGE_ORDER` are imported from incident-trail.service rather
  * than redeclared: the eight stages are one vocabulary across every event
@@ -195,12 +198,12 @@ export interface HazardTrailResponse {
 
 export const getTrackedHazards = (params?: { stage?: string; q?: string; limit?: number }) =>
   axiosInstance
-    .get<TrackedHazardListResponse>('/hazard-trail', { params })
+    .get<TrackedHazardListResponse>('/unsafe-act-register-trail', { params })
     .then((r) => r.data);
 
 export const getHazardTrail = (hazardId: number) =>
   axiosInstance
-    .get<HazardTrailResponse>(`/hazard-trail/${hazardId}`)
+    .get<HazardTrailResponse>(`/unsafe-act-register-trail/${hazardId}`)
     .then((r) => r.data);
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -291,17 +294,17 @@ export const getHazardRegister = (params?: {
   limit?: number;
 }) =>
   axiosInstance
-    .get<HazardRegisterEntry[]>('/hazard-register', { params })
+    .get<HazardRegisterEntry[]>('/unsafe-act-register', { params })
     .then((r) => r.data ?? []);
 
 export const getHazard = (id: number) =>
-  axiosInstance.get<HazardRegisterEntry>(`/hazard-register/${id}`).then((r) => r.data);
+  axiosInstance.get<HazardRegisterEntry>(`/unsafe-act-register/${id}`).then((r) => r.data);
 
 export const getHazardNextAction = (id: number) =>
-  axiosInstance.get<HazardNextAction>(`/hazard-register/${id}/next-action`).then((r) => r.data);
+  axiosInstance.get<HazardNextAction>(`/unsafe-act-register/${id}/next-action`).then((r) => r.data);
 
 export const getHazardRegisterStats = () =>
-  axiosInstance.get<HazardRegisterStats>('/hazard-register/stats/summary').then((r) => r.data);
+  axiosInstance.get<HazardRegisterStats>('/unsafe-act-register/stats/summary').then((r) => r.data);
 
 // ── Stage verbs ──────────────────────────────────────────────────────────────
 
@@ -314,19 +317,19 @@ export const assessHazard = (
     work_stopped?: boolean;
     assessment_notes?: string;
   },
-) => axiosInstance.post<HazardRegisterEntry>(`/hazard-register/${id}/assess`, body).then((r) => r.data);
+) => axiosInstance.post<HazardRegisterEntry>(`/unsafe-act-register/${id}/assess`, body).then((r) => r.data);
 
 export const recordInterimControl = (
   id: number,
   body: { interim_control: string; work_stopped?: boolean },
 ) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/interim-control`, body)
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/interim-control`, body)
     .then((r) => r.data);
 
 export const startHazardReview = (id: number, review_notes?: string) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/start-review`, { review_notes })
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/start-review`, { review_notes })
     .then((r) => r.data);
 
 export const recordHazardFindings = (
@@ -334,7 +337,7 @@ export const recordHazardFindings = (
   body: { root_cause?: string; review_notes?: string; persons_exposed?: number },
 ) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/findings`, body)
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/findings`, body)
     .then((r) => r.data);
 
 export const planHazardControls = (
@@ -349,12 +352,12 @@ export const planHazardControls = (
   },
 ) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/plan-controls`, body)
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/plan-controls`, body)
     .then((r) => r.data);
 
 export const submitHazardForVerification = (id: number, implementation_notes?: string) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/submit-verification`, { implementation_notes })
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/submit-verification`, { implementation_notes })
     .then((r) => r.data);
 
 /**
@@ -367,12 +370,12 @@ export const verifyHazardControls = (
   body: { effective: boolean; verification_notes?: string },
 ) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/verify-controls`, body)
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/verify-controls`, body)
     .then((r) => r.data);
 
 export const captureHazardLesson = (id: number, lessons_learned: string) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/lesson`, { lessons_learned })
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/lesson`, { lessons_learned })
     .then((r) => r.data);
 
 export const closeHazard = (
@@ -380,5 +383,5 @@ export const closeHazard = (
   body?: { closure_notes?: string; lessons_learned?: string },
 ) =>
   axiosInstance
-    .post<HazardRegisterEntry>(`/hazard-register/${id}/close`, body ?? {})
+    .post<HazardRegisterEntry>(`/unsafe-act-register/${id}/close`, body ?? {})
     .then((r) => r.data);

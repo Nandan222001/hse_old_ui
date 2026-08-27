@@ -43,11 +43,14 @@ const PAGE_SIZE = 15;
 const REPORT_TYPES = [
   { id: 'near_miss',  icon: 'alert-triangle', title: 'Near Miss',       desc: 'Report a near miss event',            tint: '#FEF3C7', screen: 'ReportNearMiss'  },
   { id: 'incident',   icon: 'alert-octagon',  title: 'Incident',        desc: 'Report a safety incident',            tint: '#FEE2E2', screen: 'ReportIncident'  },
-  { id: 'unsafe_act', icon: 'eye',            title: 'Unsafe Act',      desc: 'Report an unsafe behaviour',          tint: '#DBEAFE', screen: 'ReportUnsafeAct' },
   { id: 'risk',       icon: 'shield',         title: 'Risk Observation', desc: 'One-off unsafe condition you saw',   tint: '#EDE9FE', screen: 'ReportRisk'      },
-  // Flow 5. Kept apart from the risk observation above: a register entry is a
-  // standing condition that runs all eight stages, and the worker can follow it.
-  { id: 'hazard',     icon: 'tool',           title: 'Hazard Register', desc: 'Log a hazard that needs controlling', tint: '#CCFBF1', screen: 'LogHazard'       },
+  // One Unsafe Act entry, not the two that used to sit here. "Unsafe Act" and
+  // "Hazard Register" were the same family under two names — an unsafe act IS
+  // a hazard — so the register flow survived (it runs all eight stages and the
+  // worker can follow it) and took the Unsafe Act name and its blue/eye
+  // identity. ReportUnsafeAct stays routed for deep links until migration 080
+  // has folded the old `unsafe_acts` rows onto the register.
+  { id: 'hazard',     icon: 'eye',            title: 'Unsafe Act',      desc: 'Log an unsafe act that needs controlling', tint: '#DBEAFE', screen: 'LogHazard'  },
 ];
 
 /** `under_investigation` -> `under investigation`. Every family stores its
@@ -154,12 +157,12 @@ export default function ReportsScreen({ navigation }: any) {
           onPress={() => navigation.navigate('MyHazards')}
           activeOpacity={0.8}
         >
-          <View style={[styles.registerChip, { backgroundColor: '#CCFBF1' }]}>
+          <View style={[styles.registerChip, { backgroundColor: '#DBEAFE' }]}>
             <Icon name="list" style={styles.registerIcon} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.registerTitle}>My Hazards</Text>
-            <Text style={styles.registerDesc}>Track the hazards you logged through all eight stages</Text>
+            <Text style={styles.registerTitle}>My Unsafe Acts</Text>
+            <Text style={styles.registerDesc}>Track the unsafe acts you logged through all eight stages</Text>
           </View>
           <Icon name="chevron-right" style={styles.registerChevron} color={Colors.textMuted} />
         </TouchableOpacity>
@@ -239,7 +242,7 @@ export default function ReportsScreen({ navigation }: any) {
           <EmptyState
             icon="📝"
             title="No Submissions Yet"
-            subtitle="Anything you report — incidents, near misses, unsafe acts, risks and hazards — appears here."
+            subtitle="Anything you report — incidents, near misses, unsafe acts and risks — appears here."
           />
         ) : (
           visible.map(sub => {

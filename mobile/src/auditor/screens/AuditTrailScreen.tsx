@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { verificationService, TrailEntry } from '../services/verificationService';
 
-const MODULES = ['All', 'Incident', 'Permit', 'Hazard', 'Near Miss'];
+const MODULES = ['All', 'Incident', 'Permit', 'Unsafe Act', 'Near Miss'];
 
 const MODULE_STYLE: Record<string, { color: string; bg: string; icon: string }> = {
   Incident:   { color: '#DC2626', bg: '#FEF2F2', icon: 'alert-circle' },

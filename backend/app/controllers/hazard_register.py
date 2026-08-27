@@ -86,7 +86,10 @@ from app.schemas.hazard_register import (
     HazardVerifyControls,
 )
 
-router = APIRouter(prefix="/hazard-register", tags=["Hazard Register"])
+# No prefix baked in: main.py mounts this twice, at /unsafe-act-register
+# (the family's name since 078) and at /hazard-register (legacy, kept so
+# already-shipped mobile builds keep working).
+router = APIRouter(tags=["Unsafe Act Register"])
 
 # Everything that is still being managed — i.e. has not reached CLOSE. The
 # auditor's list and the "open" count both read this, so a hazard sitting in any
@@ -108,7 +111,7 @@ VALID_STATUSES = {
 def _get(db: Session, hazard_id: int, org_id: Optional[int]) -> Hazard:
     row = db.query(Hazard).filter(Hazard.id == hazard_id).first()
     if not row or (org_id is not None and row.organisation_id not in (None, org_id)):
-        raise HTTPException(status_code=404, detail="Hazard not found")
+        raise HTTPException(status_code=404, detail="Unsafe act not found")
     return row
 
 
@@ -125,7 +128,7 @@ def _require_stage(row: Hazard, allowed: Sequence[str], what: str) -> None:
     raise HTTPException(
         status_code=400,
         detail=(
-            f"Cannot {what}: this hazard is at stage {st.get('stage_number') or '?'} "
+            f"Cannot {what}: this unsafe act is at stage {st.get('stage_number') or '?'} "
             f"{st.get('stage_label') or row.register_status}."
         ),
     )
@@ -386,7 +389,7 @@ def log_hazard(
     if covering is not None:
         risk_assessment_svc.flag_for_review(
             db, covering,
-            f"Hazard HAZ-{row.id} reported in this area: {row.hazard_name or 'unnamed'}",
+            f"Unsafe act HAZ-{row.id} reported in this area: {row.hazard_name or 'unnamed'}",
         )
 
     return _respond_one(db, row)
@@ -426,7 +429,7 @@ def list_register(
     register_status: Optional[str] = None,
     stage: Optional[str] = Query(None, description="RECORD..CLOSE"),
     open_only: bool = Query(False, description="Everything not yet closed"),
-    q: Optional[str] = Query(None, description="Match on hazard name or description"),
+    q: Optional[str] = Query(None, description="Match on unsafe act name or description"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -634,7 +637,7 @@ def hazard_next_action_detail(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Stage tracker + outstanding step for one hazard."""
+    """Stage tracker + outstanding step for one unsafe act."""
     row = _get(db, hazard_id, current_user.org_id)
     desc = hazard_next_action.describe(row.register_status, current_user.role)
     return HazardNextActionResponse(
@@ -861,7 +864,7 @@ def submit_for_verification(
     if not (row.planned_controls or "").strip():
         raise HTTPException(
             status_code=400,
-            detail="No control has been planned for this hazard yet.",
+            detail="No control has been planned for this unsafe act yet.",
         )
 
     row.register_status = "pending_verification"
@@ -967,7 +970,7 @@ def close_hazard(
     row = _get(db, hazard_id, current_user.org_id)
 
     if row.register_status == "closed":
-        raise HTTPException(status_code=400, detail="Hazard is already closed")
+        raise HTTPException(status_code=400, detail="Unsafe act is already closed")
     if row.register_status != "controlled":
         st = workflow_stages.describe("hazard_register", row.register_status)
         raise HTTPException(

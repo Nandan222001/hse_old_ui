@@ -175,7 +175,7 @@ export function TabB_ReportApprovals({ showToast, reportFamily, setReportFamily 
   const confirmFailedVerification = (item: ManagerQueueItem) => {
     Alert.alert(
       "The fix did not hold?",
-      "This reopens the corrective actions and sends the record back to IMPROVE. Use it when the hazard is still live.",
+      "This reopens the corrective actions and sends the record back to IMPROVE. Use it when the unsafe act is still live.",
       [
         { text: "Cancel", style: "cancel" },
         {

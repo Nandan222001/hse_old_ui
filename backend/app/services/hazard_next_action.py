@@ -1,4 +1,4 @@
-"""What has to happen next on a register hazard, who owns it, and where to do it.
+"""What has to happen next on a register unsafe act, who owns it, and where to do it.
 
 The hazard-register twin of `incident_next_action`. Same job, same response
 shape, different status vocabulary: the register runs on `register_status`
@@ -41,15 +41,15 @@ FAMILY = "hazard_register"
 # has triaged it yet, which is why it reads ASSESS rather than RECORD.
 _NEXT: Dict[str, NextAction] = {
     "draft": NextAction(
-        action="Submit the hazard",
-        detail="This hazard was captured but never submitted to the register.",
+        action="Submit the unsafe act",
+        detail="This unsafe act was captured but never submitted to the register.",
         owner=NOBODY,
         route="hazard-register",
         cta="Open",
         unblocks="Stage 02 ASSESS",
     ),
     "open": NextAction(
-        action="Assess the hazard",
+        action="Assess the unsafe act",
         detail=(
             "Score it for severity and likelihood, and decide whether the job "
             "stops while the control is designed."
@@ -62,7 +62,7 @@ _NEXT: Dict[str, NextAction] = {
     "interim_control": NextAction(
         action="Open the control review",
         detail=(
-            "A temporary measure is holding this hazard. Establish what the "
+            "A temporary measure is holding this unsafe act. Establish what the "
             "permanent control has to be before the interim one is relied on."
         ),
         owner=SUPERVISOR,
@@ -84,7 +84,7 @@ _NEXT: Dict[str, NextAction] = {
     "controls_planned": NextAction(
         action="Apply the control and submit it for verification",
         detail=(
-            "The hazard stays in IMPROVE until the planned control is actually "
+            "The unsafe act stays in IMPROVE until the planned control is actually "
             "in place — not until it is written down."
         ),
         owner=CAPA_OWNER,
@@ -96,7 +96,7 @@ _NEXT: Dict[str, NextAction] = {
         action="Verify the control held",
         detail=(
             "Confirm the permanent control is in place and working. Answering "
-            "no returns the hazard to IMPROVE."
+            "no returns the unsafe act to IMPROVE."
         ),
         owner=MANAGER,
         route="hazard-register",
@@ -106,19 +106,19 @@ _NEXT: Dict[str, NextAction] = {
     "controlled": NextAction(
         action="Capture the lesson and close",
         detail=(
-            "Record what the register learned from this hazard, then close it. "
+            "Record what the register learned from this unsafe act, then close it. "
             "Closing updates the risk profile and the inspection schedule."
         ),
         owner=MANAGER,
         route="hazard-register",
-        cta="Close hazard",
+        cta="Close unsafe act",
         unblocks="Closed",
     ),
 }
 
 
 def next_action_for(register_status: Optional[str]) -> Optional[NextAction]:
-    """The outstanding step for a status, or None when the hazard is closed."""
+    """The outstanding step for a status, or None when the unsafe act is closed."""
     return _NEXT.get((register_status or "").strip().lower())
 
 
@@ -126,7 +126,7 @@ def describe(
     register_status: Optional[str],
     user_role: Optional[str] = None,
 ) -> dict:
-    """Stage + next action for one hazard, from the viewer's perspective.
+    """Stage + next action for one unsafe act, from the viewer's perspective.
 
     `is_mine` means "this step is this role's own job", not merely "this role is
     senior enough to do it" — that distinction is what keeps the queue honest.

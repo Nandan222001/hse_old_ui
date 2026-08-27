@@ -9,9 +9,9 @@ import { hazardService, type MyHazard } from '../services/hazardService';
 import { Colors } from '../theme/colors';
 
 /**
- * The hazards this worker logged, each with its position on the eight stages.
+ * The unsafe acts this worker logged, each with its position on the eight stages.
  *
- * A worker could log a hazard and then never hear anything again — nothing in
+ * A worker could log an unsafe act and then never hear anything again — nothing in
  * the app showed what happened to it. This closes that loop: the same stage
  * rail the supervisor and manager see, rendered from the same backend-derived
  * `stage` fields, so all three roles are looking at one answer.
@@ -26,7 +26,7 @@ const PRIORITY_COLOR: Record<string, string> = {
   P1: '#DC2626', P2: '#EA580C', P3: '#CA8A04', P4: '#2563EB', P5: '#64748B',
 };
 
-/** What is happening to the hazard, worded for the person who reported it. */
+/** What is happening to the unsafe act, worded for the person who reported it. */
 const STATUS_FOR_WORKER: Record<string, string> = {
   open: 'Logged — your supervisor has not assessed it yet',
   interim_control: 'A temporary control is in place while the fix is designed',
@@ -68,7 +68,7 @@ export default function MyHazardsScreen({ navigation }: any) {
 
   return (
     <ScreenLayout>
-      <AppHeader title="My Hazards" onBack={() => navigation.goBack()} rightIcon="🔔" />
+      <AppHeader title="My Unsafe Acts" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
       <ScrollView
         style={styles.scroll}
@@ -79,8 +79,8 @@ export default function MyHazardsScreen({ navigation }: any) {
         ) : rows.length === 0 ? (
           <EmptyState
             icon="🛡️"
-            title="No hazards logged"
-            subtitle="Anything you add to the hazard register appears here, with its progress."
+            title="No unsafe acts logged"
+            subtitle="Anything you add to the unsafe act register appears here, with its progress."
           />
         ) : (
           rows.map(h => {
