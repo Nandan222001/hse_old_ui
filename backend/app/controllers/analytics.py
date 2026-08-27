@@ -221,7 +221,7 @@ def get_violations_summary(months: int = 10, db: Session = Depends(get_db), curr
             months_map[key] = {"label": label, "critical": 0, "high": 0, "medium": 0, "low": 0}
         bucket = _rca_priority(r.sev).lower()
         months_map[key][bucket] += r.cnt
-    severity_mix = list(months_map.values())[-5:]
+    severity_mix = list(months_map.values())[-months:]
 
     # Injury cause (immediate_cause column — closest proxy to body-part/injury cause)
     injury_cat_rows = (

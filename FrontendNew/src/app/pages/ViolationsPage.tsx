@@ -85,6 +85,32 @@ function HorizontalBars({ data }: Readonly<{ data: { label: string; value: numbe
   );
 }
 
+// Period toggle for a trend chart — picking a longer window doesn't refetch,
+// it slices more of the same already-fetched array. The chart box stays a
+// fixed size; a short window (6M) fits with no scrollbar while a long one
+// (12M) renders wider than the box and scrolls left/right inside it.
+function PeriodToggle<T extends number>({ options, value, onChange }: Readonly<{ options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }>) {
+  return (
+    <div className="inline-flex items-center gap-1 rounded-full p-0.5" style={{ background: "#F1F5F9" }}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className="rounded-full px-2.5 py-1 text-[11px] transition-colors"
+          style={{
+            background: value === opt.value ? "#3957C5" : "transparent",
+            color: value === opt.value ? "#FFFFFF" : "#64748B",
+            fontWeight: 600,
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function DarkPanel({ title, icon, children, className = "" }: Readonly<{ title: string; icon: LucideIcon; children: ReactNode; className?: string }>) {
   return (
     <div
@@ -107,7 +133,13 @@ export function ViolationsPage() {
   const [incidentTrend, setIncidentTrend] = useState<{ month: string; value: number }[]>([]);
   const [downtimeData, setDowntimeData] = useState<ViolationItem[]>([]);
   const [monthlyNearMiss, setMonthlyNearMiss] = useState<{ month: string; value: number }[]>([]);
+  const [nearMissPeriod, setNearMissPeriod] = useState<6 | 12>(12);
+  const slicedNearMiss = monthlyNearMiss.slice(-nearMissPeriod);
+  const [incidentTrendPeriod, setIncidentTrendPeriod] = useState<6 | 12>(12);
+  const slicedIncidentTrend = incidentTrend.slice(-incidentTrendPeriod);
   const [severityMix, setSeverityMix] = useState<SeverityMixItem[]>([]);
+  const [severityMixPeriod, setSeverityMixPeriod] = useState<6 | 12>(12);
+  const slicedSeverityMix = severityMix.slice(-severityMixPeriod);
   const [rcaData, setRcaData] = useState<RcaItem[]>([]);
   const [actionItems, setActionItems] = useState<string[]>([]);
   const [injuryCategoryData, setInjuryCategoryData] = useState<ViolationItem[]>([]);
@@ -184,7 +216,7 @@ export function ViolationsPage() {
   }
 
   useEffect(() => {
-    getViolationsSummary(10).then((data) => {
+    getViolationsSummary(12).then((data) => {
       setIncidentTypeData(data.by_type);
       setInvestigationStatusData(data.investigation_status ?? []);
       setLocationData(data.by_location);
@@ -273,15 +305,29 @@ export function ViolationsPage() {
 
           <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <div className="rounded-md bg-white p-3 shadow-[0_6px_14px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
-              <CardHeader icon={Activity} title="Incident Trend" />
-              <ResponsiveContainer width="100%" height={145}>
-                <LineChart data={incidentTrend} margin={{ top: 6, right: 12, bottom: 0, left: 0 }}>
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                  <YAxis width={28} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={2.5} dot={{ r: 2.5, fill: '#6F80E8' }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="flex items-center justify-between gap-3">
+                <CardHeader icon={Activity} title="Incident Trend" />
+                <PeriodToggle
+                  options={[{ value: 6, label: "6M" }, { value: 12, label: "12M" }]}
+                  value={incidentTrendPeriod}
+                  onChange={setIncidentTrendPeriod}
+                />
+              </div>
+              <div className="mb-1 text-[11px]" style={{ color: '#9CA3AF' }}>
+                {slicedIncidentTrend.length > 0 ? `Monthly · last ${slicedIncidentTrend.length} months (${slicedIncidentTrend[0].month} – ${slicedIncidentTrend[slicedIncidentTrend.length - 1].month})` : ""}
+              </div>
+              <div className="h-[145px] overflow-x-auto">
+                <div className="h-full" style={{ minWidth: slicedIncidentTrend.length * 55 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={slicedIncidentTrend} margin={{ top: 6, right: 12, bottom: 0, left: 0 }}>
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                      <YAxis width={28} tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={2.5} dot={{ r: 2.5, fill: '#6F80E8' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-md bg-white p-3 shadow-[0_6px_14px_rgba(15,23,42,0.08)]" style={{ border: '1px solid #DDE5F4' }}>
@@ -313,42 +359,69 @@ export function ViolationsPage() {
 
         <div className="space-y-4">
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
-            <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Trend</div>
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={monthlyNearMiss} margin={{ top: 6, right: 8, bottom: 10, left: 0 }}>
-                <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 10, fill: '#6B7280' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-40}
-                  textAnchor="end"
-                  height={40}
-                  tickFormatter={(v: string) => String(v).slice(0, 3)}
-                />
-                <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={3} dot={{ r: 3, fill: '#6F80E8' }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Near Miss Trend</div>
+              <PeriodToggle
+                options={[{ value: 6, label: "6M" }, { value: 12, label: "12M" }]}
+                value={nearMissPeriod}
+                onChange={setNearMissPeriod}
+              />
+            </div>
+            <div className="mt-1 text-[11px]" style={{ color: '#9CA3AF' }}>
+              {slicedNearMiss.length > 0 ? `Monthly · last ${slicedNearMiss.length} months (${slicedNearMiss[0].month} – ${slicedNearMiss[slicedNearMiss.length - 1].month})` : ""}
+            </div>
+            <div className="mt-2 h-[160px] overflow-x-auto">
+              <div className="h-full" style={{ minWidth: slicedNearMiss.length * 55 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={slicedNearMiss} margin={{ top: 6, right: 8, bottom: 10, left: 0 }}>
+                    <CartesianGrid stroke="#E5E7EB" vertical={false} />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 10, fill: '#6B7280' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      angle={-40}
+                      textAnchor="end"
+                      height={40}
+                    />
+                    <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="value" stroke="#4A57B9" strokeWidth={3} dot={{ r: 3, fill: '#6F80E8' }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#DDE5F4' }}>
-            <div className="mb-2 text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Incident Severity Mix</div>
-            <ResponsiveContainer width="100%" height={175}>
-              <BarChart data={severityMix} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#E5E7EB" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
-                <Tooltip />
-                <Bar dataKey="low" stackId="a" fill="#6F80E8" name="Low" />
-                <Bar dataKey="medium" stackId="a" fill="#4A57B9" name="Medium" />
-                <Bar dataKey="high" stackId="a" fill="#38BDF8" name="High" />
-                <Bar dataKey="critical" stackId="a" fill="#0F766E" name="Critical" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[clamp(1rem,1.6vw,1.125rem)]" style={{ color: '#111827', fontWeight: 700 }}>Incident Severity Mix</div>
+              <PeriodToggle
+                options={[{ value: 6, label: "6M" }, { value: 12, label: "12M" }]}
+                value={severityMixPeriod}
+                onChange={setSeverityMixPeriod}
+              />
+            </div>
+            <div className="mt-1 text-[11px]" style={{ color: '#9CA3AF' }}>
+              {slicedSeverityMix.length > 0 ? `Monthly · last ${slicedSeverityMix.length} months (${slicedSeverityMix[0].label} – ${slicedSeverityMix[slicedSeverityMix.length - 1].label})` : ""}
+            </div>
+            <div className="mt-2 h-[175px] overflow-x-auto">
+              <div className="h-full" style={{ minWidth: slicedSeverityMix.length * 55 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={slicedSeverityMix} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid stroke="#E5E7EB" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                    <YAxis width={24} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} domain={[0, 'auto']} />
+                    <Tooltip />
+                    <Bar dataKey="low" stackId="a" fill="#6F80E8" name="Low" />
+                    <Bar dataKey="medium" stackId="a" fill="#4A57B9" name="Medium" />
+                    <Bar dataKey="high" stackId="a" fill="#38BDF8" name="High" />
+                    <Bar dataKey="critical" stackId="a" fill="#0F766E" name="Critical" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 justify-center">
               {[['#6F80E8','Low'],['#4A57B9','Med'],['#38BDF8','High'],['#0F766E','Critical']].map(([color, label]) => (
                 <div key={label} className="flex items-center gap-1 text-[10px]" style={{ color: '#6B7280' }}>
