@@ -148,6 +148,11 @@ def notify_overdue_capa_summary() -> None:
                 target_type="all",
                 status="sent",
                 sent_at=datetime.utcnow(),
+                # Not one specific CAPA (no subject_ref fits), but the client
+                # still wants clicking it to open something useful — the
+                # overdue-filtered CAPA list, not just the notifications
+                # page. See resolveNotificationLink in notifications.service.ts.
+                category="capa_overdue_summary",
             ))
         db.commit()
     except Exception:
