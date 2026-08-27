@@ -54,7 +54,7 @@ function SuperAdminSidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClo
                 <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
               </div>
               <div>
-                <span className="text-[15px] font-bold" style={{ color: "#111827" }}>HSE Intelligence</span>
+                <span className="text-[15px] font-bold" style={{ color: "#111827" }}>EHSERA Intelligence</span>
                 <div className="mt-0.5">
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide" style={{ background: "#EEF2FF", color: "#4A57B9" }}>
                     Super Admin

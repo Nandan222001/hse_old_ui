@@ -385,7 +385,7 @@ export function OrgSetupPage() {
         }}
       >
         <ShieldCheck size={22} color="#fff" />
-        <span style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>HSE Intelligence</span>
+        <span style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>EHSERA Intelligence</span>
         {orgName && (
           <>
             <span style={{ color: "rgba(255,255,255,0.4)", margin: "0 6px" }}>|</span>
@@ -464,7 +464,7 @@ export function OrgSetupPage() {
                 Organisation Data Setup
               </h1>
               <p style={{ margin: "0 0 28px", color: "#6B7280", fontSize: 14, lineHeight: 1.6 }}>
-                Upload the HSE Intelligence Excel workbook to import all your organisation data at once.
+                Upload the EHSERA Intelligence Excel workbook to import all your organisation data at once.
                 The file must contain all 17 sheets listed on the right.
               </p>
 

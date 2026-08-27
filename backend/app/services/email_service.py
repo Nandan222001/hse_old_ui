@@ -172,7 +172,7 @@ def send_user_invite(
     login_url: str,
 ) -> bool:
     """Send an invite email to a user invited by an org admin."""
-    subject = f"You've been invited to {organisation_name} on HSE Intelligence"
+    subject = f"You've been invited to {organisation_name} on EHSERA Intelligence"
     html = _build_invite_html(
         admin_name=user_name,
         organisation_name=organisation_name,
@@ -191,7 +191,7 @@ def send_organisation_invite(
     login_url: str,
 ) -> bool:
     """Send an organisation invitation email with login credentials."""
-    subject = f"You're invited to join {organisation_name} on HSE Intelligence"
+    subject = f"You're invited to join {organisation_name} on EHSERA Intelligence"
     html = _build_invite_html(
         admin_name=admin_name,
         organisation_name=organisation_name,
@@ -228,7 +228,7 @@ def _build_invite_html(
           <tr>
             <td style="background:linear-gradient(135deg,#0B3D91,#1D4ED8);padding:32px 40px;text-align:center;">
               <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">
-                HSE Intelligence
+                EHSERA Intelligence
               </h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">
                 Health, Safety &amp; Environment Platform
@@ -245,7 +245,7 @@ def _build_invite_html(
               <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
                 You have been invited to set up and manage
                 <strong style="color:#0B3D91;">{organisation_name}</strong>
-                on the HSE Intelligence platform.
+                on the EHSERA Intelligence platform.
               </p>
 
               <!-- Credentials box -->
@@ -288,7 +288,7 @@ def _build_invite_html(
 
               <p style="margin:0 0 24px;color:#6B7280;font-size:13px;line-height:1.5;">
                 For security, please change your password after your first login.
-                This invitation was sent by the HSE Intelligence Super Admin team.
+                This invitation was sent by the EHSERA Intelligence Super Admin team.
               </p>
 
               <!-- CTA -->
@@ -299,7 +299,7 @@ def _build_invite_html(
                        style="display:inline-block;background:linear-gradient(135deg,#0B3D91,#1D4ED8);
                               color:#ffffff;text-decoration:none;padding:14px 32px;
                               font-size:15px;font-weight:600;border-radius:8px;">
-                      Access HSE Intelligence
+                      Access EHSERA Intelligence
                     </a>
                   </td>
                 </tr>
@@ -318,7 +318,7 @@ def _build_invite_html(
           <tr>
             <td style="background:#F9FAFB;border-top:1px solid #E5E7EB;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#9CA3AF;font-size:12px;">
-                &copy; 2026 HSE Intelligence. All rights reserved.
+                &copy; 2026 EHSERA Intelligence. All rights reserved.
               </p>
             </td>
           </tr>

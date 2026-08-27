@@ -222,7 +222,7 @@ const reconcileSelection = (current: string[], allowed: string[], defaults: stri
 };
 
 const ALL_CARDS = [
-	{ icon: <Cpu size={18} />, title: 'Unified HSE Intelligence Core', text: 'Connected control tower for incidents, inspections, corrective actions, and compliance evidence.' },
+	{ icon: <Cpu size={18} />, title: 'Unified EHSERA Intelligence Core', text: 'Connected control tower for incidents, inspections, corrective actions, and compliance evidence.' },
 	{ icon: <Sparkles size={18} />, title: 'AI-assisted Safety Ops', text: 'Context-aware recommendations for risk prioritization and proactive interventions.' },
 	{ icon: <Globe2 size={18} />, title: 'Multi-site Governance', text: 'Global standards with country and organization layers for region-specific workflows.' },
 	{ icon: <Building2 size={18} />, title: 'Structured Setup', text: 'Capture organization profile, sites, work zones, and workforce scale.' },

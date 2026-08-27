@@ -929,7 +929,7 @@ def send_notification(notif_id: int, db: Session = Depends(get_db)):
         )
         ok = send_email(
             to_email=inv.admin_email,
-            subject=f"[HSE Intelligence] {n.title}",
+            subject=f"[EHSERA Intelligence] {n.title}",
             html_content=html,
             to_name=inv.admin_name,
         )
@@ -1005,7 +1005,7 @@ def _build_notification_html(admin_name: str, org_name: str, notif_type: str, ti
             </div>
             <hr style="border:none;border-top:1px solid #E5E7EB;margin:0 0 20px;"/>
             <p style="margin:0;color:#9CA3AF;font-size:12px;">
-              Sent by HSE Intelligence Super Admin &bull;
+              Sent by EHSERA Intelligence Super Admin &bull;
               <a href="mailto:support@hse-intelligence.com" style="color:{color};text-decoration:none;">
                 support@hse-intelligence.com</a>
             </p>
@@ -1013,7 +1013,7 @@ def _build_notification_html(admin_name: str, org_name: str, notif_type: str, ti
         </tr>
         <tr>
           <td style="background:#F9FAFB;border-top:1px solid #E5E7EB;padding:16px 40px;text-align:center;">
-            <p style="margin:0;color:#9CA3AF;font-size:11px;">&copy; 2026 HSE Intelligence. All rights reserved.</p>
+            <p style="margin:0;color:#9CA3AF;font-size:11px;">&copy; 2026 EHSERA Intelligence. All rights reserved.</p>
           </td>
         </tr>
       </table>

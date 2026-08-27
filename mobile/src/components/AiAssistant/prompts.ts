@@ -36,7 +36,7 @@ export const AI_PROMPTS: Record<'worker' | 'supervisor' | 'manager' | 'auditor',
     ],
   },
   manager: {
-    title: 'HSE Intelligence',
+    title: 'EHSERA Intelligence',
     greeting:
       'Ask me about site performance, leading indicators, compliance and contractor risk.',
     suggestions: [

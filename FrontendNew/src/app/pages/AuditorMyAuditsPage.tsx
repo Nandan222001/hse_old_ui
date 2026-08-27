@@ -38,7 +38,7 @@ export function AuditorMyAuditsPage() {
         <h1 className="text-[19px] font-bold" style={{ color: "#0F172A" }}>My Audits</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>
           Audits assigned to you. Conduct — opening meeting through issuing the report — happens on the
-          HSE Intelligence mobile app; this view is for tracking status and reading the finished report.
+          EHSERA Intelligence mobile app; this view is for tracking status and reading the finished report.
         </p>
       </div>
 

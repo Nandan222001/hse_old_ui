@@ -734,7 +734,7 @@ def _create_wizard_user(d: dict, db: Session, org_id: Optional[int] = None) -> d
             email=email, temp_password=temp_password,
             login_url=f"{settings.frontend_url}/auth/login",
         )
-        send_email(to_email=email, subject=f"You've been invited to {org_name} — HSE Intelligence",
+        send_email(to_email=email, subject=f"You've been invited to {org_name} — EHSERA Intelligence",
                    html_content=html, to_name=name)
     except Exception:
         pass

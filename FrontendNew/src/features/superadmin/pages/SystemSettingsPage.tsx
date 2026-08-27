@@ -332,7 +332,7 @@ export function SystemSettingsPage() {
           {/* ── Platform ──────────────────────────────────────────────── */}
           <SectionCard icon={SlidersHorizontal} title="Platform Configuration" sub="Core application identity and runtime behaviour" iconColor="#4A57B9">
             <FieldRow label="App Name" hint="Used in emails and system references">
-              <TextInput value={platform.app_name} onChange={(v) => setPlatform((p) => ({ ...p, app_name: v }))} placeholder="HSE Intelligence" />
+              <TextInput value={platform.app_name} onChange={(v) => setPlatform((p) => ({ ...p, app_name: v }))} placeholder="EHSERA Intelligence" />
             </FieldRow>
             <FieldRow label="Environment">
               <ReadOnlyBadge value={settings.platform.app_env.toUpperCase()} color={envCfg.color} bg={envCfg.bg} />

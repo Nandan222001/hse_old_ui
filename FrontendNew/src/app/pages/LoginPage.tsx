@@ -72,7 +72,7 @@ export function LoginPage() {
       } else if (result === "access_denied") {
         setError("Access denied. Contact your administrator if you believe this is an error.");
       } else if (result === "mobile_only") {
-        setError("This account is set up for the mobile app. Please sign in from the HSE Intelligence mobile app instead.");
+        setError("This account is set up for the mobile app. Please sign in from the EHSERA Intelligence mobile app instead.");
       } else if (result === "invalid_credentials") {
         setError("Invalid email or password. Please try again.");
       } else {
@@ -120,7 +120,7 @@ export function LoginPage() {
             className="text-white mb-4"
             style={{ fontSize: "42px", fontFamily: "DM Sans, sans-serif", fontWeight: 700, letterSpacing: "-0.5px" }}
           >
-            HSE Intelligence
+            EHSERA Intelligence
           </h1>
           <p className="text-white/80 mb-16" style={{ fontSize: "18px", fontFamily: "DM Sans, sans-serif" }}>
             Intelligent Safety. Proactive Protection.
@@ -148,7 +148,7 @@ export function LoginPage() {
           </div>
 
           <div className="mt-20 text-white/40 text-[12px]">
-            © 2026 HSE Intelligence Platform. Enterprise Edition.
+            © 2026 EHSERA Intelligence Platform. Enterprise Edition.
           </div>
         </div>
       </div>
@@ -162,7 +162,7 @@ export function LoginPage() {
               <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
             </div>
             <span className="text-[14px]" style={{ color: "#0B3D91", fontFamily: "DM Sans, sans-serif", fontWeight: 700 }}>
-              HSE Intelligence
+              EHSERA Intelligence
             </span>
           </div>
 

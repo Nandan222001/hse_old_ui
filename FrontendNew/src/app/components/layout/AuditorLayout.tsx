@@ -26,7 +26,7 @@ export function AuditorLayout() {
           <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
         </div>
         <div className="flex-1">
-          <div className="text-[14px] font-bold" style={{ color: "#111827" }}>HSE Intelligence</div>
+          <div className="text-[14px] font-bold" style={{ color: "#111827" }}>EHSERA Intelligence</div>
           <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "#4A57B9" }}>Auditor</div>
         </div>
         <div className="flex items-center gap-3">

@@ -208,7 +208,7 @@ def invite_user(
     )
     sent = send_email(
         to_email=email,
-        subject=f"You've been invited to {org_name} — HSE Intelligence",
+        subject=f"You've been invited to {org_name} — EHSERA Intelligence",
         html_content=html,
         to_name=name,
     )

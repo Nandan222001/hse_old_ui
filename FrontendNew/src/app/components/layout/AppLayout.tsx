@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ArrowRight, X } from "lucide-react";
 
-const DEFAULT_APP_TITLE = "Enterprise HSE Intelligence App UI";
+const DEFAULT_APP_TITLE = "Enterprise EHSERA Intelligence App UI";
 
 export function AppLayout() {
   const [darkMode, setDarkMode] = useState(false);
@@ -29,13 +29,13 @@ export function AppLayout() {
 
     if (isOnboardingScopedUser && orgName) {
       document.title = displayName
-        ? `${orgName} • ${displayName} | HSE Intelligence`
-        : `${orgName} | HSE Intelligence`;
+        ? `${orgName} • ${displayName} | EHSERA Intelligence`
+        : `${orgName} | EHSERA Intelligence`;
       return;
     }
 
     if (displayName) {
-      document.title = `${displayName} | HSE Intelligence`;
+      document.title = `${displayName} | EHSERA Intelligence`;
       return;
     }
 

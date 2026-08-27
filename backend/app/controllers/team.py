@@ -106,7 +106,7 @@ def _create_member(db, current_user, name, email, role_name, department_id, mana
         html = _build_invite_html(admin_name=name, organisation_name=org_name,
                                   email=email, temp_password=temp_password, login_url=login_url)
         sent = send_email(to_email=email,
-                          subject=f"You've been invited to {org_name} — HSE Intelligence",
+                          subject=f"You've been invited to {org_name} — EHSERA Intelligence",
                           html_content=html, to_name=name)
     except Exception as e:  # noqa: BLE001
         logger.warning("Invite email failed for %s: %s", email, e)

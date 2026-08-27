@@ -131,7 +131,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-white">
                 <img src="/logo.png" alt="HSE logo" className="h-full w-full object-cover" />
               </div>
-              <span className="text-[15px]" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif', fontWeight: 700 }}>HSE Intelligence</span>
+              <span className="text-[15px]" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif', fontWeight: 700 }}>EHSERA Intelligence</span>
             </div>
             <button
               type="button"
