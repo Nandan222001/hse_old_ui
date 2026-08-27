@@ -224,7 +224,7 @@ export function OperationsScreen({ navigation }: Props) {
             <View style={[styles.gridIcon, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="warning-outline" size={26} color="#B45309" />
             </View>
-            <Text style={styles.gridLabel}>Hazard Register</Text>
+            <Text style={styles.gridLabel}>Unsafe Act Register</Text>
             <Text style={styles.gridDesc}>Assess &amp; control</Text>
           </TouchableOpacity>
         </View>

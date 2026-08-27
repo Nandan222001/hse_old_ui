@@ -14,12 +14,12 @@ import { hazardService } from '../services/hazardService';
 import { Colors } from '../theme/colors';
 
 /**
- * Log a hazard into the standing register (flow 5).
+ * Log an unsafe act into the standing register (flow 5).
  *
  * Distinct from ReportRiskScreen, which writes a one-off observation to
  * `risk_reports`. A register entry is a standing condition that gets assessed,
  * contained, controlled, verified and closed — the same eight stages an
- * incident runs — and the worker can follow it the whole way on My Hazards.
+ * incident runs — and the worker can follow it the whole way on My Unsafe Acts.
  *
  * The severity words here are the register's own four-point scale
  * (Low/Medium/High/Critical), not the 5x5 consequence scale the risk form uses.
@@ -68,8 +68,8 @@ export default function LogHazardScreen({ navigation }: any) {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!hazardName.trim()) e.hazardName = 'Name the hazard';
-    if (!category) e.category = 'Select a hazard category';
+    if (!hazardName.trim()) e.hazardName = 'Name the unsafe act';
+    if (!category) e.category = 'Select an unsafe act category';
     if (!severity) e.severity = 'Select how bad it could be';
     if (!probability) e.probability = 'Select how likely it is';
     setErrors(e);
@@ -93,14 +93,14 @@ export default function LogHazardScreen({ navigation }: any) {
         photos: mediaAttachments.length > 0 ? mediaAttachments : undefined,
       });
       Alert.alert(
-        res.queued ? 'Saved — waiting to send' : 'Hazard Logged',
+        res.queued ? 'Saved — waiting to send' : 'Unsafe Act Logged',
         res.queued
           ? 'Saved on this device. There is no signal right now, so it will be sent automatically as soon as you are back online.'
-          : 'Added to the hazard register. Your supervisor will assess it — you can follow it on My Hazards.',
+          : 'Added to the unsafe act register. Your supervisor will assess it — you can follow it on My Unsafe Acts.',
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch {
-      Alert.alert('Submission Failed', 'Could not log the hazard. Please try again.');
+      Alert.alert('Submission Failed', 'Could not log the unsafe act. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -108,17 +108,18 @@ export default function LogHazardScreen({ navigation }: any) {
 
   return (
     <ScreenLayout>
-      <AppHeader title="Log a Hazard" onBack={() => navigation.goBack()} rightIcon="🔔" />
+      <AppHeader title="Log an Unsafe Act" onBack={() => navigation.goBack()} rightIcon="🔔" />
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.introBox}>
           <Text style={styles.introText}>
-            A hazard is a standing condition that could hurt someone — not an event that
-            already happened. It stays on the register until the control is verified.
+            An unsafe act is a condition or behaviour that could hurt someone — not an
+            event that already happened. It stays on the register until the control is
+            verified.
           </Text>
         </View>
 
-        <FormSection label="What is the hazard?" required>
+        <FormSection label="What is the unsafe act?" required>
           <Input
             placeholder="e.g. Unguarded conveyor pinch point"
             value={hazardName}
@@ -127,12 +128,12 @@ export default function LogHazardScreen({ navigation }: any) {
           {errors.hazardName ? <Text style={styles.errorText}>{errors.hazardName}</Text> : null}
         </FormSection>
 
-        <FormSection label="Hazard Category" required>
+        <FormSection label="Unsafe Act Category" required>
           <Dropdown
             options={categories}
             value={category}
             onChange={(v: string) => { setCategory(v); setErrors(e => ({ ...e, category: '' })); }}
-            placeholder={categories.length ? 'Select hazard type...' : 'Loading categories...'}
+            placeholder={categories.length ? 'Select unsafe act type...' : 'Loading categories...'}
           />
           {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
         </FormSection>
@@ -197,7 +198,7 @@ export default function LogHazardScreen({ navigation }: any) {
         </FormSection>
 
         <ToggleRow
-          title="The hazard is still there right now"
+          title="The unsafe act is still there right now"
           subtitle="Logging it starts the record — it does not make the area safe."
           value={stillPresent}
           onChange={setStillPresent}
@@ -216,7 +217,7 @@ export default function LogHazardScreen({ navigation }: any) {
         >
           {isLoading
             ? <ActivityIndicator color="#FFFFFF" />
-            : <Text style={styles.submitText}>Add to Hazard Register</Text>}
+            : <Text style={styles.submitText}>Add to Unsafe Act Register</Text>}
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert, Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle2, ShieldCheck, X } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, ShieldAlert, ShieldCheck, X } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { permitWorkflowService } from "../../services/permitWorkflowService";
+import { PermitGateSheets, gateDetailOf, type BlockedApproval } from "./PermitGateSheets";
 
 export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps) {
   const [items, setItems] = useState<any[]>([]);
@@ -21,6 +22,10 @@ export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // What the gates refused. The sheet renders it; see PermitGateSheets for why
+  // this is not an Alert.
+  const [blocked, setBlocked] = useState<BlockedApproval | null>(null);
+
   const decide = async (id: number, approve: boolean) => {
     try {
       setBusy(id);
@@ -29,11 +34,22 @@ export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps
       showToast?.(`Permit PTW-${id} ${approve ? "approved" : "rejected"}`);
       load();
     } catch (e: any) {
-      Alert.alert("Failed", e?.response?.data?.detail || "Could not update permit.");
+      const detail = e?.response?.data?.detail;
+      // The gate engine answers with an object: a message, the reasons, and
+      // every gate's verdict. Rendering it into a card the manager can act on
+      // is the difference between "Failed" and "no risk assessment covers this
+      // work — score the method statement".
+      const gates = gateDetailOf(e);
+      if (gates) {
+        setBlocked({ id, gates });
+      } else {
+        Alert.alert("Failed", typeof detail === "string" ? detail : "Could not update permit.");
+      }
     } finally {
       setBusy(null);
     }
   };
+
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -62,24 +78,41 @@ export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps
         ) : (
           items.map((p) => {
             const exp = p.validity_end ? new Date(p.validity_end).toLocaleDateString() : null;
+            // A permit the gates already refused. It sat at RESPOND, out of
+            // every queue, until this one learned to show it — so it has to
+            // arrive looking like what it is, not like one merely waiting.
+            const isBlocked = p.workflow_status === "gate_blocked";
             return (
-              <View key={p.id} style={styles.card}>
+              <View key={p.id} style={[styles.card, isBlocked && styles.cardBlocked]}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardId}>{p.permit_ref || `PTW-${p.id}`}</Text>
-                  <View style={styles.pendBadge}><Text style={styles.pendText}>{(p.status || "pending").replace(/_/g, " ")}</Text></View>
+                  <View style={[styles.pendBadge, isBlocked && styles.blockBadge]}>
+                    <Text style={[styles.pendText, isBlocked && styles.blockText]}>
+                      {isBlocked ? "gate blocked" : (p.status || "pending").replace(/_/g, " ")}
+                    </Text>
+                  </View>
                 </View>
                 <Text style={styles.cardDesc}>{p.work_description || "Permit to Work"}</Text>
                 <View style={styles.cardMeta}>
                   <Text style={styles.metaText}>👤 Emp {p.requested_by ?? "—"}</Text>
                   {exp && <Text style={styles.metaText}>📅 Valid till {exp}</Text>}
                 </View>
+                {isBlocked && !!p.gate_blocked_reason && (
+                  <View style={styles.blockedBox}>
+                    <ShieldAlert size={13} color="#BE123C" />
+                    <Text style={styles.blockedReason}>{p.gate_blocked_reason}</Text>
+                  </View>
+                )}
                 <View style={styles.btnRow}>
                   <TouchableOpacity style={styles.rejectBtn} onPress={() => decide(p.id, false)} disabled={busy === p.id}>
                     <X size={15} color="#DC2626" /><Text style={styles.rejectText}>Reject</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.approveBtn} onPress={() => decide(p.id, true)} disabled={busy === p.id}>
                     {busy === p.id ? <ActivityIndicator size="small" color="#fff" /> : (
-                      <><ShieldCheck size={15} color="#FFFFFF" /><Text style={styles.approveText}>Approve</Text></>
+                      <>
+                        <ShieldCheck size={15} color="#FFFFFF" />
+                        <Text style={styles.approveText}>{isBlocked ? "Re-run gates" : "Approve"}</Text>
+                      </>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -88,11 +121,28 @@ export function PermitApprovalsView({ setCurrentScreen, showToast }: ScreenProps
           })
         )}
       </ScrollView>
+
+      <PermitGateSheets
+        blocked={blocked}
+        onDismiss={() => setBlocked(null)}
+        onRetryApprove={(permitId) => decide(permitId, true)}
+        showToast={showToast}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  cardBlocked: { borderColor: "#FCA5A5", backgroundColor: "#FFFBFB" },
+  blockBadge: { backgroundColor: "#FEE2E2" },
+  blockText: { color: "#BE123C" },
+  blockedBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: "#FEF2F2", borderRadius: 10, padding: 10, marginBottom: 12,
+  },
+  blockedReason: { flex: 1, fontSize: 11.5, color: "#9F1239", lineHeight: 16 },
+
+
   container: { flex: 1, backgroundColor: "#F4F7FC" },
   headerBar: { height: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 16 },
   backButton: { padding: 8 },

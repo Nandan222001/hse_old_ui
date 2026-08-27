@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { launchCamera, launchImageLibrary, Asset, ImageLibraryOptions } from 'react-native-image-picker';
+import { ensureCameraPermission } from '../../utils/cameraPermission';
 import { authService } from '../services/authService';
 
 /** Downscaled hard enough that the base64 payload stays under the server cap. */
@@ -68,12 +69,18 @@ export function useProfilePhoto() {
       const options: any[] = [
         {
           text: 'Take Photo',
-          onPress: () =>
+          // The app declares CAMERA in its manifest, which makes requesting it
+          // the caller's job — react-native-image-picker only asks on its own
+          // when the app has not declared it. Without this the camera failed
+          // every time and the only visible result was "Camera unavailable".
+          onPress: async () => {
+            if (!(await ensureCameraPermission('take your profile photo'))) return;
             launchCamera({ ...PICKER_OPTIONS, saveToPhotos: false }, res => {
               if (res.didCancel) return;
               if (res.errorCode) { done({ ok: false, error: res.errorMessage || 'Camera unavailable.' }); return; }
               handleAsset(res.assets?.[0], done);
-            }),
+            });
+          },
         },
         {
           text: 'Choose from Gallery',

@@ -36,7 +36,8 @@ Writes to permits_to_work. Two status columns, deliberately:
                     stages are derived from. Read outside this controller only by
                     gate_engine and one `requested` count in stubs.py.
 """
-from datetime import date, datetime
+import json
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -58,6 +59,7 @@ from app.controllers.workflow_common import (
 )
 from app.models.permit_to_work import PermitToWork
 from app.services import permit_next_action, workflow_stages
+from app.services import department_scope
 from app.services.gate_engine import evaluate_permit_gates
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
@@ -74,12 +76,40 @@ from app.schemas.permit_workflow import (
 router = APIRouter(prefix="/permit-workflow", tags=["Permit Workflow"])
 
 SUPERVISOR_QUEUE = ["requested"]
-MANAGER_QUEUE = ["requested", "acknowledged"]
+
+# `gate_blocked` belongs here, and leaving it out was a trap.
+#
+# A blocked approval moves the permit to stage 03 RESPOND — a control problem
+# somebody has to fix — and the manager who pressed Approve is the person it
+# went to. But the queue they pressed it from listed only `requested` and
+# `acknowledged`, so the permit dropped out of their list the instant it
+# blocked, and no other screen in the app lists `gate_blocked` at all. Four
+# permits in this database are sitting there: visible on the monitoring tile as
+# "Pending Review", absent from every queue that could act on them, unreachable
+# forever.
+#
+# Both verbs the permit needs from here are already allowed from `gate_blocked`
+# — approve (retry once the cause is fixed) and reject — so the only thing
+# missing was showing it to the person holding it.
+MANAGER_QUEUE = ["requested", "acknowledged", "gate_blocked"]
 
 # Granted, being worked under, or worked under and since verified — the states
 # in which a permit authorises work right now. Shared with gate_engine; see
 # workflow_stages.PERMIT_LIVE_STATUSES for why it lives there.
 LIVE_STATUSES = list(workflow_stages.PERMIT_LIVE_STATUSES)
+
+
+# How early work may start against the stated window.
+#
+# `validity_start` is a MySQL DATETIME with no fractional seconds, and MySQL
+# *rounds* rather than truncates on the way in: a permit raised at 19:35:46.9 to
+# start "now" is stored as starting at 19:35:47, half a second in its own
+# future. Activating it immediately — which is exactly what a worker raising a
+# permit for the job in front of them does — was refused with "this permit is
+# not valid until 19:35". The window is stated to the minute everywhere it is
+# shown, so a minute is the honest tolerance; anything genuinely later than that
+# is a permit whose window has not opened, which is what this check is for.
+START_GRACE = timedelta(minutes=1)
 
 
 def _require_within_validity(row: PermitToWork, verb: str) -> None:
@@ -118,7 +148,7 @@ def _require_within_validity(row: PermitToWork, verb: str) -> None:
             },
         )
 
-    if row.validity_start and now < row.validity_start:
+    if row.validity_start and now < row.validity_start - START_GRACE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -233,6 +263,25 @@ def _resolve_permit_type_id(db: Session, data: dict, org_id: Optional[int]) -> O
     return row["id"] if row else None
 
 
+def _evidence_of(row) -> List[str]:
+    """The attachments, whichever way the column happens to hold them.
+
+    MySQL's JSON type comes back parsed through the ORM but as a string over
+    raw SQL, and permits are written both ways in this codebase. Returning []
+    for anything unrecognised keeps a malformed row from breaking the response
+    for the whole queue.
+    """
+    raw = getattr(row, "evidence_json", None)
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+    return [str(u) for u in raw] if isinstance(raw, list) else []
+
+
 def _respond(row) -> PermitWorkflowResponse:
     # Derived from workflow_status on the way out, never stored — see
     # PERMIT_STATUS_STAGE for why the stage rides on workflow_status and not on
@@ -257,6 +306,7 @@ def _respond(row) -> PermitWorkflowResponse:
         validity_end=row.validity_end,
         requested_by=row.requested_by,
         requested_at=row.requested_at,
+        evidence=_evidence_of(row),
         acknowledged_by=row.acknowledged_by,
         acknowledged_at=row.acknowledged_at,
         supervisor_notes=row.supervisor_notes,
@@ -286,6 +336,8 @@ def _list(rows) -> List[PermitListItem]:
             requested_by=r.requested_by,
             requested_at=r.requested_at,
             validity_end=r.validity_end,
+            gate_status=r.gate_status,
+            gate_blocked_reason=r.gate_blocked_reason,
             stage=st.get("stage"),
             stage_number=st.get("stage_number"),
             stage_label=st.get("stage_label"),
@@ -365,11 +417,16 @@ def supervisor_pending_review(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     require_role(current_user.role, ALL_READ_ROLES, "view pending permits")
-    rows = (
+    q = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
         .filter(PermitToWork.workflow_status.in_(SUPERVISOR_QUEUE))
-        .order_by(PermitToWork.id.desc())
+    )
+    # Department rule: a permit belongs to the requester's department, so only
+    # that department's supervisor and manager work it.
+    q = department_scope.apply_scope(q, PermitToWork, "requested_by", db, current_user)
+    rows = (
+        q.order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -408,11 +465,16 @@ def manager_queue(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     require_role(current_user.role, MANAGER_ROLES, "view the permit manager queue")
-    rows = (
+    q = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
         .filter(PermitToWork.workflow_status.in_(MANAGER_QUEUE))
-        .order_by(PermitToWork.id.desc())
+    )
+    # Department rule: a permit belongs to the requester's department, so only
+    # that department's supervisor and manager work it.
+    q = department_scope.apply_scope(q, PermitToWork, "requested_by", db, current_user)
+    rows = (
+        q.order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
         .all()

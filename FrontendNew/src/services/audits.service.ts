@@ -59,7 +59,7 @@ export interface Evidence {
   id: number;
   checklist_item_id?: number | null;
   finding_id?: number | null;
-  kind: 'photo' | 'document' | 'note' | 'scan' | 'interview';
+  kind: 'photo' | 'video' | 'document' | 'note' | 'scan' | 'interview';
   file_url?: string | null;
   caption?: string | null;
   scanned_ref?: string | null;
@@ -134,6 +134,8 @@ export interface Audit {
   closing_meeting_at?: string | null;
   auditee_confirmed_at?: string | null;
   auditee_signed_name?: string | null;
+  /** The drawn signature, as the auditor's device captured it on site. */
+  auditee_signature?: string | null;
   findings_locked: boolean;
   findings_locked_at?: string | null;
   score_band?: ScoreBand | null;
@@ -142,6 +144,7 @@ export interface Audit {
   finding_counts: Record<Classification, number>;
   classified_findings: Finding[];
   auditor_signed_name?: string | null;
+  auditor_signature?: string | null;
   report_ref?: string | null;
   report_issued_at?: string | null;
   report_approved_at?: string | null;
@@ -241,6 +244,10 @@ export interface AuditReport {
   distributed_to: number[];
   signed_by?: string | null;
   auditee_signed_by?: string | null;
+  auditor_signature?: string | null;
+  auditee_signature?: string | null;
+  /** Every photo, video and note captured on the walk, not only what hangs off a finding. */
+  evidence?: Evidence[];
 }
 
 export interface TemplateItem {

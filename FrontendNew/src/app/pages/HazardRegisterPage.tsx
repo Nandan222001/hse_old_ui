@@ -16,10 +16,10 @@ import { HazardsTabBar } from "../components/audits/HazardsTabBar";
 import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
- * The working hazard register — what is owed, and the one action that clears it.
+ * The working unsafe act register — what is owed, and the one action that clears it.
  *
  * The companion to HazardTrackingPage: that one is the audit view (what
- * happened, by whom), this one is where the work is done. Selecting a hazard
+ * happened, by whom), this one is where the work is done. Selecting an unsafe act
  * shows its eight-stage tracker and exactly one form — whichever stage the
  * backend says is outstanding. The page never decides that itself;
  * `/hazard-register/{id}/next-action` does, so this and the mobile app can
@@ -74,7 +74,7 @@ export function HazardRegisterPage() {
       setItems(rows);
       setStats(s);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load the hazard register");
+      setError(e instanceof Error ? e.message : "Could not load the unsafe act register");
       setItems([]);
     } finally {
       setLoading(false);
@@ -135,9 +135,9 @@ export function HazardRegisterPage() {
       <HazardsTabBar />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Hazard Register</h1>
+          <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Unsafe Act Register</h1>
           <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>
-            Every standing hazard, from logging through to a verified control — the same eight
+            Every standing unsafe act, from logging through to a verified control — the same eight
             stages an incident runs.
           </p>
         </div>
@@ -198,7 +198,7 @@ export function HazardRegisterPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search hazards…"
+                placeholder="Search unsafe acts…"
                 className="w-full rounded-md border py-1.5 pl-8 pr-2.5 text-[12.5px] outline-none"
                 style={{ borderColor: "#DDE5F4", color: "#0F172A" }}
               />
@@ -210,7 +210,7 @@ export function HazardRegisterPage() {
               <div className="p-4 text-[12px]" style={{ color: "#64748B" }}>Loading…</div>
             ) : items.length === 0 ? (
               <div className="p-4 text-[12px]" style={{ color: "#64748B" }}>
-                No hazards {stageFilter ? `at ${stageFilter}` : "on the register"}.
+                No unsafe acts {stageFilter ? `at ${stageFilter}` : "on the register"}.
               </div>
             ) : (
               items.map((h) => (
@@ -234,7 +234,7 @@ export function HazardRegisterPage() {
                     </span>
                   </div>
                   <div className="mt-1 line-clamp-2 text-[12.5px]" style={{ color: "#111827", fontWeight: 600 }}>
-                    {h.hazard_name || h.description || "Untitled hazard"}
+                    {h.hazard_name || h.description || "Untitled unsafe act"}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {h.assessed_priority && (
@@ -269,7 +269,7 @@ export function HazardRegisterPage() {
         <div className="rounded-lg border bg-white p-3.5" style={{ borderColor: "#DDE5F4" }}>
           {!selected ? (
             <div className="text-[12px]" style={{ color: "#64748B" }}>
-              Select a hazard to see where it sits and what it needs next.
+              Select an unsafe act to see where it sits and what it needs next.
             </div>
           ) : (
             <>
@@ -277,7 +277,7 @@ export function HazardRegisterPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h2 className="text-[15px]" style={{ color: "#0F172A", fontWeight: 700 }}>
-                      {selected.hazard_name || "Untitled hazard"}
+                      {selected.hazard_name || "Untitled unsafe act"}
                     </h2>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px]"
                       style={{ color: "#64748B" }}>
@@ -445,7 +445,7 @@ export function HazardRegisterPage() {
       // ── 02 ASSESS ───────────────────────────────────────────────────────
       case "open":
         return (
-          <FormShell title="Assess the hazard">
+          <FormShell title="Assess the unsafe act">
             <div className="grid gap-3 sm:grid-cols-2">
               <Choice label="Severity" options={SEVERITIES} value={severity} onChange={setSeverity} />
               <Choice label="Probability" options={PROBABILITIES} value={probability} onChange={setProbability} />
@@ -461,7 +461,7 @@ export function HazardRegisterPage() {
               <span>
                 <strong>Work stopped because of this hazard.</strong>{" "}
                 <span style={{ color: "#64748B" }}>
-                  Stopping the job routes the hazard to RESPOND so containment is recorded before
+                  Stopping the job routes the unsafe act to RESPOND so containment is recorded before
                   the review.
                 </span>
               </span>
@@ -479,7 +479,7 @@ export function HazardRegisterPage() {
                   work_stopped: workStopped,
                   assessment_notes: text.trim() || undefined,
                 }),
-                "Hazard assessed.",
+                "Unsafe act assessed.",
               )} />
             </Actions>
           </FormShell>
@@ -488,10 +488,10 @@ export function HazardRegisterPage() {
       // ── 03 RESPOND ──────────────────────────────────────────────────────
       case "interim_control":
         return (
-          <FormShell title="Contain the hazard">
+          <FormShell title="Contain the unsafe act">
             <Field label="Interim control">
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3}
-                placeholder="What is holding this hazard right now? e.g. isolated and barriered"
+                placeholder="What is holding this unsafe act right now? e.g. isolated and barriered"
                 className={inputClass} style={inputStyle} />
             </Field>
             <Actions>
@@ -517,7 +517,7 @@ export function HazardRegisterPage() {
           <FormShell title="Establish the cause, then plan the control">
             <Field label="Root cause">
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2}
-                placeholder="Why does this hazard exist? Not what it is — why it is here."
+                placeholder="Why does this unsafe act exist? Not what it is — why it is here."
                 className={inputClass} style={inputStyle} />
             </Field>
             <Secondary
@@ -530,7 +530,7 @@ export function HazardRegisterPage() {
 
             <Field label="Permanent control">
               <textarea value={secondaryText} onChange={(e) => setSecondaryText(e.target.value)} rows={2}
-                placeholder="What will remove or reduce the hazard for good?"
+                placeholder="What will remove or reduce the unsafe act for good?"
                 className={inputClass} style={inputStyle} />
             </Field>
             <Field label="Hierarchy of control">
@@ -549,7 +549,7 @@ export function HazardRegisterPage() {
                 ))}
               </div>
               <p className="mt-1 text-[11px]" style={{ color: "#64748B" }}>
-                Strongest first. PPE protects the person instead of removing the hazard, so it
+                Strongest first. PPE protects the person instead of removing the unsafe act, so it
                 needs a justification — the backend refuses it without one.
               </p>
             </Field>
@@ -613,8 +613,8 @@ export function HazardRegisterPage() {
                 className={inputClass} style={inputStyle} />
             </Field>
             <p className="text-[11.5px]" style={{ color: "#64748B" }}>
-              Answering "did not hold" returns the hazard to IMPROVE and counts the failure. A
-              control that failed means the hazard is still live.
+              Answering "did not hold" returns the unsafe act to IMPROVE and counts the failure. A
+              control that failed means the unsafe act is still live.
             </p>
             <Actions>
               <Danger label="Did not hold" onClick={() => run(
@@ -635,7 +635,7 @@ export function HazardRegisterPage() {
           <FormShell title="Capture the lesson, then close">
             <Field label="Lesson learned">
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3}
-                placeholder="What should change elsewhere so this hazard does not recur?"
+                placeholder="What should change elsewhere so this unsafe act does not recur?"
                 className={inputClass} style={inputStyle} />
             </Field>
             <Field label="Closure notes">
@@ -648,12 +648,12 @@ export function HazardRegisterPage() {
                 if (!text.trim()) { setError("Enter the lesson."); return; }
                 run(() => captureHazardLesson(id, text.trim()), "Lesson captured.");
               }} />
-              <Primary busy={busy} label="Close hazard" onClick={() => run(
+              <Primary busy={busy} label="Close unsafe act" onClick={() => run(
                 () => closeHazard(id, {
                   lessons_learned: text.trim() || undefined,
                   closure_notes: secondaryText.trim() || undefined,
                 }),
-                "Hazard closed.",
+                "Unsafe act closed.",
               )} />
             </Actions>
           </FormShell>

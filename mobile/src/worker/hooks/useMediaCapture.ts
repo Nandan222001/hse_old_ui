@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { MediaAttachment } from '../types';
+// Shared with the auditor's checklist screen. Kept in one place after that
+// screen grew its own launchCamera call without the permission request and was
+// silently broken by exactly the problem this solves.
+import { ensureCameraPermission, reportPickerError } from '../../utils/cameraPermission';
 
 /**
  * Attaching evidence to a report: photograph it, film it, or pick either from
@@ -83,57 +87,8 @@ export function useMediaCapture(options: UseMediaCaptureOptions | number = {}) {
     if (picked.length) setItems(prev => [...prev, ...picked]);
   };
 
-  const reportPickerError = (label: string, code?: string, message?: string) => {
-    // didCancel is the worker backing out — not something to interrupt them over.
-    if (code === 'camera_unavailable') {
-      Alert.alert('No camera', 'This device has no camera available.');
-    } else if (code === 'permission') {
-      Alert.alert(
-        `${label} permission needed`,
-        'Allow access in Settings to attach evidence photos or videos.',
-      );
-    } else if (message) {
-      Alert.alert(`Could not open ${label.toLowerCase()}`, message);
-    }
-  };
-
-  /**
-   * Ask for CAMERA at runtime, because nothing else will.
-   *
-   * react-native-image-picker only requests this itself when the app does NOT
-   * declare CAMERA in its manifest. This app does declare it, which flips the
-   * responsibility to the caller — and where that request was never made, the
-   * permission sat at granted=false and launchCamera failed every time. Gallery
-   * is unaffected: the Android photo picker needs no permission at all.
-   */
-  const ensureCameraPermission = async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') return true;
-    try {
-      if (await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA)) return true;
-
-      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
-        title: 'Camera access',
-        message: 'The camera is needed to attach evidence photos and videos to this report.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Not now',
-      });
-      if (result === PermissionsAndroid.RESULTS.GRANTED) return true;
-
-      Alert.alert(
-        'Camera permission needed',
-        result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-          ? 'Camera access was turned off for this app. Enable it in Settings → Apps → Permissions, or attach evidence from the gallery instead.'
-          : 'Evidence captures need camera access. You can still attach one from the gallery.',
-      );
-      return false;
-    } catch (e: any) {
-      Alert.alert('Camera unavailable', e?.message ?? 'Could not request camera permission.');
-      return false;
-    }
-  };
-
   const takePhoto = async () => {
-    if (!(await ensureCameraPermission())) return;
+    if (!(await ensureCameraPermission('attach evidence to this report'))) return;
     const res = await launchCamera({
       mediaType: 'photo', quality: 0.7, maxWidth: 1600, maxHeight: 1600, saveToPhotos: false,
     });
@@ -143,7 +98,7 @@ export function useMediaCapture(options: UseMediaCaptureOptions | number = {}) {
   };
 
   const recordVideo = async () => {
-    if (!(await ensureCameraPermission())) return;
+    if (!(await ensureCameraPermission('attach evidence to this report'))) return;
     const res = await launchCamera({
       mediaType: 'video',
       videoQuality: 'medium',

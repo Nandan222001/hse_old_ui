@@ -18,7 +18,6 @@ import ProfileScreen from '../screens/ProfileScreen';
 import PerformTaskScreen from '../screens/PerformTaskScreen';
 import RaisePermitScreen from '../screens/RaisePermitScreen';
 import ReportNearMissScreen from '../screens/ReportNearMissScreen';
-import ReportUnsafeActScreen from '../screens/ReportUnsafeActScreen';
 import ReportIncidentScreen from '../screens/ReportIncidentScreen';
 import ReportRiskScreen from '../screens/ReportRiskScreen';
 import LogHazardScreen from '../screens/LogHazardScreen';
@@ -148,7 +147,6 @@ export default function AppNavigator() {
         <Stack.Screen name="PerformTask" component={PerformTaskScreen} options={{ presentation: 'card' }} />
         <Stack.Screen name="RaisePermit" component={RaisePermitScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportNearMiss" component={ReportNearMissScreen} options={{ presentation: 'modal' }} />
-        <Stack.Screen name="ReportUnsafeAct" component={ReportUnsafeActScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportIncident" component={ReportIncidentScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="ReportRisk" component={ReportRiskScreen} options={{ presentation: 'modal' }} />
         {/* Flow 5 · the standing hazard register. Separate from ReportRisk

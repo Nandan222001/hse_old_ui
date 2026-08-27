@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Menu,
   LayoutGrid,
-  AlertTriangle,
   ShieldCheck,
   MessageSquare,
   User,
@@ -27,7 +26,7 @@ import { Avatar } from "../../components";
 
 // New Figma-aligned manager tabs.
 import { MgrMonitoring } from "./tabs/MgrMonitoring";
-import { MgrRisk } from "./tabs/MgrRisk";
+import { MgrTasks } from "./tabs/MgrTasks";
 import { MgrPermits } from "./tabs/MgrPermits";
 import { MgrComplaints } from "./tabs/MgrComplaints";
 import { Tab_Profile } from "./tabs/Tab_Profile";
@@ -60,7 +59,7 @@ export function AppContainerView(props: ScreenProps) {
   const renderTabContent = () => {
     switch (activeTab) {
       case 0: return <MgrMonitoring {...props} />;
-      case 1: return <MgrRisk {...props} />;
+      case 1: return <MgrTasks {...props} />;
       case 2: return <MgrPermits {...props} />;
       case 3: return <MgrComplaints {...props} />;
       case 4: return <Tab_Profile {...props} />;
@@ -70,7 +69,7 @@ export function AppContainerView(props: ScreenProps) {
 
   const tabs = [
     { label: "Monitoring", icon: LayoutGrid },
-    { label: "Risk", icon: AlertTriangle },
+    { label: "Tasks", icon: ListChecks },
     { label: "Permits", icon: ShieldCheck },
     { label: "Complaints", icon: MessageSquare },
     { label: "Profile", icon: User },

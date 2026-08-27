@@ -5,6 +5,7 @@ import string
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -98,6 +99,12 @@ def invite_user(
     name = (payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
     role_name = (payload.get("role") or "operator").strip().lower()
+    # Optional, but the whole point of collecting it at invite time: an employee
+    # with no department cannot be routed to a supervisor, and incidents they
+    # report fall back to "any supervisor in the org". Validated against the
+    # inviter's own organisation below so one tenant cannot file a person into
+    # another tenant's department.
+    department_id = payload.get("department_id")
 
     if not name or not email:
         raise HTTPException(status_code=400, detail="name and email are required")
@@ -147,11 +154,27 @@ def invite_user(
     # employees row, so they never show up in employee-based views — supervisors
     # can't see or assign tasks to them, and /employees/me has nothing to return.
     # This mirrors what /team/add-worker already does.
+    if department_id is not None:
+        try:
+            department_id = int(department_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="department_id must be a number")
+        in_org = db.execute(
+            text("SELECT id FROM departments WHERE id = :id AND organisation_id = :org"),
+            {"id": department_id, "org": org_id},
+        ).scalar()
+        if not in_org:
+            raise HTTPException(
+                status_code=400,
+                detail="That department does not belong to your organisation",
+            )
+
     employee = Employee(
         full_name=name,
         organisation_id=org_id,
         employment_type="Full-time",
         active_status="Active",
+        department_id=department_id,
     )
     db.add(employee)
     db.flush()  # populate employee.id for the FK below

@@ -123,7 +123,7 @@ export function AuditorDashboardScreen({ navigation }: any) {
               <Banner
                 tone="danger" icon="hand-left"
                 title={`${stopped.length} audit${stopped.length === 1 ? '' : 's'} stopped — critical finding`}
-                text="Work may be suspended. Contain the hazard, then resume the walk."
+                text="Work may be suspended. Contain the unsafe act, then resume the walk."
               />
             </TouchableOpacity>
           )}
@@ -229,7 +229,7 @@ export function AuditorDashboardScreen({ navigation }: any) {
           <SectionLabel>On-site verification</SectionLabel>
           <View style={styles.quickGrid}>
             {[
-              { r: 'Verifications', i: 'shield-checkmark', t: 'Permit & hazard', s: 'WF-02 · WF-01' },
+              { r: 'Verifications', i: 'shield-checkmark', t: 'Permit & unsafe act', s: 'WF-02 · WF-01' },
               { r: 'CompetenceEvidenceAudit', i: 'school', t: 'Competence', s: 'WF-07' },
               { r: 'ContractorAudit', i: 'business', t: 'Contractor', s: 'WF-09' },
               { r: 'TransportVehicleAudit', i: 'car', t: 'Vehicle', s: 'WF-10' },

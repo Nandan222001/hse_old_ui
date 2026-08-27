@@ -36,9 +36,9 @@ export interface Submission {
 export const FAMILY_LABEL: Record<SubmissionFamily, string> = {
   incident: 'Incident',
   near_miss: 'Near Miss',
-  unsafe_act: 'Unsafe Act',
+  unsafe_act: 'Unsafe Act (reported before merge)',
   risk: 'Risk',
-  hazard: 'Hazard',
+  hazard: 'Unsafe Act',
 };
 
 /** Matches the report tiles above the list, so a submission is the colour of
@@ -48,7 +48,7 @@ export const FAMILY_TINT: Record<SubmissionFamily, { ink: string; tint: string }
   near_miss:  { ink: '#B45309', tint: '#FEF3C7' },
   unsafe_act: { ink: '#1D4ED8', tint: '#DBEAFE' },
   risk:       { ink: '#6D28D9', tint: '#EDE9FE' },
-  hazard:     { ink: '#0F766E', tint: '#CCFBF1' },
+  hazard:     { ink: '#1D4ED8', tint: '#DBEAFE' },
 };
 
 /** The API client unwraps `{success, data}`, but `/worker/incidents` nests its
@@ -99,7 +99,7 @@ async function fetchHazards(): Promise<Submission[]> {
     key: `hazard:${r.id}`,
     family: 'hazard' as const,
     reference: r.reference || `HAZ-${r.id}`,
-    title: r.hazard_name || r.description || 'Hazard',
+    title: r.hazard_name || r.description || 'Unsafe act',
     status: r.register_status ?? null,
     severity: r.severity ?? null,
     at: r.logged_at ?? null,

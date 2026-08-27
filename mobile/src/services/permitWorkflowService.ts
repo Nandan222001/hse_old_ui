@@ -21,6 +21,9 @@ export interface PermitListItem {
   requested_by: number | null;
   requested_at: string | null;
   validity_end: string | null;
+  /** Why the gates refused, when the permit is sitting at RESPOND. */
+  gate_status?: string | null;
+  gate_blocked_reason?: string | null;
 
   // Position on the eight stages, derived by the backend from workflow_status.
   // The API has always sent these; the type simply never declared them, so
@@ -208,6 +211,41 @@ export const permitWorkflowService = {
    * is a granted authorisation, the second is live work relying on its controls
    * right now.
    */
+  /**
+   * Score the method statement against this permit, on the six-criterion rubric.
+   *
+   * This is what unblocks `gate_rams_linked`, and until now nothing in the app
+   * could do it. The gate is satisfied by a Flow-B risk assessment or, failing
+   * that, a RAMS score carrying this permit's id — and the only screen that
+   * created a RAMS score scored a *contractor company* and never sent
+   * `permit_id`, so it could not satisfy the gate for any permit ever raised.
+   * With `risk_assessments` empty too, every permit stopped at approval with
+   * "No approved risk assessment covers this work."
+   *
+   * 80+ passes the gate, 60-79 is conditional (amber, still approvable), under
+   * 60 is a rejection the gate blocks on — which is the rubric doing its job,
+   * not a failure to score.
+   */
+  async scoreRams(
+    permitId: number,
+    criteria: {
+      hazard_identification: number;
+      control_adequacy: number;
+      competence_evidence: number;
+      equipment_suitability: number;
+      emergency_arrangements: number;
+      supervision_arrangements: number;
+    },
+    taskDescription?: string,
+  ): Promise<{ total_score: number; verdict: string }> {
+    const { data } = await apiClient.post('/rams-scores', {
+      permit_id: permitId,
+      task_description: taskDescription,
+      ...criteria,
+    });
+    return data;
+  },
+
   async activate(id: number): Promise<PermitDetail> {
     const { data } = await apiClient.post(PERMIT_WORKFLOW.ACTIVATE(id), {});
     return data;

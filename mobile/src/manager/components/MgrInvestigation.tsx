@@ -162,7 +162,7 @@ export function MgrInvestigation({ setCurrentScreen, selectedIncident, showToast
    *
    * Answering no is not a paperwork rejection: the backend returns the incident
    * to IMPROVE and reopens its corrective actions, because a control that did
-   * not hold means the hazard is still live.
+   * not hold means the unsafe act is still live.
    */
   const verify = async (effective: boolean) => {
     if (!effective && !findings.trim()) {

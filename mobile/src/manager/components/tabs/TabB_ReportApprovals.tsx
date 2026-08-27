@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -11,9 +12,9 @@ import {
   View,
 } from "react-native";
 import {
-  AlertCircle, CheckCircle2, Eye, RotateCcw, ShieldCheck, TriangleAlert,
+  AlertCircle, CheckCircle2, Eye, RotateCcw, ShieldCheck, TriangleAlert, UserPlus,
 } from "lucide-react-native";
-import type { ScreenProps } from "../types";
+import type { ReportFamily, ScreenProps } from "../types";
 import { StageTracker, type StageTrackerInfo } from "../StageTracker";
 import {
   queueKey,
@@ -22,6 +23,7 @@ import {
 } from "../../../hooks/useManagerReportQueue";
 import {
   reportWorkflowService,
+  type CapaOwner,
   type ReportDetail,
 } from "../../../services/reportWorkflowService";
 import { ReportRecordCard } from "../../../components/workflow/ReportRecordCard";
@@ -66,9 +68,17 @@ const STAGE_TINT: Record<string, { bg: string; fg: string }> = {
   CLOSE: { bg: "#F1F5F9", fg: "#475569" },
 };
 
-export function TabB_ReportApprovals({ showToast }: ScreenProps) {
+export function TabB_ReportApprovals({ showToast, reportFamily, setReportFamily }: ScreenProps) {
   const { queue, isLoading, busyId, error, refresh, approve, verifyEffectiveness, completeCapa, close } =
     useManagerReportQueue();
+
+  // Arriving from a Tasks card opens on that family; the pills stay so the
+  // other two are still reachable from here rather than only from the card
+  // that happens to have been tapped.
+  const visible = reportFamily
+    ? queue.filter((r) => r.report_type === reportFamily)
+    : queue;
+  const countOf = (family: string) => queue.filter((r) => r.report_type === family).length;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [closing, setClosing] = useState<ManagerQueueItem | null>(null);
   // The eight-stage track for the open card only. Fetched on expand rather than
@@ -80,6 +90,44 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
   // the supervisor had written.
   const [detail, setDetail] = useState<ReportDetail | null>(null);
   const [verifyNotes, setVerifyNotes] = useState("");
+
+  // Naming who does the work, from the record it came off. A risk observation
+  // whose corrective action sits unowned is the common case this exists for:
+  // the supervisor raised it, the manager is the one who knows whose job it is.
+  const [assigning, setAssigning] = useState<ManagerQueueItem | null>(null);
+  const [owners, setOwners] = useState<CapaOwner[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
+  const [savingOwner, setSavingOwner] = useState<number | null>(null);
+
+  const openAssign = useCallback(async (item: ManagerQueueItem) => {
+    setAssigning(item);
+    setOwnersLoading(true);
+    try {
+      // Workers included: the person who will physically do it is often not a
+      // supervisor, and the lifecycle has always allowed them to own it.
+      setOwners(await reportWorkflowService(item.report_type).getCapaOwners(true));
+    } catch {
+      setOwners([]);
+    } finally {
+      setOwnersLoading(false);
+    }
+  }, []);
+
+  const assignTo = async (owner: CapaOwner) => {
+    if (!assigning?.subject) return;
+    setSavingOwner(owner.employee_id);
+    try {
+      await reportWorkflowService(assigning.report_type)
+        .assignCapa(assigning.subject.id, owner.employee_id);
+      showToast?.(`${assigning.subject.reference} assigned to ${owner.name}`);
+      setAssigning(null);
+      refresh();
+    } catch (e: any) {
+      Alert.alert("Could not assign", e?.response?.data?.detail || "Please try again.");
+    } finally {
+      setSavingOwner(null);
+    }
+  };
 
   useEffect(() => {
     refresh();
@@ -127,7 +175,7 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
   const confirmFailedVerification = (item: ManagerQueueItem) => {
     Alert.alert(
       "The fix did not hold?",
-      "This reopens the corrective actions and sends the record back to IMPROVE. Use it when the hazard is still live.",
+      "This reopens the corrective actions and sends the record back to IMPROVE. Use it when the unsafe act is still live.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -187,6 +235,19 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
                 {!!item.subject.due_date && (
                   <Text style={styles.subjectDue}>Due {item.subject.due_date}</Text>
                 )}
+                {/* Who is actually doing it. An unowned action is chased by
+                    nobody — the escalation chain is addressed off the owner —
+                    so saying so plainly is half the point of this row. */}
+                <Text
+                  style={[
+                    styles.subjectOwner,
+                    !item.subject.responsible_person_name && styles.subjectUnowned,
+                  ]}
+                >
+                  {item.subject.responsible_person_name
+                    ? `Owner: ${item.subject.responsible_person_name}`
+                    : "No owner yet — nothing is chasing this"}
+                </Text>
                 {item.subject.open_count > 1 && (
                   <Text style={styles.subjectDue}>
                     {item.subject.open_count} actions open — the record leaves IMPROVE when the
@@ -198,15 +259,26 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
               <Text style={styles.note}>A corrective action is outstanding.</Text>
             )}
             {!!item.subject && (
-              <TouchableOpacity
-                style={[styles.workflowBtn, styles.primaryBtn, styles.fullBtn]}
-                onPress={async () => {
-                  if (await completeCapa(item, item.subject!.id)) showToast("Action signed off");
-                }}
-              >
-                <CheckCircle2 size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                <Text style={styles.primaryText}>Sign off {item.subject.reference}</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.workflowBtn, styles.assignBtn, styles.fullBtn]}
+                  onPress={() => openAssign(item)}
+                >
+                  <UserPlus size={14} color="#0B3D91" style={{ marginRight: 4 }} />
+                  <Text style={styles.assignText}>
+                    {item.subject.responsible_person_name ? "Reassign" : "Assign to someone"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.workflowBtn, styles.primaryBtn, styles.fullBtn]}
+                  onPress={async () => {
+                    if (await completeCapa(item, item.subject!.id)) showToast("Action signed off");
+                  }}
+                >
+                  <CheckCircle2 size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.primaryText}>Sign off {item.subject.reference}</Text>
+                </TouchableOpacity>
+              </>
             )}
           </>
         );
@@ -335,22 +407,102 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.familyRow}>
+          {([null, "near_miss", "unsafe_act", "risk"] as Array<ReportFamily | null>).map((f) => {
+            const label = f ? TYPE_META[f].label : "All";
+            const count = f ? countOf(f) : queue.length;
+            const on = reportFamily === f;
+            return (
+              <TouchableOpacity
+                key={label}
+                style={[styles.familyPill, on && styles.familyPillOn]}
+                onPress={() => setReportFamily(f)}
+              >
+                <Text style={[styles.familyPillText, on && styles.familyPillTextOn]}>
+                  {label} ({count})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <Text style={styles.sectionHeader}>Waiting on you</Text>
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        {queue.length === 0 && !isLoading && !error ? (
+        {visible.length === 0 && !isLoading && !error ? (
           <View style={styles.empty}>
             <CheckCircle2 size={40} color="#A0AEC0" />
-            <Text style={styles.emptyTitle}>Nothing waiting on you</Text>
+            <Text style={styles.emptyTitle}>
+              {reportFamily ? `No ${TYPE_META[reportFamily].label.toLowerCase()}es waiting on you` : "Nothing waiting on you"}
+            </Text>
             <Text style={styles.emptySub}>
               Reports appear here once a supervisor escalates or finishes investigating, and again
               when their corrective action is ready to verify.
             </Text>
           </View>
         ) : (
-          queue.map(renderCard)
+          visible.map(renderCard)
         )}
+
+        <Modal
+          visible={assigning !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAssigning(null)}
+        >
+          <View style={styles.ownerBackdrop}>
+            <View style={styles.ownerSheet}>
+              <Text style={styles.ownerTitle}>
+                Who does {assigning?.subject?.reference}?
+              </Text>
+              <Text style={styles.ownerSub}>
+                {assigning?.subject?.description}
+                {"\n\n"}They are notified straight away, and it appears in their own
+                actions list. The escalation chain starts measuring against them at
+                50% of the deadline.
+              </Text>
+
+              {ownersLoading ? (
+                <ActivityIndicator color="#0B3D91" style={{ marginVertical: 24 }} />
+              ) : (
+                <ScrollView>
+                  {owners.length === 0 && (
+                    <Text style={styles.ownerSub}>
+                      Nobody in this organisation can be assigned. Check that the
+                      employee records are in the same organisation as the logins.
+                    </Text>
+                  )}
+                  {owners.map((o) => (
+                    <TouchableOpacity
+                      key={o.employee_id}
+                      style={styles.ownerRow}
+                      disabled={savingOwner !== null}
+                      onPress={() => assignTo(o)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.ownerName}>{o.name}</Text>
+                        <Text style={styles.ownerMeta}>
+                          {o.role.replace(/_/g, " ")}
+                          {o.department ? ` · ${o.department}` : ""}
+                        </Text>
+                      </View>
+                      {savingOwner === o.employee_id && <ActivityIndicator color="#0B3D91" />}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+
+              <TouchableOpacity
+                style={styles.ownerCancel}
+                onPress={() => setAssigning(null)}
+                disabled={savingOwner !== null}
+              >
+                <Text style={styles.ownerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <ReportClosureModal
           visible={closing !== null}
@@ -369,6 +521,36 @@ export function TabB_ReportApprovals({ showToast }: ScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  subjectOwner: { fontSize: 11.5, color: "#334155", marginTop: 4, fontWeight: "600" },
+  subjectUnowned: { color: "#BE123C" },
+  assignBtn: { backgroundColor: "#EEF2FB", borderWidth: 1, borderColor: "#C7D2FE" },
+  assignText: { fontSize: 12.5, fontWeight: "700", color: "#0B3D91" },
+
+  ownerBackdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.45)", justifyContent: "flex-end" },
+  ownerSheet: {
+    backgroundColor: "#FFFFFF", borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 18, maxHeight: "75%",
+  },
+  ownerTitle: { fontSize: 16, fontWeight: "800", color: "#0B1C30" },
+  ownerSub: { fontSize: 12, color: "#63739B", marginTop: 6, lineHeight: 17 },
+  ownerRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#EEF2F7",
+  },
+  ownerName: { fontSize: 14, fontWeight: "700", color: "#0B1C30" },
+  ownerMeta: { fontSize: 11.5, color: "#63739B", marginTop: 2 },
+  ownerCancel: { alignItems: "center", paddingVertical: 14, marginTop: 6 },
+  ownerCancelText: { fontSize: 13.5, fontWeight: "700", color: "#63739B" },
+
+  familyRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  familyPill: {
+    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: "#E2E8F0", backgroundColor: "#FFFFFF",
+  },
+  familyPillOn: { backgroundColor: "#0B3D91", borderColor: "#0B3D91" },
+  familyPillText: { fontSize: 11.5, fontWeight: "700", color: "#63739B" },
+  familyPillTextOn: { color: "#FFFFFF" },
+
   container: { padding: 16, flexGrow: 1 },
   sectionHeader: {
     fontSize: 12, fontWeight: "800", color: "#63739B",

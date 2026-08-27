@@ -130,7 +130,7 @@ class OpeningMeeting(BaseModel):
 class EvidenceCreate(BaseModel):
     checklist_item_id: Optional[int] = None
     finding_id: Optional[int] = None
-    kind: str = "photo"                       # photo | document | note | scan | interview
+    kind: str = "photo"                       # photo | video | document | note | scan | interview
     file_url: Optional[str] = None
     caption: Optional[str] = None
     scanned_ref: Optional[str] = None         # QR / barcode payload
@@ -300,6 +300,13 @@ class ReportOut(BaseModel):
     distributed_to: List[int] = Field(default_factory=list)
     signed_by: Optional[str] = None
     auditee_signed_by: Optional[str] = None
+    auditor_signature: Optional[str] = None
+    auditee_signature: Optional[str] = None
+    # Every photo, video and note captured on the walk, not only the ones that
+    # happen to hang off a finding. The report listed a count and nothing else,
+    # so a conformance evidenced by a photograph showed no photograph, and a
+    # video recorded on site existed only on the phone that took it.
+    evidence: List[EvidenceOut] = Field(default_factory=list)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -385,6 +392,14 @@ class AuditResponse(BaseModel):
     closing_meeting_at: Optional[datetime] = None
     auditee_confirmed_at: Optional[datetime] = None
     auditee_signed_name: Optional[str] = None
+    # The drawn signatures, as the device captured them.
+    #
+    # They have been stored since the closing meeting endpoint was written and
+    # read by nothing: the response carried only the typed name, so the console
+    # could say who signed and never show the signature. The whole point of the
+    # pad being on the phone is that signing happens on site before anyone
+    # leaves, and the record of it belongs wherever the audit is reviewed.
+    auditee_signature: Optional[str] = None
     findings_locked_at: Optional[datetime] = None
     findings_locked: bool = False
     score_band: Optional[str] = None
@@ -393,6 +408,7 @@ class AuditResponse(BaseModel):
     finding_counts: Dict[str, int] = Field(default_factory=dict)
     classified_findings: List[FindingOut] = Field(default_factory=list)
     auditor_signed_name: Optional[str] = None
+    auditor_signature: Optional[str] = None
     report_ref: Optional[str] = None
     report_issued_at: Optional[datetime] = None
     report_approved_at: Optional[datetime] = None

@@ -89,6 +89,10 @@ class PermitWorkflowResponse(BaseModel):
 
     requested_by: Optional[int] = None
     requested_at: Optional[datetime] = None
+    # The risk assessment the worker attached when they raised it. The
+    # supervisor acknowledging and the manager approving are the two people who
+    # most need to read it, and until now it reached neither.
+    evidence: List[str] = Field(default_factory=list)
     acknowledged_by: Optional[int] = None
     acknowledged_at: Optional[datetime] = None
     supervisor_notes: Optional[str] = None
@@ -123,6 +127,11 @@ class PermitListItem(BaseModel):
     requested_by: Optional[int] = None
     requested_at: Optional[datetime] = None
     validity_end: Optional[datetime] = None
+
+    # Why a permit is sitting at RESPOND, so the queue card can say so rather
+    # than showing a blocked permit as though it were merely waiting.
+    gate_status: Optional[str] = None
+    gate_blocked_reason: Optional[str] = None
 
     # Enough to draw the stage rail on a queue card without opening the permit.
     stage: Optional[str] = None

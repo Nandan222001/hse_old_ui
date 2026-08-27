@@ -82,7 +82,7 @@ export const hazardService = {
         kind: hasMedia ? 'multipart' : 'json',
         photos: hasMedia ? media.map(m => ({ uri: m.uri, name: m.name, type: m.type })) : undefined,
         client: hasMedia ? 'workerUpload' : 'worker',
-        label: 'Hazard register entry',
+        label: 'Unsafe act register entry',
       },
     );
   },

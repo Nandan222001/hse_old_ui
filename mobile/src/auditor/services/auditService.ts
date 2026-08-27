@@ -65,7 +65,7 @@ export interface Evidence {
   audit_id: number;
   checklist_item_id?: number | null;
   finding_id?: number | null;
-  kind: 'photo' | 'document' | 'note' | 'scan' | 'interview';
+  kind: 'photo' | 'video' | 'document' | 'note' | 'scan' | 'interview';
   file_url?: string | null;
   caption?: string | null;
   scanned_ref?: string | null;

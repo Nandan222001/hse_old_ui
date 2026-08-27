@@ -22,6 +22,8 @@ from app.services.events import catalogue
 from app.services.capa_priority import prioritise
 from app.services.incident_severity import classify_severity
 from app.services import workflow_stages
+from app.services import department_scope
+from app.services import supervisor_routing
 from app.services import incident_next_action
 from app.schemas.incident_workflow import (
     WorkerIncidentReport,
@@ -73,31 +75,13 @@ def _role_matches(user_role: str, allowed_roles: set) -> bool:
 
 
 def _find_supervisor_for(db: Session, current_user: CurrentUser) -> Optional[int]:
-    """The supervisor an incident from this user should land on.
+    """See app.services.supervisor_routing.find_supervisor_for.
 
-    The reporter's own manager where there is one, otherwise any active
-    supervisor in the org — an unassigned incident sits in nobody's queue, which
-    is worse than one assigned to an approximately right person.
+    Kept as a thin alias so this module reads the same as before. The logic
+    moved out because /worker/incidents needs it too and the two must not
+    drift.
     """
-    reporter = (
-        db.query(Employee)
-        .filter(Employee.organisation_id == current_user.org_id)
-        .filter(Employee.full_name.ilike(f"%{current_user.username}%"))
-        .first()
-    )
-    if reporter and reporter.manager_id:
-        return reporter.manager_id
-
-    from app.models.role import Role
-    sup = (
-        db.query(Employee)
-        .join(Role, Employee.role_id == Role.id)
-        .filter(Employee.organisation_id == current_user.org_id)
-        .filter(Role.role_name.in_(["Supervisor", "Site Inspector", "Safety Manager"]))
-        .filter(Employee.active_status == "Active")
-        .first()
-    )
-    return sup.id if sup else None
+    return supervisor_routing.find_supervisor_for(db, current_user)
 
 
 def _acting_employee_id(db: Session, current_user: CurrentUser) -> Optional[int]:
@@ -337,10 +321,16 @@ def worker_report_incident(
         raise HTTPException(status_code=404, detail="No such hazard")
 
     # Find the employee record for the reporter (by user email → employee match)
+    # Resolved through users.employee_id, the real foreign key. This was
+    # `full_name ILIKE %username%`, which only lands when the username happens
+    # to appear inside the person's name — so for a login like worker01 or
+    # zzztest_bw it matched nothing and the incident was written with
+    # reported_by = NULL. That is why the seed carries incidents with no
+    # reporter at all, and it makes department scoping impossible: with no
+    # reporter there is no department to scope by.
     reporter_employee = (
         db.query(Employee)
-        .filter(Employee.organisation_id == current_user.org_id)
-        .filter(Employee.full_name.ilike(f"%{current_user.username}%"))
+        .filter(Employee.id == _acting_employee_id(db, current_user))
         .first()
     )
 
@@ -432,14 +422,27 @@ def supervisor_pending_review(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Supervisor sees incidents assigned to them (reported or acknowledged status)."""
+    """Incidents awaiting a supervisor, restricted to the viewer's department.
+
+    The docstring used to say "assigned to them" and the query did nothing of
+    the sort — it returned every open incident in the organisation, so a
+    supervisor in Finishing saw Maintenance's reports and vice versa.
+
+    Now scoped by the reporter's department (department_scope), because the
+    admin fixes a department on every employee when they are added. Admins and
+    auditors still see the whole organisation, and an incident whose reporter
+    has no department stays visible to everyone rather than falling into a gap.
+    """
     _require_role(current_user.role, ALL_ELEVATED_ROLES, "view pending incidents")
 
-    rows = (
+    q = (
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
         .filter(Incident.workflow_status.in_(SUPERVISOR_QUEUE_STATUSES))
-        .order_by(Incident.reported_at.desc())
+    )
+    q = department_scope.apply_scope(q, Incident, "reported_by", db, current_user)
+    rows = (
+        q.order_by(Incident.reported_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -464,6 +467,15 @@ def my_next_actions(
     Ordered by priority then by how long the step has been outstanding, so the
     oldest P1 is at the top rather than the most recently touched record.
     """
+    # Same department rule as the queues above — "what is waiting on me" must
+    # not list another department's work.
+    viewer_dept = None if department_scope.sees_whole_org(current_user.role) \
+        else department_scope.viewer_department_id(db, current_user)
+    dept_sql = department_scope.scope_sql("reported_by") if viewer_dept else ""
+    params = {"org": current_user.org_id}
+    if viewer_dept:
+        params["viewer_dept"] = viewer_dept
+
     rows = db.execute(
         text(
             "SELECT id, description, incident_type, severity_priority, severity_label, "
@@ -472,9 +484,10 @@ def my_next_actions(
             "       assigned_supervisor_id, escalated_to_manager_id "
             "  FROM incidents "
             " WHERE organisation_id = :org AND workflow_status <> 'closed' "
+            + dept_sql +
             " ORDER BY COALESCE(reported_at, created_at) DESC LIMIT 300"
         ),
-        {"org": current_user.org_id},
+        params,
     ).mappings().all()
 
     if not rows:
@@ -883,12 +896,17 @@ def manager_queue(
     """
     _require_role(current_user.role, MANAGER_ROLES, "view manager queue")
 
-    rows = (
+    q = (
         db.query(Incident)
         .filter(Incident.organisation_id == current_user.org_id)
         .filter(Incident.workflow_status.in_(MANAGER_QUEUE_STATUSES))
+    )
+    # Same department rule as the supervisor queue: the manager of a department
+    # decides on that department's incidents. Admins and auditors are exempt.
+    q = department_scope.apply_scope(q, Incident, "reported_by", db, current_user)
+    rows = (
         # MySQL has no NULLS LAST; a DESC sort already orders NULLs last there.
-        .order_by(Incident.escalated_at.desc(), Incident.reported_at.desc())
+        q.order_by(Incident.escalated_at.desc(), Incident.reported_at.desc())
         .offset(skip)
         .limit(limit)
         .all()

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, Time
+from sqlalchemy import JSON, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, Time
 from app.models.base import Base
 
 
@@ -59,3 +59,9 @@ class PermitToWork(Base):
     is_high_energy = Column(Integer, nullable=False, default=0)
     gps_latitude = Column(Numeric(10, 7), nullable=True)
     gps_longitude = Column(Numeric(10, 7), nullable=True)
+
+    # The risk assessment (JSA) the worker attached when they raised it, in the
+    # same shape the five report families use. Not the same thing as
+    # `risk_assessment_id` above: that is the Flow-B assessment the gate engine
+    # requires, this is what the worker had in their hand. See migration 077.
+    evidence_json = Column(JSON, nullable=True)

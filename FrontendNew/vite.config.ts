@@ -28,6 +28,15 @@ export default defineConfig(({ mode }) => {
               target: apiProxyTarget,
               changeOrigin: true,
             },
+            // Audit photos, videos and CAPA evidence are stored as server paths
+            // (/uploads/audit/<uuid>.jpg) and mounted at the backend root,
+            // outside the /api/v1 prefix. Without this the console requested
+            // them from the Vite dev server, which has no such directory, and
+            // every piece of evidence rendered as a broken image.
+            '/uploads': {
+              target: apiProxyTarget,
+              changeOrigin: true,
+            },
           }
         : undefined,
     },

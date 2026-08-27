@@ -1,21 +1,25 @@
 import { useLocation, useNavigate } from "react-router";
-import { AlertTriangle, Eye, FileCheck2, ShieldAlert, Siren } from "lucide-react";
+import { AlertTriangle, Eye, FileCheck2, ShieldAlert } from "lucide-react";
 
+// One "Unsafe Act" family, not the two this used to carry. The hazard
+// register and the old unsafe-act register were the same thing under two
+// names — an unsafe act IS a hazard — so the register flow survived and took
+// the Unsafe Act name with it. Both /unsafe-acts and the legacy /hazards
+// paths land on it, which is why the chip claims both prefixes.
 const FAMILIES = [
   { name: "Incidents", icon: AlertTriangle, path: "/violations", prefixes: ["/violations", "/incidents"] },
-  { name: "Hazards", icon: Siren, path: "/hazards", prefixes: ["/hazards"] },
+  { name: "Unsafe Act", icon: ShieldAlert, path: "/unsafe-acts", prefixes: ["/unsafe-acts", "/hazards"] },
   { name: "Permits", icon: FileCheck2, path: "/permits/tracking", prefixes: ["/permits"] },
   { name: "Near Miss", icon: Eye, path: "/near-miss", prefixes: ["/near-miss"] },
-  { name: "Unsafe Act", icon: ShieldAlert, path: "/unsafe-acts", prefixes: ["/unsafe-acts"] },
 ];
 
 /**
- * Switches between the five eight-stage-lifecycle families — Incidents,
- * Hazards, Permits, Near Miss, Unsafe Act. Mounted on every page in all five
- * families (not just Incidents') so it stays on screen across the switch
- * instead of disappearing the moment you leave Incidents; each family's own
+ * Switches between the four eight-stage-lifecycle families — Incidents,
+ * Unsafe Act, Permits, Near Miss. Mounted on every page in all four families
+ * (not just Incidents') so it stays on screen across the switch instead of
+ * disappearing the moment you leave Incidents; each family's own
  * Overview/Lifecycle-Tracking split (IncidentsTabBar, HazardsTabBar,
- * NearMissTabBar, UnsafeActTabBar) sits in its own row underneath this one.
+ * NearMissTabBar) sits in its own row underneath this one.
  */
 export function EventFamilyTabBar() {
   const navigate = useNavigate();

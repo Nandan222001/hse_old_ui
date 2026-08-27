@@ -14,11 +14,11 @@ import { HazardsTabBar } from "../components/audits/HazardsTabBar";
 import { EventFamilyTabBar } from "../components/audits/EventFamilyTabBar";
 
 /**
- * Hazard register lifecycle tracker.
+ * Unsafe act register lifecycle tracker.
  *
- * One screen answering "what has happened to this hazard, by whom, when" for
+ * One screen answering "what has happened to this unsafe act, by whom, when" for
  * all eight stages of the workflow engine (HSE_Workflow_Engine_Slide.pptx).
- * Left: every hazard with its current stage. Right: the full action trail.
+ * Left: every unsafe act with its current stage. Right: the full action trail.
  *
  * Deliberately the twin of IncidentTrackingPage — same layout, same stage
  * pipeline, same trail rendering. An admin who has learned one has learned the
@@ -70,7 +70,7 @@ function StatePill({ state }: Readonly<{ state: string }>) {
  * The control's level in the hierarchy, coloured by strength.
  *
  * PPE reads amber rather than neutral on purpose: it is the only level that
- * protects the person instead of removing the hazard, and a register full of
+ * protects the person instead of removing the unsafe act, and a register full of
  * amber is exactly the finding this page should make visible at a glance.
  */
 function HierarchyPill({ level }: Readonly<{ level: string | null }>) {
@@ -198,7 +198,7 @@ export function HazardTrackingPage() {
       setStageCounts(data.stage_counts ?? {});
       setSelectedId((prev) => (prev && data.items.some((i) => i.id === prev) ? prev : data.items[0]?.id ?? null));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load hazards");
+      setError(e instanceof Error ? e.message : "Could not load unsafe acts");
       setItems([]);
     } finally {
       setLoadingList(false);
@@ -231,9 +231,9 @@ export function HazardTrackingPage() {
       <EventFamilyTabBar />
       <HazardsTabBar />
       <div>
-        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Hazard Lifecycle Tracking</h1>
+        <h1 className="text-[19px]" style={{ color: "#0F172A", fontWeight: 700 }}>Unsafe Act Lifecycle Tracking</h1>
         <p className="mt-0.5 text-[12.5px]" style={{ color: "#64748B" }}>
-          Every action on every register hazard, stage 01 Record through stage 08 Close — who did
+          Every action on every register unsafe act, stage 01 Record through stage 08 Close — who did
           it and when. {totalTracked} on the register.
         </p>
       </div>
@@ -288,7 +288,7 @@ export function HazardTrackingPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search hazards…"
+                placeholder="Search unsafe acts…"
                 className="w-full rounded-md border py-1.5 pl-8 pr-2.5 text-[12.5px] outline-none"
                 style={{ borderColor: "#DDE5F4", color: "#0F172A" }}
               />
@@ -300,7 +300,7 @@ export function HazardTrackingPage() {
               <div className="p-4 text-[12px]" style={{ color: "#64748B" }}>Loading…</div>
             ) : items.length === 0 ? (
               <div className="p-4 text-[12px]" style={{ color: "#64748B" }}>
-                No hazards {stageFilter ? `at ${stageFilter}` : "on the register"}.
+                No unsafe acts {stageFilter ? `at ${stageFilter}` : "on the register"}.
               </div>
             ) : (
               items.map((h) => {
@@ -365,7 +365,7 @@ export function HazardTrackingPage() {
             <div className="text-[12px]" style={{ color: "#64748B" }}>Loading trail…</div>
           ) : !trail ? (
             <div className="text-[12px]" style={{ color: "#64748B" }}>
-              Select a hazard to see its full lifecycle.
+              Select an unsafe act to see its full lifecycle.
             </div>
           ) : (
             <>
@@ -431,7 +431,7 @@ export function HazardTrackingPage() {
                   style={{ borderColor: "#FDE68A", background: "#FFFBEB", color: "#92400E" }}>
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                   <span>
-                    No action was recorded at {trail.skipped_stages.join(", ")}. The hazard moved past
+                    No action was recorded at {trail.skipped_stages.join(", ")}. The unsafe act moved past
                     {trail.skipped_stages.length === 1 ? " this stage" : " these stages"} without one.
                   </span>
                 </div>
@@ -480,7 +480,7 @@ export function HazardTrackingPage() {
                 <div className="mb-2 flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5" style={{ color: "#4A57B9" }} />
                   <span className="text-[12.5px]" style={{ color: "#111827", fontWeight: 700 }}>
-                    Who acted on this hazard
+                    Who acted on this unsafe act
                   </span>
                 </div>
                 {trail.people.length === 0 ? (

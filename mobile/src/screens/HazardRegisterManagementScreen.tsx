@@ -16,18 +16,18 @@ import {
 import { newestFirst } from '../utils/newestFirst';
 
 /**
- * The supervisor's half of the hazard register (flow 5).
+ * The supervisor's half of the unsafe act register (flow 5).
  *
  * Stages 02 ASSESS through 05 IMPROVE belong to the supervisor — that is what
  * `hazard_next_action` says owns each register_status — but until now the only
- * screen that could move a hazard along was the manager's. A supervisor could
- * be told a hazard was waiting on them and have nowhere to do it.
+ * screen that could move an unsafe act along was the manager's. A supervisor could
+ * be told an unsafe act was waiting on them and have nowhere to do it.
  *
  * Which form appears is decided by `/hazard-register/{id}/next-action`, never
- * here. The backend already refuses a verb the hazard is not at, and it words
+ * here. The backend already refuses a verb the unsafe act is not at, and it words
  * the refusal by stage; inventing a second opinion in the client is how the two
  * drift. Stages the supervisor does not own still render — read-only, saying
- * whose step it is — because a supervisor chasing a hazard needs to know it is
+ * whose step it is — because a supervisor chasing an unsafe act needs to know it is
  * sitting with the manager rather than lost.
  *
  * Deliberately not a copy of the manager screen: this one opens on the
@@ -112,7 +112,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
         // you" tab. It stays, marked as theirs and done.
         setHandledIds(new Set(queue.items.filter(i => i.handled_by_me).map(i => i.id)));
       })
-      .catch(() => setError('Could not load the hazard register.'))
+      .catch(() => setError('Could not load the unsafe act register.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -172,7 +172,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
   const renderStageForm = (hazard: HazardRegisterItem) => {
     if (!nextAction) return <ActivityIndicator color={Colors.primary} style={{ marginVertical: 12 }} />;
     if (!nextAction.next_action) {
-      return <Text style={styles.note}>This hazard is closed. Nothing is outstanding.</Text>;
+      return <Text style={styles.note}>This unsafe act is closed. Nothing is outstanding.</Text>;
     }
     if (!nextAction.can_act) {
       return (
@@ -215,7 +215,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
                 color={workStopped ? Colors.critical : Colors.textMuted}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>Work stopped because of this hazard</Text>
+                <Text style={styles.toggleLabel}>Work stopped because of this unsafe act</Text>
                 <Text style={styles.hint}>
                   Stopping the job records containment at RESPOND before the review opens.
                 </Text>
@@ -237,7 +237,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
                   work_stopped: workStopped,
                   assessment_notes: freeText.trim() || undefined,
                 }),
-                'Hazard assessed.',
+                'Unsafe act assessed.',
               )}
             />
           </>
@@ -254,7 +254,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
             <TextInput
               style={[styles.input, styles.multiline]} multiline
               value={freeText} onChangeText={setFreeText}
-              placeholder="What is holding this hazard right now? e.g. isolated and barriered"
+              placeholder="What is holding this unsafe act right now? e.g. isolated and barriered"
               placeholderTextColor={Colors.textMuted}
             />
             <View style={styles.btnRow}>
@@ -287,7 +287,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
             <TextInput
               style={[styles.input, styles.multiline]} multiline
               value={freeText} onChangeText={setFreeText}
-              placeholder="Why does this hazard exist? Not what it is — why it is here."
+              placeholder="Why does this unsafe act exist? Not what it is — why it is here."
               placeholderTextColor={Colors.textMuted}
             />
             {!!hazard.root_cause && <Text style={styles.recorded}>Recorded: {hazard.root_cause}</Text>}
@@ -306,7 +306,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
             <TextInput
               style={[styles.input, styles.multiline]} multiline
               value={controlText} onChangeText={setControlText}
-              placeholder="What will remove or reduce the hazard for good?"
+              placeholder="What will remove or reduce the unsafe act for good?"
               placeholderTextColor={Colors.textMuted}
             />
             <Text style={styles.fieldLabel}>HIERARCHY OF CONTROL</Text>
@@ -415,7 +415,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
         <TouchableOpacity activeOpacity={0.85} onPress={() => open(hazard)}>
           <View style={styles.cardHeader}>
             <Text style={styles.title} numberOfLines={isOpen ? undefined : 2}>
-              {hazard.hazard_name || hazard.description || 'Unnamed hazard'}
+              {hazard.hazard_name || hazard.description || 'Unnamed unsafe act'}
             </Text>
             {!!priority && (
               <View style={[styles.badge, { backgroundColor: (PRIORITY_COLOR[priority] ?? Colors.textMuted) + '1A' }]}>
@@ -489,7 +489,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textDark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hazard Register</Text>
+        <Text style={styles.headerTitle}>Unsafe Act Register</Text>
       </View>
 
       <View style={styles.tabs}>
@@ -516,11 +516,11 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
         {visible.length === 0 && !loading && !error ? (
           <EmptyState
             icon="shield-checkmark-outline"
-            title={tab === 'mine' ? 'Nothing waiting on you' : 'No open hazards'}
+            title={tab === 'mine' ? 'Nothing waiting on you' : 'No open unsafe acts'}
             subtitle={
               tab === 'mine'
-                ? 'Hazards needing your assessment, containment, review or control will appear here.'
-                : 'Hazards logged by your team will appear here as they come in.'
+                ? 'Unsafe acts needing your assessment, containment, review or control will appear here.'
+                : 'Unsafe acts logged by your team will appear here as they come in.'
             }
           />
         ) : (
@@ -559,7 +559,7 @@ export function HazardRegisterManagementScreen({ navigation }: any) {
                 <Text style={styles.trackStep}>
                   {track.next_action
                     ? track.next_action.action
-                    : 'Nothing outstanding — this hazard is complete.'}
+                    : 'Nothing outstanding — this unsafe act is complete.'}
                 </Text>
                 <Text style={styles.trackOwner}>
                   {track.is_closed

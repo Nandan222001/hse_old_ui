@@ -239,7 +239,7 @@ export function RiskPage() {
                 whole defect this toggle fixes — the register view is kept
                 because it is genuinely useful, just no longer the only one. */}
             <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: '#F1F5F9' }}>
-              {([['risk', 'Risk reports'], ['hazard', 'Hazard register']] as const).map(([key, label]) => (
+              {([['risk', 'Risk reports'], ['hazard', 'Unsafe act register']] as const).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"

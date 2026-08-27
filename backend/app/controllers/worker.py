@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, require_valid_org, CurrentUser
 from app.services import workflow_stages
+from app.services import supervisor_routing
 from app.utils import report_media
 
 router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
@@ -259,6 +260,9 @@ def list_permits(
             # person who does not exist in this database.
             "requested_by": r["requested_by_name"] or "Unknown",
             "created_at": r["date_issued"].isoformat() if r["date_issued"] else date.today().isoformat(),
+            # What the worker attached when they raised it. Read back so the
+            # permit they can see is the one they actually sent.
+            "evidence": json.loads(r["evidence_json"]) if r["evidence_json"] else [],
             "safety_gear": {
                 "hard_hat": True,
                 "gloves": True,
@@ -281,12 +285,22 @@ def _dt(value) -> Optional[datetime]:
 
 
 @router.post("/permits")
-def create_permit(
-    payload: dict,
+async def create_permit(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
-    data = payload.get("data", payload)
+    """Raise a permit, with or without the risk assessment attached.
+
+    Declared as `payload: dict` until now, which is JSON-only: the moment the
+    app attached a file and switched to multipart, FastAPI saw a multipart body
+    where it expected a model and answered 422 — the same failure
+    `report_media` was written to end for near miss, unsafe act and risk. The
+    attach box on the permit form never got as far as finding out, because it
+    had no handler wired to it at all.
+    """
+    data, media_urls = await report_media.read_report_body(request, subdir="permits")
+    data = report_media.merge_media(data, media_urls)
     
     # Look up permit type id or default
     pt_name = data.get("permit_type", "hot_work").replace("_", " ")
@@ -316,12 +330,14 @@ def create_permit(
                 organisation_id, permit_type_id, date_issued, time_issued,
                 location_station_id, work_description, duration_requested_hours,
                 validity_start, validity_end, status,
-                workflow_status, requested_by, requested_at, issued_by
+                workflow_status, requested_by, requested_at, issued_by,
+                evidence_json
             ) VALUES (
                 :org_id, :permit_type_id, :date_issued, :time_issued,
                 :location_station_id, :work_description, :duration,
                 :validity_start, :validity_end, :status,
-                'requested', :requested_by, :requested_at, :requested_by
+                'requested', :requested_by, :requested_at, :requested_by,
+                :evidence
             )
         """),
         {
@@ -351,6 +367,7 @@ def create_permit(
             "status": "Pending",
             "requested_by": requester_emp_id,
             "requested_at": datetime.now(),
+            "evidence": json.dumps(data.get("photos") or []) if data.get("photos") else None,
         }
     )
 
@@ -372,6 +389,7 @@ def create_permit(
         "work_description": data.get("work_description", ""),
         "status": "pending",
         "workflow_status": "requested",
+        "evidence": data.get("photos") or [],
         "requested_by": "Alex Safety",
         "created_at": date.today().isoformat(),
         "safety_gear": data.get("safety_gear", {
@@ -735,18 +753,25 @@ async def report_incident(
                 injured_person_name, injured_body_part, hazard_id, permit_active, control_failure,
                 hazard_still_present, immediate_actions_taken, witnesses_json, evidence_json,
                 gps_latitude, gps_longitude, investigation_status, reported_by, workflow_status,
-                reported_at, source
+                reported_at, source, assigned_supervisor_id
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
                 :severity, :description, :immediate_cause, :number_persons_involved, :anyone_injured,
                 :injured_person_name, :injured_body_part, :hazard_id, :permit_active, :control_failure,
                 :hazard_still_present, :immediate_actions_taken, :witnesses_json, :evidence_json,
                 :gps_latitude, :gps_longitude, :investigation_status, :reported_by, :workflow_status,
-                :reported_at, :source
+                :reported_at, :source, :assigned_supervisor_id
             )
         """),
         {
             "org_id": current_user.org_id,
+            # Routed the same way /incident-workflow/report routes it: the
+            # reporter's manager, else a supervisor in their own department,
+            # else nobody. This endpoint is the one the mobile app and the web
+            # register page actually post to, and it used to assign no
+            # supervisor at all -- so where an incident landed depended on
+            # which door it came through.
+            "assigned_supervisor_id": supervisor_routing.find_supervisor_for(db, current_user),
             "report_date": incident_dt.date(),
             "incident_date_time": incident_dt,
             "loc_id": loc_id,

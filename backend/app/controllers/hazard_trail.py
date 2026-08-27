@@ -31,7 +31,8 @@ from app.services.workflow_stages import (
     VERIFY,
 )
 
-router = APIRouter(prefix="/hazard-trail", tags=["Hazard Register"])
+# Mounted twice by main.py — see the note in hazard_register.py.
+router = APIRouter(tags=["Unsafe Act Register"])
 
 FAMILY = "hazard_register"
 
@@ -40,14 +41,14 @@ FAMILY = "hazard_register"
 # In lifecycle order. Each row here is something the register can prove
 # happened, because a person and a moment were both recorded against it.
 _TIMELINE = [
-    ("logged_at", RECORD, "Hazard logged", "logged_by"),
-    ("assessed_at", ASSESS, "Hazard assessed", "assessed_by"),
+    ("logged_at", RECORD, "Unsafe act logged", "logged_by"),
+    ("assessed_at", ASSESS, "Unsafe act assessed", "assessed_by"),
     ("interim_control_at", RESPOND, "Interim control applied", "interim_control_by"),
     ("review_started_at", INVESTIGATE, "Control review opened", "reviewed_by"),
     ("controls_planned_at", IMPROVE, "Permanent control planned", "controls_planned_by"),
     ("controls_verified_at", VERIFY, "Control verified", "controls_verified_by"),
     ("lesson_captured_at", LEARN, "Lesson captured", "lesson_captured_by"),
-    ("closed_at", CLOSE, "Hazard closed", "closed_by"),
+    ("closed_at", CLOSE, "Unsafe act closed", "closed_by"),
     # Post-closure assurance. Filed under CLOSE because that is when it happens,
     # but it gates nothing — the auditor observes the chain, they do not drive it.
     ("auditor_verified_at", CLOSE, "Auditor verified on site", "auditor_verified_by"),
@@ -89,7 +90,7 @@ def _hazard_row(db: Session, hazard_id: int, org_id: Optional[int]) -> dict:
         text("SELECT * FROM hazards WHERE id = :id"), {"id": hazard_id}
     ).mappings().first()
     if not row or (org_id is not None and row["organisation_id"] not in (None, org_id)):
-        raise HTTPException(status_code=404, detail="Hazard not found")
+        raise HTTPException(status_code=404, detail="Unsafe act not found")
     return dict(row)
 
 
@@ -181,7 +182,7 @@ def _build_actions(hz: dict) -> List[dict]:
         actions.append({
             "stage": VERIFY,
             "action": f"Control failed verification ({failures}×)",
-            "detail": "The control did not hold and the hazard returned to IMPROVE.",
+            "detail": "The control did not hold and the unsafe act returned to IMPROVE.",
             "actor_id": hz.get("controls_verified_by"),
             "occurred_at": hz.get("controls_verified_at") or hz.get("reviewed_at"),
             "source": "hazards.verification_failures",

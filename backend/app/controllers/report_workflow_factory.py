@@ -41,6 +41,7 @@ from app.services import (
     workflow_stages,
 )
 from app.services.events import catalogue
+from app.services import department_scope
 from app.utils import report_media
 from sqlalchemy.orm import Session
 
@@ -511,11 +512,18 @@ def build_workflow_router(
         current_user: CurrentUser = Depends(get_current_user),
     ):
         _require_role(current_user.role, ALL_ELEVATED_ROLES, f"view pending {noun} reports")
-        rows = (
+        # Scoped to the reporter's department, the same rule incidents use: the
+        # admin fixes a department on every employee, and only that
+        # department's supervisor works its reports. Admins and auditors still
+        # see the whole organisation.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status.in_(SUPERVISOR_QUEUE_STATUSES))
-            .order_by(model.id.desc())
+        )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = (
+            q.order_by(model.id.desc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -714,11 +722,16 @@ def build_workflow_router(
         current_user: CurrentUser = Depends(get_current_user),
     ):
         _require_role(current_user.role, MANAGER_ROLES, f"view the {noun} manager queue")
-        rows = (
+        # Department rule again: the manager of a department decides on that
+        # department's reports.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status.in_(MANAGER_QUEUE_STATUSES))
-            .order_by(model.id.desc())
+        )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = (
+            q.order_by(model.id.desc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -1080,14 +1093,15 @@ def build_workflow_router(
         saying so. This is the same answer `/incident-workflow/next-actions`
         gives, from the same resolver, for the other three families.
         """
-        rows = (
+        # Department-scoped like the two queues above — "waiting on me" must not
+        # list another department's work.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status != "closed")
-            .order_by(model.id.desc())
-            .limit(300)
-            .all()
         )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = q.order_by(model.id.desc()).limit(300).all()
         if not rows:
             return {"count": 0, "items": [], "mine_count": 0}
 
@@ -1102,6 +1116,12 @@ def build_workflow_router(
                 func.min(CapaAction.id).label("first_id"),
                 func.min(CapaAction.description).label("first_description"),
                 func.min(CapaAction.due_date).label("first_due"),
+                # Who holds it, so the manager's card can say so and offer to
+                # change it. Without this the only thing a card at IMPROVE could
+                # do was sign the action off — a manager looking at an action
+                # sitting unowned, or owned by the wrong person, had no way to
+                # see either fact, let alone fix it.
+                func.min(CapaAction.responsible_person_id).label("first_owner"),
             )
             .filter(CapaAction.subject_family == report_type)
             .filter(CapaAction.subject_id.in_([r.id for r in rows]))
@@ -1113,6 +1133,19 @@ def build_workflow_router(
             .all()
         )
         capa_by_record = {c.subject_id: c for c in capa_rows}
+
+        # One lookup for every owner across the whole queue, rather than a query
+        # per card.
+        owner_ids = [c.first_owner for c in capa_rows if c.first_owner]
+        owner_names: dict = {}
+        if owner_ids:
+            owner_names = {
+                r[0]: r[1]
+                for r in db.execute(
+                    text("SELECT id, full_name FROM employees WHERE id IN :ids"),
+                    {"ids": tuple(set(owner_ids))},
+                ).all()
+            }
 
         station_names = _station_names(db, rows)
         now = datetime.now()
@@ -1147,6 +1180,8 @@ def build_workflow_router(
                     "description": (capa.first_description or "")[:120],
                     "due_date": capa.first_due.isoformat() if capa.first_due else None,
                     "open_count": int(capa.open_count),
+                    "responsible_person_id": capa.first_owner,
+                    "responsible_person_name": owner_names.get(capa.first_owner),
                 }
                 detail = (
                     f"{capa.open_count} corrective action"

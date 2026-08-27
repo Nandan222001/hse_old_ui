@@ -341,7 +341,7 @@ export function AuditDetailScreen({ route, navigation }: any) {
         <SectionLabel>On-site verification</SectionLabel>
         <Card subtitle="Formal audits are only part of the role. These confirm on site that what the system says is true actually is.">
           {[
-            { r: 'Verifications', i: 'shield-checkmark', t: 'Permit & hazard verification', s: 'WF-02 · WF-01' },
+            { r: 'Verifications', i: 'shield-checkmark', t: 'Permit & unsafe act verification', s: 'WF-02 · WF-01' },
             { r: 'CompetenceEvidenceAudit', i: 'school', t: 'Competence evidence audit', s: 'WF-07' },
             { r: 'ContractorAudit', i: 'business', t: 'Contractor audit', s: 'WF-09' },
             { r: 'TransportVehicleAudit', i: 'car', t: 'Vehicle & journey audit', s: 'WF-10' },

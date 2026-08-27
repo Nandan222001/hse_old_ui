@@ -339,6 +339,7 @@ def _to_response(db: Session, a: Audit) -> AuditResponse:
         closing_meeting_at=a.closing_meeting_at,
         auditee_confirmed_at=a.auditee_confirmed_at,
         auditee_signed_name=a.auditee_signed_name,
+        auditee_signature=a.auditee_signature,
         findings_locked_at=a.findings_locked_at,
         findings_locked=bool(a.findings_locked_at),
         score_band=a.score_band, overall_rating=a.overall_rating,
@@ -346,6 +347,7 @@ def _to_response(db: Session, a: Audit) -> AuditResponse:
         finding_counts=counts,
         classified_findings=[_finding_out(f, evidence) for f in findings],
         auditor_signed_name=a.auditor_signed_name,
+        auditor_signature=a.auditor_signature,
         report_ref=a.report_ref, report_issued_at=a.report_issued_at,
         report_approved_at=a.report_approved_at,
         report_approval_notes=a.report_approval_notes,
@@ -976,6 +978,11 @@ def resume_after_stop_work(
 # Step 06 · evidence, linked to the line it proves
 # ══════════════════════════════════════════════════════════════════════════════
 
+# What a piece of evidence can be. Checked on write rather than left open: the
+# value decides how every renderer displays it, and an unrecognised one silently
+# becomes an <img> with a broken source.
+EVIDENCE_KINDS = {"photo", "video", "document", "note", "scan", "interview"}
+
 @router.post("/{audit_id}/evidence/upload")
 async def upload_evidence_file(
     audit_id: int,
@@ -1029,9 +1036,18 @@ def add_evidence(
         if not item:
             raise HTTPException(status_code=404, detail="Checklist item not found on this audit")
 
-    if payload.kind not in ("photo", "document", "note", "scan", "interview"):
-        raise HTTPException(status_code=400, detail=f"Unknown evidence kind '{payload.kind}'")
-    if payload.kind in ("photo", "document") and not payload.file_url:
+    if payload.kind not in EVIDENCE_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown evidence kind '{payload.kind}'. "
+                f"One of: {', '.join(sorted(EVIDENCE_KINDS))}"
+            ),
+        )
+    # A recording is as much a file as a photograph is. Left out of this tuple,
+    # a video could be attached with no file at all and the record would claim
+    # evidence that does not exist.
+    if payload.kind in ("photo", "video", "document") and not payload.file_url:
         raise HTTPException(
             status_code=400, detail=f"A {payload.kind} needs a file — upload it first"
         )
@@ -1754,6 +1770,9 @@ def get_report(
         distributed_to=_json(a.report_distributed_to, []),
         signed_by=a.auditor_signed_name,
         auditee_signed_by=a.auditee_signed_name,
+        auditor_signature=a.auditor_signature,
+        auditee_signature=a.auditee_signature,
+        evidence=[EvidenceOut.model_validate(e) for e in evidence],
     )
 
 

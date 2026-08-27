@@ -10,7 +10,8 @@ import {
 const breadcrumbMap: Record<string, string> = {
   "/": "Dashboard",
   "/violations": "Incidents",
-  "/hazards": "Hazards",
+  // Legacy path for the register that is now the Unsafe Act family.
+  "/hazards": "Unsafe Act",
   "/near-miss": "Near Miss",
   "/unsafe-acts": "Unsafe Act",
   "/permits/tracking": "Permits",

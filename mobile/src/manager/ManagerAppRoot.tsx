@@ -28,8 +28,9 @@ import { AssignedTasksScreenView } from "./components/AssignedTasksScreen";
 import { MgrInvestigation } from "./components/MgrInvestigation";
 import { MgrAssignActions } from "./components/MgrAssignActions";
 import { UnassignedCapaScreen } from "./components/UnassignedCapaScreen";
+import { MgrIncidentQueue } from "./components/MgrIncidentQueue";
 import { ComplianceApprovalsView } from "./components/ComplianceApprovals";
-import type { ManagerScreen } from "./components/types";
+import type { ManagerScreen, ReportFamily } from "./components/types";
 import { HazardRegisterScreen } from "./components/HazardRegisterScreen";
 import { ReportApprovalsScreen } from "./components/ReportApprovalsScreen";
 import { PolicyManagementScreen } from "./components/PolicyManagementScreen";
@@ -70,6 +71,7 @@ export function ManagerAppRoot() {
 
   // Form/Flow States (Investigation & Action Assignment)
   const [selectedIncident, setSelectedIncident] = useState<Incident>(INITIAL_INCIDENTS[0]);
+  const [reportFamily, setReportFamily] = useState<ReportFamily | null>(null);
   const [whys, setWhys] = useState({
     why1: "Containment drum seal failed during transport.",
     why2: "Drum was subjected to excessive mechanical vibration.",
@@ -312,6 +314,8 @@ export function ManagerAppRoot() {
     setComplaintFilter,
     selectedIncident,
     setSelectedIncident,
+    reportFamily,
+    setReportFamily,
     whys,
     setWhys,
     rcaDone,
@@ -345,6 +349,8 @@ export function ManagerAppRoot() {
         return <MgrAssignActions {...sharedProps} />;
       case "unassigned_capa":
         return <UnassignedCapaScreen {...sharedProps} />;
+      case "incident_queue":
+        return <MgrIncidentQueue {...sharedProps} />;
       case "assigned_tasks":
         return <AssignedTasksScreenView {...sharedProps} />;
       case "compliance_approvals":
