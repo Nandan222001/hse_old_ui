@@ -514,8 +514,28 @@ export function UsersPage() {
 
   // ── Invite modal state ──────────────────────────────────────────────────────
   const [showInviteModal, setShowInviteModal]   = useState(false);
-  const [inviteForm, setInviteForm]             = useState({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" });
+  const [inviteForm, setInviteForm]             = useState({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator", department_id: "" });
+  // Site is a filter, not a stored field. `employees` has no site_id — a
+  // person's site is derived as employee -> department -> site, so storing it
+  // separately would be a second copy that can disagree with the first.
+  const [inviteSiteId, setInviteSiteId]         = useState("");
+  const [siteOptions, setSiteOptions]           = useState<{ id: number; site_name: string }[]>([]);
+  const [deptOptions, setDeptOptions]           = useState<{ id: number; department_name: string; site_id: number | null }[]>([]);
   const [inviteLoading, setInviteLoading]       = useState(false);
+  // Both lists are org-scoped by the backend, so no filtering is needed here.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      apiGet("/sites/?limit=200").catch(() => []),
+      apiGet("/departments/?limit=200").catch(() => []),
+    ]).then(([sites, depts]) => {
+      if (cancelled) return;
+      const list = (v: unknown) => (Array.isArray(v) ? v : (v as { items?: unknown[] })?.items ?? []);
+      setSiteOptions(list(sites) as typeof siteOptions);
+      setDeptOptions(list(depts) as typeof deptOptions);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [inviteError, setInviteError]           = useState("");
   const [inviteResult, setInviteResult]         = useState<{
     email: string; temp_password: string; login_url: string; email_sent: boolean;
@@ -575,7 +595,14 @@ export function UsersPage() {
     }
     setInviteLoading(true);
     try {
-      const result = await apiPost("/org/invite-user", inviteForm);
+      const result = await apiPost("/org/invite-user", {
+        name: inviteForm.name,
+        email: inviteForm.email,
+        role: inviteForm.role,
+        // Omitted rather than sent as "" — the backend treats absent as
+        // "no department" and would reject the empty string as not a number.
+        ...(inviteForm.department_id ? { department_id: Number(inviteForm.department_id) } : {}),
+      });
       setInviteResult(result as typeof inviteResult);
       loadOrgUsers();
       getEmployeeDirectory().then(setEmployeeDirectory).catch(console.error);
@@ -634,7 +661,8 @@ export function UsersPage() {
         {canInvite && (
           <button
             onClick={() => {
-              setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" });
+              setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator", department_id: "" });
+              setInviteSiteId("");
               setInviteError("");
               setInviteResult(null);
               setCopied(false);
@@ -904,7 +932,7 @@ export function UsersPage() {
                       </div>
                     </div>
                     <button
-                      onClick={() => { setInviteResult(null); setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator" }); setInviteError(""); setCopied(false); }}
+                      onClick={() => { setInviteResult(null); setInviteForm({ name: "", email: "", role: inviteTargetRoles[0] ?? "operator", department_id: "" }); setInviteSiteId(""); setInviteError(""); setCopied(false); }}
                       className="w-full py-2.5 rounded-xl text-[13px]"
                       style={{ background: "linear-gradient(135deg, #0B3D91, #1D4ED8)", color: "#fff", fontWeight: 600 }}
                     >
@@ -958,6 +986,46 @@ export function UsersPage() {
                           <option key={r.value} value={r.value}>{r.label}</option>
                         ))}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-[12px]" style={{ color: "#374151", fontWeight: 600 }}>Site</label>
+                      <select
+                        value={inviteSiteId}
+                        onChange={(e) => {
+                          setInviteSiteId(e.target.value);
+                          // The chosen department may not belong to the new site.
+                          setInviteForm((p) => ({ ...p, department_id: "" }));
+                        }}
+                        className="w-full h-11 px-4 rounded-xl border text-[13px] bg-white focus:outline-none"
+                        style={{ borderColor: "#E2E8E2", color: "#0A0A0A" }}
+                      >
+                        <option value="">All sites</option>
+                        {siteOptions.map((st) => (
+                          <option key={st.id} value={String(st.id)}>{st.site_name}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px]" style={{ color: "#94A3B8" }}>
+                        Narrows the department list. The site itself comes from the department.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-[12px]" style={{ color: "#374151", fontWeight: 600 }}>Department</label>
+                      <select
+                        value={inviteForm.department_id}
+                        onChange={(e) => setInviteForm((p) => ({ ...p, department_id: e.target.value }))}
+                        className="w-full h-11 px-4 rounded-xl border text-[13px] bg-white focus:outline-none"
+                        style={{ borderColor: "#E2E8E2", color: "#0A0A0A" }}
+                      >
+                        <option value="">Not assigned</option>
+                        {deptOptions
+                          .filter((d) => !inviteSiteId || String(d.site_id) === inviteSiteId)
+                          .map((d) => (
+                            <option key={d.id} value={String(d.id)}>{d.department_name}</option>
+                          ))}
+                      </select>
+                      <p className="mt-1 text-[11px]" style={{ color: "#94A3B8" }}>
+                        Incidents this person reports route to a supervisor in their department.
+                      </p>
                     </div>
                     {inviteError && (
                       <div className="px-3 py-2 rounded-lg text-[12px]" style={{ background: "#FEF2F2", color: "#DC2626", border: "1px solid #FECACA" }}>

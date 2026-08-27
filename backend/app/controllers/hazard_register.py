@@ -434,6 +434,9 @@ def list_register(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     query = db.query(Hazard).filter(Hazard.organisation_id == current_user.org_id)
+    # Scoped to the logger's department — the register uses logged_by where
+    # the report families use reported_by, but the rule is the same.
+    query = department_scope.apply_scope(query, Hazard, "logged_by", db, current_user)
     if register_status:
         query = query.filter(Hazard.register_status == register_status)
     if open_only:

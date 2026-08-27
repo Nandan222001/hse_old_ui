@@ -492,10 +492,19 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
     ]
 
     # Always include non-admin org users (wizard step-4 / invited users)
+    # Joined through to Department and Site exactly as the employee branch is.
+    # These two columns used to be hardcoded None here, which meant every
+    # invited user — that is, everybody the admin adds — showed a blank
+    # department in the directory even though the department was saved on their
+    # employee record. The site is derived (department -> site) rather than
+    # stored, so it comes from the same join.
     if org_id is not None:
         uq = (
-            db.query(User, AppRole)
+            db.query(User, AppRole, Employee, Department, Site)
             .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .outerjoin(Employee, Employee.id == User.employee_id)
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .outerjoin(Site, Department.site_id == Site.id)
             .filter(
                 User.organisation_id == org_id,
                 AppRole.name.notin_(["superadmin", "admin"]),
@@ -503,8 +512,11 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
         )
     else:
         uq = (
-            db.query(User, AppRole)
+            db.query(User, AppRole, Employee, Department, Site)
             .outerjoin(AppRole, User.app_role_id == AppRole.id)
+            .outerjoin(Employee, Employee.id == User.employee_id)
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .outerjoin(Site, Department.site_id == Site.id)
             .filter(AppRole.name.notin_(["superadmin", "admin"]))
         )
     user_rows = uq.order_by(User.full_name.asc()).all()
@@ -513,13 +525,16 @@ def get_employee_directory(db: Session = Depends(get_db), current_user: CurrentU
             "id": -(u.id),
             "full_name": u.full_name or u.username,
             "role_name": ar.label if ar else None,
-            "department_name": None,
-            "site_name": None,
-            "employment_type": "System User",
-            "shift_pattern": None,
+            "department_name": dept.department_name if dept else None,
+            "site_name": site.site_name if site else None,
+            # The employee record carries the real employment type once it is
+            # set; "System User" is only the fallback for a login with no
+            # employee behind it.
+            "employment_type": (emp.employment_type if emp and emp.employment_type else "System User"),
+            "shift_pattern": emp.shift_pattern if emp else None,
             "active_status": "Active" if u.is_active else "Inactive",
         }
-        for u, ar in user_rows
+        for u, ar, emp, dept, site in user_rows
     ]
 
     # Return system users first, then imported employees — always both

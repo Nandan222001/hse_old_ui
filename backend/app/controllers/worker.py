@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.core.dependencies import get_current_user, require_valid_org, CurrentUser
 from app.services import workflow_stages
+from app.services import supervisor_routing
 from app.utils import report_media
 
 router = APIRouter(prefix="/worker", tags=["Worker Mobile App"])
@@ -752,18 +753,25 @@ async def report_incident(
                 injured_person_name, injured_body_part, hazard_id, permit_active, control_failure,
                 hazard_still_present, immediate_actions_taken, witnesses_json, evidence_json,
                 gps_latitude, gps_longitude, investigation_status, reported_by, workflow_status,
-                reported_at, source
+                reported_at, source, assigned_supervisor_id
             ) VALUES (
                 :org_id, :report_date, :incident_date_time, :loc_id, :incident_type,
                 :severity, :description, :immediate_cause, :number_persons_involved, :anyone_injured,
                 :injured_person_name, :injured_body_part, :hazard_id, :permit_active, :control_failure,
                 :hazard_still_present, :immediate_actions_taken, :witnesses_json, :evidence_json,
                 :gps_latitude, :gps_longitude, :investigation_status, :reported_by, :workflow_status,
-                :reported_at, :source
+                :reported_at, :source, :assigned_supervisor_id
             )
         """),
         {
             "org_id": current_user.org_id,
+            # Routed the same way /incident-workflow/report routes it: the
+            # reporter's manager, else a supervisor in their own department,
+            # else nobody. This endpoint is the one the mobile app and the web
+            # register page actually post to, and it used to assign no
+            # supervisor at all -- so where an incident landed depended on
+            # which door it came through.
+            "assigned_supervisor_id": supervisor_routing.find_supervisor_for(db, current_user),
             "report_date": incident_dt.date(),
             "incident_date_time": incident_dt,
             "loc_id": loc_id,

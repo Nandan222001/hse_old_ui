@@ -59,6 +59,7 @@ from app.controllers.workflow_common import (
 )
 from app.models.permit_to_work import PermitToWork
 from app.services import permit_next_action, workflow_stages
+from app.services import department_scope
 from app.services.gate_engine import evaluate_permit_gates
 from app.schemas.permit_workflow import (
     PermitAcknowledge,
@@ -416,11 +417,16 @@ def supervisor_pending_review(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     require_role(current_user.role, ALL_READ_ROLES, "view pending permits")
-    rows = (
+    q = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
         .filter(PermitToWork.workflow_status.in_(SUPERVISOR_QUEUE))
-        .order_by(PermitToWork.id.desc())
+    )
+    # Department rule: a permit belongs to the requester's department, so only
+    # that department's supervisor and manager work it.
+    q = department_scope.apply_scope(q, PermitToWork, "requested_by", db, current_user)
+    rows = (
+        q.order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -459,11 +465,16 @@ def manager_queue(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     require_role(current_user.role, MANAGER_ROLES, "view the permit manager queue")
-    rows = (
+    q = (
         db.query(PermitToWork)
         .filter(PermitToWork.organisation_id == current_user.org_id)
         .filter(PermitToWork.workflow_status.in_(MANAGER_QUEUE))
-        .order_by(PermitToWork.id.desc())
+    )
+    # Department rule: a permit belongs to the requester's department, so only
+    # that department's supervisor and manager work it.
+    q = department_scope.apply_scope(q, PermitToWork, "requested_by", db, current_user)
+    rows = (
+        q.order_by(PermitToWork.id.desc())
         .offset(skip)
         .limit(limit)
         .all()

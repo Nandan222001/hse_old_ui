@@ -41,6 +41,7 @@ from app.services import (
     workflow_stages,
 )
 from app.services.events import catalogue
+from app.services import department_scope
 from app.utils import report_media
 from sqlalchemy.orm import Session
 
@@ -511,11 +512,18 @@ def build_workflow_router(
         current_user: CurrentUser = Depends(get_current_user),
     ):
         _require_role(current_user.role, ALL_ELEVATED_ROLES, f"view pending {noun} reports")
-        rows = (
+        # Scoped to the reporter's department, the same rule incidents use: the
+        # admin fixes a department on every employee, and only that
+        # department's supervisor works its reports. Admins and auditors still
+        # see the whole organisation.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status.in_(SUPERVISOR_QUEUE_STATUSES))
-            .order_by(model.id.desc())
+        )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = (
+            q.order_by(model.id.desc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -714,11 +722,16 @@ def build_workflow_router(
         current_user: CurrentUser = Depends(get_current_user),
     ):
         _require_role(current_user.role, MANAGER_ROLES, f"view the {noun} manager queue")
-        rows = (
+        # Department rule again: the manager of a department decides on that
+        # department's reports.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status.in_(MANAGER_QUEUE_STATUSES))
-            .order_by(model.id.desc())
+        )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = (
+            q.order_by(model.id.desc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -1080,14 +1093,15 @@ def build_workflow_router(
         saying so. This is the same answer `/incident-workflow/next-actions`
         gives, from the same resolver, for the other three families.
         """
-        rows = (
+        # Department-scoped like the two queues above — "waiting on me" must not
+        # list another department's work.
+        q = (
             db.query(model)
             .filter(model.organisation_id == current_user.org_id)
             .filter(model.workflow_status != "closed")
-            .order_by(model.id.desc())
-            .limit(300)
-            .all()
         )
+        q = department_scope.apply_scope(q, model, "reported_by", db, current_user)
+        rows = q.order_by(model.id.desc()).limit(300).all()
         if not rows:
             return {"count": 0, "items": [], "mine_count": 0}
 

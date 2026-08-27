@@ -78,7 +78,13 @@ export function CAPAManagementScreen({ route, navigation }: any) {
   const [immediateCause, setImmediateCause] = useState('');
   const [immediateActions, setImmediateActions] = useState('');
   const [capaDesc, setCapaDesc] = useState('');
-  const [capaAssigneeId, setCapaAssigneeId] = useState('15');
+  // Empty, not '15'. That default was employee 15 -- a real person in
+  // organisation 1 -- so every supervisor in every other organisation
+  // submitted an investigation naming somebody outside their tenant and got
+  // "No such employee" back, and a supervisor inside org 1 silently assigned
+  // the corrective action to a stranger. Blank means the CAPA is created
+  // unassigned, which the backend allows.
+  const [capaAssigneeId, setCapaAssigneeId] = useState('');
   // Empty on purpose. This used to ship a hardcoded '2026-07-31', which was in
   // the past for most of the year, so every CAPA raised from the app was born
   // overdue. Left blank the backend applies the WF-04 rule instead: P1 24h,
@@ -216,7 +222,15 @@ export function CAPAManagementScreen({ route, navigation }: any) {
       dangerous_occurrence: dangerousOccurrence,
       worst_case_fatal: worstCaseFatal,
       capa_description: capaDesc,
-      capa_responsible_person_id: parseInt(capaAssigneeId) || 15,
+      // Omitted when nobody is chosen, never defaulted. This was `|| 15`, a
+      // hardcoded employee id that belongs to organisation 1 -- so every
+      // submission from any other organisation failed the backend's owner
+      // check with "No such employee", and a submission from org 1 quietly
+      // assigned the corrective action to a stranger. The backend skips the
+      // ownership check entirely when this is absent.
+      ...(Number.isFinite(parseInt(capaAssigneeId, 10))
+        ? { capa_responsible_person_id: parseInt(capaAssigneeId, 10) }
+        : {}),
       // Omitted when blank so WF-04's due-date rule applies.
       capa_due_date: capaDueDate || undefined,
       capa_severity_potential: capaSeverityPotential || undefined,
