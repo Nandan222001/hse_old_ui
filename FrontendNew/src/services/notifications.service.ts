@@ -21,16 +21,24 @@ export interface NotificationItem {
 
 /** Where clicking a notification should take the user, or null for a plain
  * broadcast with nothing to open (falls back to the notifications list). */
-export function resolveNotificationLink(n: Pick<NotificationItem, 'subject_ref'>): string | null {
+export function resolveNotificationLink(n: Pick<NotificationItem, 'subject_ref' | 'category'>): string | null {
   const match = n.subject_ref ? /^([A-Z]+)-0*(\d+)$/.exec(n.subject_ref) : null;
-  if (!match) return null;
-  const [, prefix, numStr] = match;
-  const id = Number(numStr);
-  if (!Number.isFinite(id) || id <= 0) return null;
-  if (prefix === 'CAPA') return `/capa-actions/${id}`;
-  // AUD and RPT notifications both name the same audit row — report_ref is
-  // just a different label stamped on the same id at the report-issued stage.
-  if (prefix === 'AUD' || prefix === 'RPT') return `/audits/${id}`;
+  if (match) {
+    const [, prefix, numStr] = match;
+    const id = Number(numStr);
+    if (Number.isFinite(id) && id > 0) {
+      if (prefix === 'CAPA') return `/capa-actions/${id}`;
+      // AUD and RPT notifications both name the same audit row — report_ref
+      // is just a different label stamped on the same id at the
+      // report-issued stage.
+      if (prefix === 'AUD' || prefix === 'RPT') return `/audits/${id}`;
+    }
+  }
+  // Aggregate notifications ("11 corrective actions are overdue") don't name
+  // one record, so subject_ref never matches above — route by category to
+  // the matching filtered list instead of falling back to the plain
+  // notifications page.
+  if (n.category === 'capa_overdue_summary') return '/capa-actions?overdue=1';
   return null;
 }
 

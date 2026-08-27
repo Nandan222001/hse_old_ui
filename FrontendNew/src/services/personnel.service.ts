@@ -96,12 +96,14 @@ export interface PeopleKpiMetric {
 
 export interface PeopleFatiguePoint {
   week: string;
+  week_start: string;
   normal: number;
   overtime: number;
 }
 
 export interface PeopleToolboxPoint {
   month: string;
+  month_start: string;
   meetings: number;
 }
 
@@ -134,7 +136,9 @@ export interface PeopleOverview {
   worker_exposure_index: PeopleKpiMetric;
   supervisor_safety_score: PeopleKpiMetric;
   fatigue_trend: PeopleFatiguePoint[];
+  fatigue_trend_range: string;
   toolbox_trend: PeopleToolboxPoint[];
+  toolbox_trend_range: string;
   high_risk_roles: PeopleHighRiskRole[];
   training_expiry: PeopleTrainingExpiry[];
   expiring_soon_count: number;

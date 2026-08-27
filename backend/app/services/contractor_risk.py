@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.contractor import ContractorCompany, ContractorScorecard
 from app.models.employee import Employee
 from app.models.incident import Incident
 from app.models.organisation import Organisation
@@ -142,4 +144,43 @@ def compute_contractor_risk(db: Session, org_id: int | None) -> ContractorRiskRe
         score_10=score_10,
         score_pct=score_pct,
         label=label,
+    )
+
+
+@dataclass
+class ContractorSafetyScoreResult:
+    score: Optional[float]
+    company_count: int
+
+
+def compute_contractor_safety_score(db: Session, org_id: int | None) -> ContractorSafetyScoreResult:
+    """Average of each contractor company's latest scorecard (0-100) — single
+    source of truth shared by the dashboard leading-indicators panel and the
+    Vendors page, same reasoning as compute_contractor_risk above."""
+
+    def _org(query, model):
+        if org_id is not None:
+            return query.filter(model.organisation_id == org_id)
+        return query
+
+    company_ids = [r[0] for r in _org(db.query(ContractorCompany.id), ContractorCompany).all()]
+    if not company_ids:
+        return ContractorSafetyScoreResult(score=None, company_count=0)
+
+    scorecard_rows = (
+        _org(db.query(ContractorScorecard), ContractorScorecard)
+        .filter(ContractorScorecard.contractor_company_id.in_(company_ids))
+        .order_by(ContractorScorecard.period_year.desc(), ContractorScorecard.period_quarter.desc())
+        .all()
+    )
+    latest_scores: dict[int, float] = {}
+    for row in scorecard_rows:
+        latest_scores.setdefault(row.contractor_company_id, float(row.score))
+
+    if not latest_scores:
+        return ContractorSafetyScoreResult(score=None, company_count=0)
+
+    return ContractorSafetyScoreResult(
+        score=round(sum(latest_scores.values()) / len(latest_scores), 1),
+        company_count=len(latest_scores),
     )

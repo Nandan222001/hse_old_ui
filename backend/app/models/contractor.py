@@ -19,6 +19,13 @@ class ContractorCompany(Base, AiIsmsMetadataMixin):
 
     organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
     company_name = Column(String(200), nullable=False)
+    # Module 5 register fields — not needed by the mobile RAMS-scoring flow
+    # above, but part of the client's own contractor-register KPI spec.
+    service_type = Column(String(120), nullable=True)
+    contract_start_date = Column(Date, nullable=True)
+    contract_end_date = Column(Date, nullable=True)
+    iso_45001_certified = Column(Integer, nullable=True)
+    last_safety_audit_date = Column(Date, nullable=True)
     registration_no = Column(String(120), nullable=True)
     contact_name = Column(String(200), nullable=True)
     contact_email = Column(String(200), nullable=True)
@@ -107,6 +114,22 @@ class ContractorScorecard(Base, AiIsmsMetadataMixin):
     # <50 enhanced oversight · <30 contract review · two quarters <30 = off list
     verdict = Column(String(30), nullable=False, default="ok")
     computed_at = Column(DateTime, nullable=True)
+
+
+class ContractorHours(Base, AiIsmsMetadataMixin):
+    """Real monthly hours-worked per contractor company — the denominator for
+    Contractor TRIR (injuries x 200,000 / hours). The web Vendors page used to
+    approximate this from PermitToWork durations; this is the actual figure."""
+
+    __tablename__ = "contractor_hours"
+
+    organisation_id = Column(Integer, ForeignKey("organisation.id"), nullable=True, index=True)
+    contractor_company_id = Column(
+        Integer, ForeignKey("contractor_companies.id"), nullable=False, index=True
+    )
+    period_year = Column(Integer, nullable=False)
+    period_month = Column(Integer, nullable=False)
+    hours_worked = Column(Integer, nullable=False, default=0)
 
 
 class IogpBenchmark(Base, AiIsmsMetadataMixin):

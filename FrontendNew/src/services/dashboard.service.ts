@@ -91,6 +91,8 @@ export interface LeadingIndicators {
   contractor_risk_score: number;
   contractor_risk_score_10?: number;
   contractor_has_contractors?: boolean;
+  contractor_safety_score?: number | null;
+  contractor_safety_company_count?: number;
   audit_readiness_score: number;
   audit_readiness_label: string;
 }

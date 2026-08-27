@@ -23,7 +23,8 @@ from app.models.safety_walk import SafetyWalk
 from app.models.site import Site
 from app.models.shift_schedule import ShiftSchedule
 from app.models.working_station import WorkingStation
-from app.services.contractor_risk import compute_contractor_risk
+from app.services.audit_readiness import compute_audit_readiness
+from app.services.contractor_risk import compute_contractor_risk, compute_contractor_safety_score
 
 from app.utils.logger import get_logger
 logger = get_logger(__name__)
@@ -160,12 +161,6 @@ def get_leading_indicators(
     latest_incident_dt = _org_filter(
         db.query(func.max(Incident.incident_date_time)), Incident, org_id
     ).scalar()
-    latest_walk_dt = _org_filter(
-        db.query(func.max(SafetyWalk.inspection_date_time)), SafetyWalk, org_id
-    ).scalar()
-    latest_audit_dt = _org_filter(
-        db.query(func.max(Audit.submitted_at)), Audit, org_id
-    ).filter(Audit.submitted_at.isnot(None)).scalar()
     # Near misses anchor the window too — see why below.
     latest_near_miss_dt = _org_filter(
         db.query(func.max(NearMiss.event_date_time)), NearMiss, org_id
@@ -336,50 +331,16 @@ def get_leading_indicators(
                 contractor_risk_score_10, contractor_risk_score, contractor_risk_label,
                 contractor_risk.contractor_violations, contractor_risk.has_contractors)
 
-    # ── Audit Readiness Score ───────────────────────────────────────────────
-    # Blends two sources on a common 0-100 scale: the legacy web/Excel-imported
-    # SafetyWalk.compliance_rating (0-5), and the mobile Auditor app's submitted
-    # Audit.compliance_score (already 0-100) — the only source mobile ever writes to.
-    # Anchor on whichever of the two has the more recent activity.
-    latest_readiness_dt = max(
-        (d for d in (latest_walk_dt, latest_audit_dt) if d is not None), default=None
-    )
-    latest_walk_anchor = latest_readiness_dt.date() if latest_readiness_dt else data_window_end
-    if data_window_start:
-        walk_window_start = data_window_start
-        walk_window_end = data_window_end
-    else:
-        walk_window_end = latest_walk_anchor
-        walk_window_start = latest_walk_anchor - timedelta(days=90)
+    # ── Contractor Safety Score — same shared implementation as the Vendors
+    # page's Safety Score KPI (app/services/contractor_risk.py) ─────────────
+    contractor_safety = compute_contractor_safety_score(db, org_id)
 
-    avg_compliance_walk = (
-        _org_filter(db.query(func.avg(SafetyWalk.compliance_rating)), SafetyWalk, org_id)
-        .filter(SafetyWalk.inspection_date_time.isnot(None))
-        .filter(func.date(SafetyWalk.inspection_date_time) >= walk_window_start)
-        .filter(func.date(SafetyWalk.inspection_date_time) <= walk_window_end)
-        .scalar()
-    )
-    avg_compliance_audit = (
-        _org_filter(db.query(func.avg(Audit.compliance_score)), Audit, org_id)
-        .filter(Audit.compliance_score.isnot(None))
-        .filter(Audit.submitted_at.isnot(None))
-        .filter(func.date(Audit.submitted_at) >= walk_window_start)
-        .filter(func.date(Audit.submitted_at) <= walk_window_end)
-        .scalar()
-    )
-    average_compliance = _safe_round(avg_compliance_walk)
-
-    readiness_components = []
-    if avg_compliance_walk is not None:
-        readiness_components.append((float(avg_compliance_walk) / 5) * 100)
-    if avg_compliance_audit is not None:
-        readiness_components.append(float(avg_compliance_audit))
-
-    audit_readiness_score = (
-        _safe_round(sum(readiness_components) / len(readiness_components))
-        if readiness_components else 0.0
-    )
-    audit_readiness_label = "Ready" if audit_readiness_score >= 80 else ("Needs Attention" if audit_readiness_score >= 60 else "Not Ready")
+    # ── Audit Readiness Score — single shared implementation, see
+    # app/services/audit_readiness.py (same all-time score as the Compliance
+    # page, deliberately not windowed to the selected period) ──────────────
+    audit_readiness = compute_audit_readiness(db, org_id)
+    audit_readiness_score = audit_readiness.score
+    audit_readiness_label = audit_readiness.label
 
     return {
         "predictive_injury_risk_score": injury_risk_score,
@@ -402,8 +363,9 @@ def get_leading_indicators(
         "contractor_risk_score": contractor_risk_score,
         "contractor_risk_score_10": contractor_risk_score_10,
         "contractor_has_contractors": contractor_risk.has_contractors,
+        "contractor_safety_score": contractor_safety.score,
+        "contractor_safety_company_count": contractor_safety.company_count,
         "audit_readiness_score": audit_readiness_score,
-        "average_compliance": average_compliance,
         "audit_readiness_label": audit_readiness_label,
     }
 
