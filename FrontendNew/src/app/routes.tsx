@@ -36,6 +36,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { SubscriptionPage } from "./pages/SubscriptionPage";
 import { NearMissPage } from "./pages/NearMissPage";
+import { SafetyWalkPage } from "./pages/SafetyWalkPage";
 import { RiskPage } from "./pages/RiskPage";
 import { RootCauseAnalysisPage } from "./pages/RootCauseAnalysisPage";
 import { AssetsPage } from "./pages/AssetsPage";
@@ -221,6 +222,7 @@ export const router = createBrowserRouter([
       { path: "audits/trends", Component: AuditTrendsPage },
       { path: "audits/templates", Component: AuditTemplatesPage },
       { path: "audits/:id", Component: AuditDetailPage },
+      { path: "safety-walks", Component: SafetyWalkPage },
       { path: "sites-zones", Component: SitesZonesPage },
       { path: "policies", Component: PoliciesRoute },
       { path: "users", Component: UsersRoute },

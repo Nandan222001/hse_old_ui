@@ -414,6 +414,24 @@ export const STEP_STATE_META: Record<StepState, { color: string; bg: string }> =
   todo: { color: '#94A3B8', bg: '#F1F5F9' },
 };
 
+// Module 8 (Compliance & Audits) KPI block — client's own KPI spec
+// (HSEIQ_Full_KPI_with_SampleData.xlsx, M8_Compliance_Audits).
+export interface AuditKpis {
+  audit_completion_rate_pct: number | null;
+  finding_closure_rate_pct: number | null;
+  nc_closure_rate_pct: number | null;
+  regulatory_compliance_rate_pct: number | null;
+  overdue_findings_count: number;
+  detail: {
+    audits_planned: number;
+    audits_completed: number;
+    total_findings: number;
+    findings_closed: number;
+    total_ncs: number;
+    ncs_closed: number;
+  };
+}
+
 // ── Calls ────────────────────────────────────────────────────────────────────
 
 const unwrap = <T,>(r: { data: T }) => r.data;
@@ -423,6 +441,9 @@ export const getAuditReference = () =>
 
 export const getAudits = () =>
   axiosInstance.get<Audit[]>('/audits/').then(unwrap);
+
+export const getAuditKpis = () =>
+  axiosInstance.get<AuditKpis>('/audits/kpis').then(unwrap);
 
 export const getAudit = (id: number) =>
   axiosInstance.get<Audit>(`/audits/${id}`).then(unwrap);

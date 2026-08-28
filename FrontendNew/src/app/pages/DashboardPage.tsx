@@ -579,15 +579,20 @@ export function DashboardPage() {
         {/* Latest Safety Walks — proves the mobile-to-web loop end to end for
             the client's own demo scenario: a walk logged on the phone, given
             a DSW- reference, showing up here without a page reload. */}
-        <div className="rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
+        <div className="flex min-w-0 w-full flex-col rounded-2xl border bg-white p-4 md:p-5" style={{ borderColor: '#D9E4F6', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)' }}>
           <h2 className="text-[clamp(1.15rem,2.3vw,1.5rem)]" style={{ color: '#111827', fontWeight: 700 }}>Latest Safety Walks</h2>
           <p className="mt-1 text-[13px]" style={{ color: '#6B7280' }}>Inspections from the field, newest first — including those raised on the mobile app.</p>
           {safetyWalks.length === 0 ? (
             <p className="mt-3 text-[13px]" style={{ color: '#9CA3AF' }}>No safety walks reported yet.</p>
           ) : (
-            <div className="mt-3 divide-y" style={{ borderColor: '#F1F5F9' }}>
+            <div className="mt-3 flex-1 divide-y" style={{ borderColor: '#F1F5F9' }}>
               {safetyWalks.map((sw) => (
-                <div key={sw.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <button
+                  key={sw.id}
+                  type="button"
+                  onClick={() => navigate('/safety-walks')}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-left first:pt-0 last:pb-0"
+                >
                   <span className="text-[11px] tabular-nums" style={{ color: '#4A57B9', fontWeight: 700 }}>
                     {sw.reference}
                   </span>
@@ -608,10 +613,11 @@ export function DashboardPage() {
                       <span>· {new Date(sw.inspection_date_time).toLocaleDateString()}</span>
                     )}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
+          <button onClick={() => navigate('/safety-walks')} className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-6 py-3 text-[14px] text-white transition-transform duration-150 hover:scale-[1.01]" style={{ background: 'linear-gradient(135deg, #5565C1 0%, #6E7BDB 100%)', boxShadow: '0 8px 18px rgba(81, 96, 186, 0.28)', fontWeight: 600 }}>Open Site Inspections</button>
         </div>
       </div>
     );

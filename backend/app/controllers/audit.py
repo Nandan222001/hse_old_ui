@@ -500,6 +500,84 @@ def list_audits(
     ]
 
 
+# Findings that have reached a terminal state — same set the "my open
+# findings" queue above already excludes, so a finding's closed-ness reads
+# the same everywhere on this page.
+_FINDING_CLOSED_STATUSES = ("verified", "closed")
+
+
+@router.get("/kpis")
+def get_audit_kpis(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Module 8 (Compliance & Audits) KPI block — client's own KPI spec
+    (HSEIQ_Full_KPI_with_SampleData.xlsx, M8_Compliance_Audits):
+
+        Audit Completion Rate %       = Audits completed / Audits planned x 100        (ISO 45001 9.2)
+        Finding Closure Rate %        = Findings closed / Total findings x 100          (ISO 45001 10)
+        NC Closure Rate %             = NCs closed / Total NCs x 100                    (ISO 45001 10.1)
+        Regulatory Compliance Rate %  = Closed NCs / Total NCs x 100 (same proxy         (ISO 45001 6.1.3)
+                                         the spec itself uses — no separate legal
+                                         register exists to check against)
+        Overdue Findings              = findings not yet closed whose corrective_action_due
+                                         has passed — a real due-date rule, not a status
+                                         string (see the CAPA fix this mirrors: a literal
+                                         "Overdue" status is never written by this app's
+                                         own workflow, only the original demo dataset).
+
+    Org-scoped, all-time (matches audit_readiness.compute_audit_readiness's
+    reasoning: this is the org's overall compliance posture, not windowed to
+    whatever period a chart elsewhere has selected).
+    """
+    org_id = current_user.org_id
+    today = date.today()
+
+    audits = db.query(Audit).filter(Audit.organisation_id == org_id).all()
+    audits_planned = len(audits)
+    audits_completed = sum(1 for a in audits if a.closed_at or a.status == "completed")
+
+    findings = (
+        db.query(AuditFinding)
+        .join(Audit, Audit.id == AuditFinding.audit_id)
+        .filter(Audit.organisation_id == org_id)
+        .all()
+    )
+    total_findings = len(findings)
+    findings_closed = sum(1 for f in findings if f.status in _FINDING_CLOSED_STATUSES)
+    nc_findings = [f for f in findings if audit_scoring.is_non_conformance(f.classification)]
+    total_ncs = len(nc_findings)
+    ncs_closed = sum(1 for f in nc_findings if f.status in _FINDING_CLOSED_STATUSES)
+    overdue_findings = [
+        f for f in findings
+        if f.status not in _FINDING_CLOSED_STATUSES
+        and f.corrective_action_due is not None
+        and f.corrective_action_due < today
+    ]
+
+    def _pct(numerator: int, denominator: int):
+        # None (not 0.0) when there is nothing to divide by — "no findings yet"
+        # is a different fact from "0% closed", same distinction the rest of
+        # this app's KPI cards already draw (e.g. Equipment's pm_compliance_pct).
+        return round(numerator / denominator * 100, 1) if denominator else None
+
+    return {
+        "audit_completion_rate_pct": _pct(audits_completed, audits_planned),
+        "finding_closure_rate_pct": _pct(findings_closed, total_findings),
+        "nc_closure_rate_pct": _pct(ncs_closed, total_ncs),
+        "regulatory_compliance_rate_pct": _pct(ncs_closed, total_ncs),
+        "overdue_findings_count": len(overdue_findings),
+        "detail": {
+            "audits_planned": audits_planned,
+            "audits_completed": audits_completed,
+            "total_findings": total_findings,
+            "findings_closed": findings_closed,
+            "total_ncs": total_ncs,
+            "ncs_closed": ncs_closed,
+        },
+    }
+
+
 @router.get("/{audit_id}", response_model=AuditResponse)
 def get_audit(
     audit_id: int,

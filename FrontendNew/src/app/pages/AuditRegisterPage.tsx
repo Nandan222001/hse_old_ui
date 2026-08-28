@@ -19,15 +19,42 @@ import {
 } from "lucide-react";
 import { AuditsTabBar } from "../components/audits/AuditsTabBar";
 import {
-  assignTeam, currentStep, formatDate, getAuditReference, getAuditorRegister, getAudits,
+  assignTeam, currentStep, formatDate, getAuditKpis, getAuditReference, getAuditorRegister, getAudits,
   getTemplates, scheduleAudit, humanise,
-  type Audit, type AuditReference, type AuditorRegisterRow, type Template,
+  type Audit, type AuditKpis, type AuditReference, type AuditorRegisterRow, type Template,
 } from "../../services/audits.service";
 import {
   Banner, EmptyState, FindingCounts, RatingChip, RiskBandChip, ScoreBadge, StepStrip,
 } from "../components/audit/AuditPrimitives";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+
+// ── Module 8 KPI tile — same visual language as the Assets/Equipment
+// register page (white card, big tone-coloured number, one-line note), per
+// the client's own reference for this section. Named distinctly from the
+// shadcn `Card` this page already imports so the two don't collide. ────────
+function KpiTile({
+  title, value, unit, note, tone,
+}: {
+  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral";
+}) {
+  const color = value === null ? "#9CA3AF"
+    : tone === "good" ? "#166534" : tone === "warn" ? "#B45309" : tone === "bad" ? "#B91C1C" : "#111827";
+  return (
+    <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
+      <div className="mb-3 text-[15px]" style={{ color: "#111827", fontWeight: 700 }}>{title}</div>
+      <div className="text-[40px] leading-none" style={{ color, fontWeight: 700 }}>
+        {value === null ? "N/A" : `${value}${unit}`}
+      </div>
+      <p className="mt-2 text-[11px] leading-snug" style={{ color: "#9CA3AF" }}>{note}</p>
+    </div>
+  );
+}
+
+function pctTone(value: number | null, goodFloor: number, warnFloor: number): "good" | "warn" | "bad" | "neutral" {
+  if (value === null) return "neutral";
+  return value >= goodFloor ? "good" : value >= warnFloor ? "warn" : "bad";
+}
 
 type Filter = "all" | "planning" | "in_field" | "reporting" | "verifying" | "closed";
 
@@ -43,6 +70,7 @@ const FILTERS: Array<{ key: Filter; label: string; test: (a: Audit) => boolean }
 export function AuditRegisterPage() {
   const navigate = useNavigate();
   const [audits, setAudits] = useState<Audit[]>([]);
+  const [kpis, setKpis] = useState<AuditKpis | null>(null);
   const [auditors, setAuditors] = useState<AuditorRegisterRow[]>([]);
   const [reference, setReference] = useState<AuditReference | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -57,8 +85,9 @@ export function AuditRegisterPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [a, r, ref, t] = await Promise.all([
+      const [a, k, r, ref, t] = await Promise.all([
         getAudits(),
+        getAuditKpis().catch(() => null),
         getAuditorRegister().catch(() => [] as AuditorRegisterRow[]),
         getAuditReference().catch(() => null),
         // Only the Admin maintains templates, so a role that cannot read them
@@ -67,6 +96,7 @@ export function AuditRegisterPage() {
         getTemplates().catch(() => [] as Template[]),
       ]);
       setAudits(a);
+      setKpis(k);
       setAuditors(r);
       setReference(ref);
       setTemplates(t);
@@ -108,6 +138,46 @@ export function AuditRegisterPage() {
           <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
           Schedule an audit
         </Button>
+      </div>
+
+      {/* Module 8 (Compliance & Audits) KPI block — client's own KPI spec
+          (HSEIQ_Full_KPI_with_SampleData.xlsx, M8_Compliance_Audits). */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+        <KpiTile
+          title="Audit Completion Rate"
+          value={kpis?.audit_completion_rate_pct ?? null}
+          unit="%"
+          note={kpis ? `${kpis.detail.audits_completed} of ${kpis.detail.audits_planned} audits completed` : "Target: 100%"}
+          tone={pctTone(kpis?.audit_completion_rate_pct ?? null, 90, 70)}
+        />
+        <KpiTile
+          title="Finding Closure Rate"
+          value={kpis?.finding_closure_rate_pct ?? null}
+          unit="%"
+          note={kpis ? `${kpis.detail.findings_closed} of ${kpis.detail.total_findings} findings closed` : "Target: 80%+ within 90 days"}
+          tone={pctTone(kpis?.finding_closure_rate_pct ?? null, 80, 50)}
+        />
+        <KpiTile
+          title="NC Closure Rate"
+          value={kpis?.nc_closure_rate_pct ?? null}
+          unit="%"
+          note={kpis ? `${kpis.detail.ncs_closed} of ${kpis.detail.total_ncs} non-conformances closed` : "Target: 100% within SLA"}
+          tone={pctTone(kpis?.nc_closure_rate_pct ?? null, 90, 60)}
+        />
+        <KpiTile
+          title="Regulatory Compliance"
+          value={kpis?.regulatory_compliance_rate_pct ?? null}
+          unit="%"
+          note="Proxy from audit NC closure — no separate legal register exists yet to check against"
+          tone={pctTone(kpis?.regulatory_compliance_rate_pct ?? null, 95, 80)}
+        />
+        <KpiTile
+          title="Overdue Findings"
+          value={kpis?.overdue_findings_count ?? null}
+          unit=""
+          note="Corrective action past due, still open. Target: 0"
+          tone={kpis == null ? "neutral" : kpis.overdue_findings_count === 0 ? "good" : "bad"}
+        />
       </div>
 
       {error && <Banner tone="danger" title="Something went wrong" icon={<TriangleAlert className="h-4 w-4" />}>{error}</Banner>}
