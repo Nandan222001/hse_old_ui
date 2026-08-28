@@ -53,18 +53,87 @@ def _latest_org_date(db: Session, model, date_column, org_id):
     return latest_value.date() if latest_value else None
 
 
+def _org_data_anchor_date(db: Session, org_id) -> date:
+    """The most recent date across this org's incidents/near-misses/safety
+    walks — the real "as of" point for preset windows (7D/30D/90D/1Y).
+
+    Anchoring on the real system clock instead breaks every preset whenever
+    the org's actual data doesn't reach up to today (imported/demo data with
+    older dates, or simply a clock running ahead of the last logged event):
+    "last 7 days" would silently mean 7 days nothing was recorded in, not the
+    7 most recent days of data. Falls back to today only when the org has no
+    dated records at all yet, so a brand-new org's presets don't error.
+    """
+    candidates = [
+        _latest_org_date(db, Incident, Incident.incident_date_time, org_id),
+        _latest_org_date(db, NearMiss, NearMiss.event_date_time, org_id),
+        _latest_org_date(db, SafetyWalk, SafetyWalk.inspection_date_time, org_id),
+    ]
+    dates = [d for d in candidates if d]
+    return max(dates) if dates else date.today()
+
+
+def _resolve_window(
+    db: Session, org_id, start_date: Optional[date], end_date: Optional[date], days: Optional[int],
+):
+    """Turn a request's start_date/end_date/days into an effective (start, end).
+
+    - Explicit start_date/end_date (the Custom picker) are respected as given;
+      an open side of a custom range falls back to the data anchor, not
+      real "today", for the same reason _org_data_anchor_date exists.
+    - A bare `days` value (7/30/90/365 preset buttons) is resolved against
+      the org's own latest recorded data via _org_data_anchor_date, not the
+      real system clock.
+    - Neither given ("All") returns (None, None) — no filter, true all-time.
+    """
+    if start_date or end_date:
+        anchor = _org_data_anchor_date(db, org_id)
+        return start_date, (end_date or anchor)
+    if days:
+        anchor = _org_data_anchor_date(db, org_id)
+        return anchor - timedelta(days=days), anchor
+    return None, None
+
+
 def _safe_round(value, digits=2):
     return round(float(value), digits) if value is not None else 0.0
 
 
+_CAPA_TERMINAL_STATUSES = ["completed", "closed", "verified", "done"]
+
+
+def _capa_overdue_sql_filter(query, today: date):
+    """A CAPA is overdue when its due date has passed and it hasn't reached a
+    terminal status — the same rule app/services/capa_lifecycle.py's describe()
+    uses for the per-row `is_overdue` flag shown everywhere else in the app.
+    Older code here matched a literal status == "Overdue" instead, which was
+    only ever true for the original demo dataset's pre-set status column —
+    real due-date-driven data (freshly imported or newly created orgs) never
+    writes that literal string, so the filter silently matched zero rows.
+    """
+    return query.filter(
+        CapaAction.due_date.isnot(None),
+        CapaAction.due_date < today,
+        (CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(_CAPA_TERMINAL_STATUSES),
+    )
+
+
+def _capa_is_overdue(status, due_date, today: date) -> bool:
+    if not due_date or due_date >= today:
+        return False
+    return (status or "").strip().lower() not in _CAPA_TERMINAL_STATUSES
+
+
 @router.get("/stats")
 def get_dashboard_stats(
-    start_date: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD)"),
-    end_date: Optional[date] = Query(None, description="Filter to date (YYYY-MM-DD)"),
+    start_date: Optional[date] = Query(None, description="Filter from date (YYYY-MM-DD) — Custom range"),
+    end_date: Optional[date] = Query(None, description="Filter to date (YYYY-MM-DD) — Custom range"),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
 
     def inc_q():
         return _date_filter(_org_filter(db.query(Incident), Incident, org_id), Incident.incident_date_time, start_date, end_date)
@@ -79,16 +148,14 @@ def get_dashboard_stats(
         return _date_filter(_org_filter(db.query(CapaAction), CapaAction, org_id), CapaAction.due_date, start_date, end_date)
 
     total_incidents = inc_q().count()
-    open_capa_actions = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
+    # Filtered on due_date within the selected period, same as every other
+    # count on this card — previously org-wide regardless of period, which
+    # disagreed with the CAPA list widgets below it once those became
+    # period-aware.
+    open_capa_actions = capa_q().filter(
         (CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"])
     ).count()
-    # CAPA data already carries a real "Overdue" status (client's own Excel spec counts
-    # it the same way: COUNTIF Status = "Overdue"). Recomputing via due_date < today
-    # was comparing seed due-dates from 2024-2025 against a 2026 system clock, so it
-    # counted almost every open/in-progress action as "overdue" (107 instead of 6).
-    overdue_capa = _org_filter(db.query(CapaAction), CapaAction, org_id).filter(
-        CapaAction.status == "Overdue",
-    ).count()
+    overdue_capa = _capa_overdue_sql_filter(capa_q(), date.today()).count()
     active_permits = _org_filter(db.query(PermitToWork), PermitToWork, org_id).filter(PermitToWork.status == "Active").count()
     total_employees = _org_filter(db.query(Employee), Employee, org_id).count()
     total_sites = _org_filter(db.query(Site), Site, org_id).count()
@@ -131,6 +198,12 @@ def get_dashboard_stats(
         "avg_housekeeping_rating": round(float(avg_housekeeping), 1) if avg_housekeeping else 0,
         "critical_incidents": critical_incidents,
         "capa_completion_rate": capa_completion_rate,
+        # The window actually applied above (after resolving days/Custom against
+        # the org's data) — the frontend reads this to label the period instead
+        # of re-deriving it from the real client clock, which is exactly the
+        # mismatch this endpoint now corrects for.
+        "period_start": start_date.isoformat() if start_date else None,
+        "period_end": end_date.isoformat() if end_date else None,
     }
 
 
@@ -138,6 +211,7 @@ def get_dashboard_stats(
 def get_leading_indicators(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -157,37 +231,40 @@ def get_leading_indicators(
 
     # ── Anchor dates on actual data, not today ───────────────────────────────
     # Using today as anchor makes all 90-day windows empty when historical data
-    # is from a past year. Anchor on the latest incident/walk date instead.
-    latest_incident_dt = _org_filter(
-        db.query(func.max(Incident.incident_date_time)), Incident, org_id
-    ).scalar()
-    # Near misses anchor the window too — see why below.
-    latest_near_miss_dt = _org_filter(
-        db.query(func.max(NearMiss.event_date_time)), NearMiss, org_id
-    ).scalar()
+    # is from a past year (or, same effect, the system clock has moved on past
+    # the newest data). Anchor on the org's latest incident/near-miss/safety-
+    # walk date instead — same anchor _resolve_window uses for the other
+    # dashboard endpoints, so every tile driven by the same period selection
+    # lands on the same effective window.
+    #
+    # near_miss_ratio divides near misses by recordable incidents over this
+    # window. Ending it at the last incident capped the numerator there while
+    # near misses kept arriving — every one reported from the mobile app
+    # since the last incident fell outside the window, so the tile sat frozen
+    # no matter how many were logged. That is the opposite of what a
+    # *leading* indicator is for: near-miss reporting is supposed to move
+    # before the next incident does, not wait for one.
+    data_anchor = _org_data_anchor_date(db, org_id)
 
-    # If user passed explicit date window, respect it; otherwise anchor on data
     if start_date or end_date:
-        data_window_end = end_date or date.today()
+        # Custom range — an open end falls back to the data anchor rather
+        # than real "today", for the same reason the other two branches do.
+        data_window_end = end_date or data_anchor
         data_window_start = start_date or None
+    elif days:
+        # Preset button (7D/30D/90D/1Y) — anchor on the org's own latest
+        # recorded data instead of the real system clock, so "last 7 days"
+        # means the 7 most recent days of data, not 7 days that happen to
+        # contain nothing because the clock has drifted past the data.
+        data_window_end = data_anchor
+        data_window_start = data_anchor - timedelta(days=days)
     else:
-        # Anchored on the latest *event of any counted kind*, not on the latest
-        # incident alone.
-        #
-        # near_miss_ratio divides near misses by recordable incidents over this
-        # window. Ending it at the last incident capped the numerator there
-        # while near misses kept arriving — every one reported from the mobile
-        # app since the last incident fell outside the window, so the tile sat
-        # frozen no matter how many were logged. That is the opposite of what a
-        # *leading* indicator is for: near-miss reporting is supposed to move
-        # before the next incident does, not wait for one.
-        #
-        # Extending the end date keeps both sides of the ratio on the same
-        # window, so the methodology is unchanged — the denominator simply has
-        # no incidents in the extension, which is precisely the good news the
-        # ratio is meant to show.
-        anchors = [d for d in (latest_incident_dt, latest_near_miss_dt) if d]
-        data_window_end = max(anchors).date() if anchors else date.today()
+        # "All" — extending the end date to the data anchor keeps both sides
+        # of near_miss_ratio on the same window, so the methodology is
+        # unchanged; the denominator simply has no incidents in the
+        # extension, which is precisely the good news the ratio is meant to
+        # show.
+        data_window_end = data_anchor
         data_window_start = None
 
     latest_date = data_window_end
@@ -257,13 +334,17 @@ def get_leading_indicators(
         else_=0.5,
     )
 
-    def weighted_risk_score(start_date, end_date, inclusive_end: bool = False) -> float:
+    def weighted_risk_score(start_date, end_date, inclusive_end: bool = False):
         # inclusive_end=True for the "current" window: end_date is anchored on the
         # latest incident's own date (see latest_date above), so a strict `<` would
         # exclude that incident from its own window — e.g. right after a worker
         # submits a same-day report, the score would drop to 0 instead of reflecting
         # it. The "previous" window keeps the exclusive bound so the two windows
         # don't double-count incidents dated exactly on the current_start boundary.
+        #
+        # Returns (score, count, weight_sum) — count/weight_sum are the exact
+        # inputs the score was computed from, surfaced for the dashboard's Info
+        # tooltip so it can show the real numbers instead of re-deriving them.
         q = (
             _org_filter(
                 db.query(
@@ -283,8 +364,8 @@ def get_leading_indicators(
         count = int(row.count or 0)
         weight_sum = float(row.weight_sum or 0)
         if not count:
-            return 0.0
-        return min(100.0, (weight_sum / (count * 3)) * 100)
+            return 0.0, count, weight_sum
+        return min(100.0, (weight_sum / (count * 3)) * 100), count, weight_sum
 
     # The comparison window tracks whatever period the user actually selected
     # (7D/30D/90D/1Y/custom) rather than always being a fixed 90 days — a 7-day
@@ -293,11 +374,20 @@ def get_leading_indicators(
     # picker asked. "Previous" is the immediately preceding window of the same
     # length, per the client's own correction: not "vs last year", the
     # corresponding prior period for whatever range is on screen.
+    #
+    # When no period is selected ("All"), data_window_start is None and there
+    # is no user-chosen range to mirror, so the comparison falls back to a
+    # fixed 90-day window — same fallback the rest of this function already
+    # uses for data_window_end's anchor.
     period_days = max(1, (data_window_end - data_window_start).days) if data_window_start else 90
     current_start = latest_date - timedelta(days=period_days)
     previous_start = latest_date - timedelta(days=period_days * 2)
-    current_score = weighted_risk_score(current_start, latest_date, inclusive_end=True)
-    previous_score = weighted_risk_score(previous_start, current_start)
+    current_score, current_incident_count, current_weight_sum = weighted_risk_score(
+        current_start, latest_date, inclusive_end=True
+    )
+    previous_score, previous_incident_count, previous_weight_sum = weighted_risk_score(
+        previous_start, current_start
+    )
     injury_risk_score = _safe_round(current_score)
     injury_risk_trend = _safe_round(current_score - previous_score)
 
@@ -346,6 +436,24 @@ def get_leading_indicators(
         "predictive_injury_risk_score": injury_risk_score,
         "predictive_injury_risk_previous_score": _safe_round(previous_score),
         "predictive_injury_risk_trend": injury_risk_trend,
+        # Raw inputs behind the two scores above, for the KPI's Info tooltip —
+        # same weighted_risk_score() calls, not a separate/re-derived figure.
+        "predictive_injury_risk_detail": {
+            "current_window_start": current_start.isoformat(),
+            "current_window_end": latest_date.isoformat(),
+            "previous_window_start": previous_start.isoformat(),
+            "previous_window_end": current_start.isoformat(),
+            "period_days": period_days,
+            "period_source": (
+                "custom" if (start_date or end_date)
+                else "preset_anchor" if days
+                else "default_90d"
+            ),
+            "current_incident_count": current_incident_count,
+            "current_weight_sum": round(current_weight_sum, 2),
+            "previous_incident_count": previous_incident_count,
+            "previous_weight_sum": round(previous_weight_sum, 2),
+        },
         "trir": trir,
         "ltifr": ltifr,
         "ltisr": ltisr,
@@ -399,10 +507,12 @@ def get_ranked_capa_actions(
     limit: int = 10,
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
     q = _org_filter(db.query(CapaAction, Employee), CapaAction, org_id)\
         .outerjoin(Employee, org_scoped_join(CapaAction.responsible_person_id == Employee.id, Employee.organisation_id, org_id))\
         .filter((CapaAction.status.is_(None)) | func.lower(CapaAction.status).notin_(["completed", "closed", "verified", "done"]))
@@ -411,12 +521,10 @@ def get_ranked_capa_actions(
     if end_date:
         q = q.filter(func.date(CapaAction.due_date) <= end_date)
     rows = q.order_by(case((CapaAction.due_date.is_(None), 1), else_=0), CapaAction.due_date.asc()).limit(limit).all()
+    today = date.today()
     result = []
     for capa, emp in rows:
-        # Priority is derived from the real CAPA status field, not a due_date-vs-today
-        # comparison — the seed data's due dates are all 2024-2025 while the system
-        # clock is 2026, so every row would read as "overdue"/High otherwise.
-        is_overdue = capa.status == "Overdue"
+        is_overdue = _capa_is_overdue(capa.status, capa.due_date, today)
         result.append({
             "id": capa.id,
             "description": capa.description,
@@ -435,26 +543,27 @@ def get_ranked_capa_actions(
 @router.get("/overdue-capa")
 def get_overdue_capa(
     limit: int = 10,
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
-    # Real "Overdue" status (client's own Excel spec counts it the same way), not a
-    # due_date-vs-today comparison — see get_dashboard_stats for why that's wrong here.
+    today = date.today()
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
     rows = (
-        _org_filter(db.query(CapaAction), CapaAction, org_id)
-        .filter(CapaAction.status == "Overdue")
+        _date_filter(
+            _capa_overdue_sql_filter(_org_filter(db.query(CapaAction), CapaAction, org_id), today),
+            CapaAction.due_date, start_date, end_date,
+        )
         .order_by(CapaAction.due_date.asc())
         .limit(limit)
         .all()
     )
-    # "Days overdue" is display-only context, not a spec KPI — anchor it on the
-    # latest due_date in this org's own CAPA data instead of the real system clock,
-    # so it reads as a sane recency figure instead of a clock-skew artifact.
-    anchor = _org_filter(db.query(func.max(CapaAction.due_date)), CapaAction, org_id).scalar() or date.today()
     result = []
     for c in rows:
-        days_overdue = max(0, (anchor - c.due_date).days) if c.due_date else 0
+        days_overdue = max(0, (today - c.due_date).days) if c.due_date else 0
         result.append({
             "id": c.id,
             "incident_id": c.incident_id,
@@ -472,10 +581,12 @@ def get_overdue_capa(
 def get_incidents_by_category(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
     # HazardCategory and Hazard are themselves org-owned (each org can define its
     # own categories/hazards), and hazard_id/category_id are global-PK foreign
     # keys — an unscoped join can pull another org's category name or hazard
@@ -546,12 +657,19 @@ def get_compliance_trend(
 @router.get("/safety-walks-recent")
 def get_safety_walks_recent(
     limit: int = 5,
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
     rows = (
-        _org_filter(db.query(SafetyWalk, WorkingStation, Employee), SafetyWalk, org_id)
+        _date_filter(
+            _org_filter(db.query(SafetyWalk, WorkingStation, Employee), SafetyWalk, org_id),
+            SafetyWalk.inspection_date_time, start_date, end_date,
+        )
         .outerjoin(WorkingStation, org_scoped_join(SafetyWalk.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
         .order_by(SafetyWalk.inspection_date_time.desc())
@@ -583,12 +701,19 @@ def get_safety_walks_recent(
 @router.get("/near-misses-recent")
 def get_near_misses_recent(
     limit: int = 5,
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, description="Preset window (7/30/90/365), anchored on the org's own latest recorded data, not the real system clock"),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     org_id = current_user.org_id
+    start_date, end_date = _resolve_window(db, org_id, start_date, end_date, days)
     rows = (
-        _org_filter(db.query(NearMiss, WorkingStation, Employee), NearMiss, org_id)
+        _date_filter(
+            _org_filter(db.query(NearMiss, WorkingStation, Employee), NearMiss, org_id),
+            NearMiss.event_date_time, start_date, end_date,
+        )
         .outerjoin(WorkingStation, org_scoped_join(NearMiss.location_station_id == WorkingStation.id, WorkingStation.organisation_id, org_id))
         .outerjoin(Employee, org_scoped_join(NearMiss.reported_by == Employee.id, Employee.organisation_id, org_id))
         .order_by(NearMiss.event_date_time.desc())

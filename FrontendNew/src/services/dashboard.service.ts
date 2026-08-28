@@ -13,6 +13,10 @@ export interface DashboardStats {
   avg_housekeeping_rating: number;
   critical_incidents: number;
   capa_completion_rate: number;
+  /** The date window actually applied server-side (after resolving a preset's
+   *  `days` against the org's own latest recorded data) — null/null for "All". */
+  period_start: string | null;
+  period_end: string | null;
 }
 
 export interface CapaAction {
@@ -77,9 +81,27 @@ export interface RecentNearMiss {
   severity: string;
 }
 
+export interface PredictiveInjuryRiskDetail {
+  current_window_start: string;
+  current_window_end: string;
+  previous_window_start: string;
+  previous_window_end: string;
+  period_days: number;
+  /** 'custom' for an explicit From/To range; 'preset_anchor' for a 7D/30D/
+   *  90D/1Y button (anchored on the org's latest recorded data, not today);
+   *  'default_90d' for "All", which falls back to the same 90-day anchor. */
+  period_source: 'custom' | 'preset_anchor' | 'default_90d';
+  current_incident_count: number;
+  current_weight_sum: number;
+  previous_incident_count: number;
+  previous_weight_sum: number;
+}
+
 export interface LeadingIndicators {
   predictive_injury_risk_score: number;
+  predictive_injury_risk_previous_score: number;
   predictive_injury_risk_trend: number;
+  predictive_injury_risk_detail: PredictiveInjuryRiskDetail;
   trir: number;
   ltif: number;
   ltifr?: number;
@@ -109,37 +131,48 @@ export interface ActivePermit {
   status: string;
 }
 
-export const getDashboardStats = (startDate?: string, endDate?: string) =>
+// `days` (7/30/90/365) is how the preset buttons ask for "last N days" —
+// resolved server-side against the org's own latest recorded data instead of
+// the real system clock, so a preset never silently returns empty because
+// the browser's "today" has drifted past where the data actually is.
+// `startDate`/`endDate` remain for the Custom picker's explicit range.
+export const getDashboardStats = (startDate?: string, endDate?: string, days?: number) =>
   axiosInstance.get<DashboardStats>('/dashboard/stats', {
-    params: { start_date: startDate, end_date: endDate },
+    params: { start_date: startDate, end_date: endDate, days },
   }).then((r) => r.data);
 
-export const getLeadingIndicators = (startDate?: string, endDate?: string) =>
+export const getLeadingIndicators = (startDate?: string, endDate?: string, days?: number) =>
   axiosInstance.get<LeadingIndicators>('/dashboard/leading-indicators', {
-    params: { start_date: startDate, end_date: endDate },
+    params: { start_date: startDate, end_date: endDate, days },
   }).then((r) => r.data);
 
-export const getCapaActions = (limit = 10, startDate?: string, endDate?: string) =>
+export const getCapaActions = (limit = 10, startDate?: string, endDate?: string, days?: number) =>
   axiosInstance.get<CapaAction[]>('/dashboard/capa-actions', {
-    params: { limit, start_date: startDate, end_date: endDate },
+    params: { limit, start_date: startDate, end_date: endDate, days },
   }).then((r) => r.data);
 
-export const getOverdueCapa = (limit = 10) =>
-  axiosInstance.get<OverdueCapa[]>('/dashboard/overdue-capa', { params: { limit } }).then((r) => r.data);
+export const getOverdueCapa = (limit = 10, startDate?: string, endDate?: string, days?: number) =>
+  axiosInstance.get<OverdueCapa[]>('/dashboard/overdue-capa', {
+    params: { limit, start_date: startDate, end_date: endDate, days },
+  }).then((r) => r.data);
 
-export const getIncidentsByCategory = (startDate?: string, endDate?: string) =>
+export const getIncidentsByCategory = (startDate?: string, endDate?: string, days?: number) =>
   axiosInstance.get<IncidentByCategory[]>('/dashboard/incidents-by-category', {
-    params: { start_date: startDate, end_date: endDate },
+    params: { start_date: startDate, end_date: endDate, days },
   }).then((r) => r.data);
 
 export const getComplianceTrend = (days = 30) =>
   axiosInstance.get<ComplianceTrend[]>('/dashboard/compliance-trend', { params: { days } }).then((r) => r.data);
 
-export const getSafetyWalksRecent = (limit = 5) =>
-  axiosInstance.get<RecentSafetyWalk[]>('/dashboard/safety-walks-recent', { params: { limit } }).then((r) => r.data);
+export const getSafetyWalksRecent = (limit = 5, startDate?: string, endDate?: string, days?: number) =>
+  axiosInstance.get<RecentSafetyWalk[]>('/dashboard/safety-walks-recent', {
+    params: { limit, start_date: startDate, end_date: endDate, days },
+  }).then((r) => r.data);
 
-export const getNearMissesRecent = (limit = 5) =>
-  axiosInstance.get<RecentNearMiss[]>('/dashboard/near-misses-recent', { params: { limit } }).then((r) => r.data);
+export const getNearMissesRecent = (limit = 5, startDate?: string, endDate?: string, days?: number) =>
+  axiosInstance.get<RecentNearMiss[]>('/dashboard/near-misses-recent', {
+    params: { limit, start_date: startDate, end_date: endDate, days },
+  }).then((r) => r.data);
 
 export const getActivePermits = (limit = 10) =>
   axiosInstance.get<ActivePermit[]>('/dashboard/permits-active', { params: { limit } }).then((r) => r.data);

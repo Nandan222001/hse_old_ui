@@ -4,7 +4,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import {
   CheckCircle2, Circle, Loader2, Building2, ChevronRight, ChevronDown,
   Upload, Download, Plus, Trash2, X, Check, AlertTriangle, FileText,
-  Brain, Zap, BarChart3, Users, Shield, Clock,
+  Brain, Zap, BarChart3, Users, Shield, Clock, Wrench, HardHat,
 } from "lucide-react";
 import {
   useGetOrgSetupProgressQuery, useGetOrgSetupStep1Query, useGetOrgSetupStep2Query,
@@ -79,6 +79,10 @@ const DATA_IMPORT_TYPES = [
   { key: "safety_walks", label: "Safety Walks", icon: Check },
   { key: "capa_actions", label: "CAPA Actions", icon: Zap },
   { key: "shift_schedule", label: "Shift Schedule", icon: Clock },
+  { key: "equipment", label: "Equipment Register", icon: Wrench },
+  { key: "contractor_companies", label: "Contractor Companies", icon: HardHat },
+  { key: "contractor_workers", label: "Contractor Workers", icon: Users },
+  { key: "contractor_hours", label: "Contractor Hours", icon: Clock },
 ];
 
 type FieldDef = { label: string; key: string; type: string; placeholder?: string; options?: string[]; required?: boolean };
@@ -175,7 +179,7 @@ function OrgDetailsForm({ form, set }: { form: OrgForm; set: (k: string, v: stri
       <div><label className={labelCls} style={labelStyle}>Organisation ID</label><input className={inputCls} style={inputStyle} placeholder="e.g. ORG-001" value={form.organisationId} onChange={(e) => set("organisationId", e.target.value)} /></div>
       <div><label className={labelCls} style={labelStyle}>Organisation Name{req}</label><input className={inputCls} style={inputStyle} placeholder="Enter organisation name" value={form.organisationName} onChange={(e) => set("organisationName", e.target.value)} /></div>
       <div><label className={labelCls} style={labelStyle}>Country{req}</label><input className={inputCls} style={inputStyle} placeholder="e.g. United Kingdom" value={form.country} onChange={(e) => set("country", e.target.value)} /></div>
-      <div><label className={labelCls} style={labelStyle}>Industry Sector{req}</label><select className={inputCls} style={inputStyle} value={form.industrySector} onChange={(e) => set("industrySector", e.target.value)}><option value="">Select industry sector</option>{INDUSTRY_SECTORS.map((i) => <option key={i} value={i}>{i}</option>)}</select></div>
+      <div><label className={labelCls} style={labelStyle}>Industry Sector{req}</label><select className={inputCls} style={inputStyle} value={form.industrySector} onChange={(e) => set("industrySector", e.target.value)}><option value="">Select industry sector</option>{form.industrySector && !INDUSTRY_SECTORS.includes(form.industrySector) && <option value={form.industrySector}>{form.industrySector}</option>}{INDUSTRY_SECTORS.map((i) => <option key={i} value={i}>{i}</option>)}</select></div>
       <div><label className={labelCls} style={labelStyle}>Number of Employees{req}</label><input type="number" className={inputCls} style={inputStyle} placeholder="0" min="0" value={form.numberOfEmployees} onChange={(e) => set("numberOfEmployees", e.target.value)} /></div>
       <div><label className={labelCls} style={labelStyle}>Headquarters Location</label><input className={inputCls} style={inputStyle} placeholder="City, Country" value={form.headquartersLocation} onChange={(e) => set("headquartersLocation", e.target.value)} /></div>
       <div><label className={labelCls} style={labelStyle}>Parent Company</label><input className={inputCls} style={inputStyle} placeholder="Parent company name (if any)" value={form.parentCompany} onChange={(e) => set("parentCompany", e.target.value)} /></div>

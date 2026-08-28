@@ -11,9 +11,12 @@ import {
 import {
   getEmployeeDirectory, getPeopleOverview, getTeamHierarchy,
   type EmployeeDirectoryRow, type PeopleOverview, type TeamHierarchyRow,
+  type PeopleKpiMetric, type CompetencyCoverageDetail, type WorkerExposureDetail,
+  type SupervisorSafetyDetail, type PeopleHighRiskRole,
 } from "../../services/personnel.service";
 import { useAuth } from "../context/AuthContext";
 import { TeamHierarchyTree } from "../components/people/TeamHierarchyTree";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -177,10 +180,265 @@ function PeriodToggle<T extends number>({ options, value, onChange }: { options:
   );
 }
 
+// ── Competency Coverage % — Info tooltip content ────────────────────────────────
+// Renders straight from PeopleOverview.competency_coverage (the same object
+// the KPI card reads), so the tooltip can never drift from the card.
+function CompetencyCoverageInfoContent({ metric }: { metric: PeopleKpiMetric & { detail: CompetencyCoverageDetail } }) {
+  const d = metric.detail;
+  const covered = d.total_employees - d.flagged_employees;
+  const sparkline = metric.sparkline ?? [];
+  const earliest = sparkline.length > 0 ? sparkline[0] : null;
+  const flat = sparkline.length > 0 && sparkline.every((v) => v === sparkline[0]);
+
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Competency Coverage %</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Score</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{metric.value}% — {metric.subtitle}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Change indicator</div>
+        <div className="font-semibold" style={{ color: metric.tone === 'red' ? '#B91C1C' : '#3C8A52' }}>{metric.change}</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>
+          Not a period-over-period comparison — the arrow only shows whether the score sits in a healthy band; the number just repeats the current score.
+        </div>
+      </div>
+
+      {sparkline.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Trend (last {d.sparkline_months} months)</div>
+          <div>
+            {flat
+              ? `No change recorded — every monthly checkpoint in this window reads ${metric.value}%.`
+              : `${earliest}% earliest checkpoint → ${metric.value}% now.`}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Calculation</div>
+        <div>Score = (Total employees − Flagged employees) ÷ Total employees × 100.</div>
+        <div className="mt-0.5 text-[11px]" style={{ color: '#6B7280' }}>
+          &quot;Flagged&quot; = an employee linked to a training-related incident (root cause mentions &quot;training&quot;) or responsible for a CAPA whose root cause addressed mentions &quot;training&quot;.
+        </div>
+        <div className="mt-1.5 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>
+          ({d.total_employees} − {d.flagged_employees}) ÷ {d.total_employees} × 100 = {metric.value}%
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Raw values</div>
+        <div>Total employees: {d.total_employees}</div>
+        <div>Flagged via training-related incident: {d.flagged_from_incidents}</div>
+        <div>Flagged via training-related CAPA: {d.flagged_from_capa}</div>
+        <div>Flagged, unique total: {d.flagged_employees}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Rating bands</div>
+        <div>{d.high_label} at {d.high_floor}%+ · {d.mid_label} at {d.mid_floor}%+ · {d.low_label} below {d.mid_floor}%</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Interpretation</div>
+        <div>
+          {covered} of {d.total_employees} employees ({metric.value}%) have no training-linked incident or CAPA against them — rated &quot;{metric.subtitle}&quot; ({d.high_label} starts at {d.high_floor}%).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Worker Exposure Index — Info tooltip content ────────────────────────────────
+// Renders straight from PeopleOverview.worker_exposure_index (the same object
+// the KPI card reads), so the tooltip can never drift from the card.
+function WorkerExposureInfoContent({ metric }: { metric: PeopleKpiMetric & { detail: WorkerExposureDetail } }) {
+  const d = metric.detail;
+  const windowRange = `${formatShortDate(d.window_start)} – ${formatShortDate(d.window_end)}`;
+
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Worker Exposure Index</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Score</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{metric.value}% — {metric.subtitle}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Change indicator</div>
+        <div className="font-semibold" style={{ color: metric.tone === 'green' ? '#3C8A52' : metric.tone === 'red' ? '#B91C1C' : '#B45309' }}>{metric.change || '—'}</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>
+          Not a period-over-period comparison — this is a single symbol showing whether the risk band is healthy (▲, Low Risk only) or needs attention (⚠). There is no previous-period value behind it.
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Window</div>
+        <div>Trailing {d.window_days} days: {windowRange}</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>Anchored on your organisation&apos;s latest recorded incident/near-miss date, not today&apos;s date.</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Calculation</div>
+        <div>Score = min(100, (Recent incidents + Recent near misses) ÷ Total employees × 100).</div>
+        <div className="mt-1.5 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>
+          ({d.recent_incidents} + {d.recent_near_misses}) ÷ {d.total_employees} × 100 = {d.raw_pct}%{d.capped ? ` → capped to 100%` : ''}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Raw values</div>
+        <div>Total employees: {d.total_employees}</div>
+        <div>Incidents in window: {d.recent_incidents}</div>
+        <div>Near misses in window: {d.recent_near_misses}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Rating bands</div>
+        <div>{d.low_label} below {d.mid_floor}% · {d.mid_label} at {d.mid_floor}%+ · {d.high_label} at {d.high_floor}%+</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Interpretation</div>
+        <div>
+          {d.recent_incidents + d.recent_near_misses} safety events ({d.recent_incidents} incidents, {d.recent_near_misses} near misses) were logged against {d.total_employees} employees in this {d.window_days}-day window — rated &quot;{metric.subtitle}&quot; ({d.mid_label} starts at {d.mid_floor}%, {d.high_label} at {d.high_floor}%).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Supervisor Safety Score — Info tooltip content ──────────────────────────────
+// Renders straight from PeopleOverview.supervisor_safety_score (the same
+// object the KPI card reads), so the tooltip can never drift from the card.
+function SupervisorSafetyInfoContent({ metric }: { metric: PeopleKpiMetric & { detail: SupervisorSafetyDetail } }) {
+  const d = metric.detail;
+
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Supervisor Safety Score</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Score</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{metric.value}% — {metric.subtitle}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Change indicator</div>
+        <div className="font-semibold" style={{ color: metric.tone === 'red' ? '#B91C1C' : '#3C8A52' }}>{metric.change}</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>
+          Not a period-over-period comparison — the arrow only shows whether the score sits in a healthy band; the number just repeats the current score.
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Calculation</div>
+        <div>Score = Average Safety Walk compliance rating (1–5 scale) ÷ 5 × 100, rounded.</div>
+        <div className="mt-0.5 text-[11px]" style={{ color: '#6B7280' }}>
+          Averaged across every Safety Walk logged by an employee whose Role has Safety_Signatory = Yes — all-time, not limited to the dashboard&apos;s selected period.
+        </div>
+        <div className="mt-1.5 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>
+          {d.avg_compliance_rating_1_5 !== null
+            ? `${d.avg_compliance_rating_1_5} ÷ 5 × 100 = ${metric.value}%`
+            : 'No qualifying Safety Walks recorded — score defaults to 0%.'}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Raw values</div>
+        <div>Safety Walks counted: {d.safety_walk_count}</div>
+        <div>Distinct supervisors (Safety_Signatory = Yes) inspecting: {d.supervisor_count}</div>
+        <div>Average compliance rating: {d.avg_compliance_rating_1_5 !== null ? `${d.avg_compliance_rating_1_5} / 5` : '—'}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Rating bands</div>
+        <div>Needs Coaching below {d.effective_floor}% · Effective at {d.effective_floor}%+ · Highly Effective at {d.highly_effective_floor}%+</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>Fixed thresholds — not org-configurable, unlike Competency Coverage and Worker Exposure Index.</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Interpretation</div>
+        <div>
+          {d.supervisor_count} supervisor{d.supervisor_count === 1 ? '' : 's'} logged {d.safety_walk_count} Safety Walk{d.safety_walk_count === 1 ? '' : 's'} averaging {d.avg_compliance_rating_1_5 ?? '—'}/5 compliance — rated &quot;{metric.subtitle}&quot;.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── High Risk Roles — Info tooltip content ──────────────────────────────────────
+// Renders straight from PeopleOverview.high_risk_roles (the same array the
+// table reads), so the tooltip can never drift from what's on screen.
+function HighRiskRolesInfoContent({ roles }: { roles: PeopleHighRiskRole[] }) {
+  if (roles.length === 0) {
+    return (
+      <div className="text-[12px]" style={{ color: '#374151' }}>
+        No roles with employees assigned yet — there is nothing to rank.
+      </div>
+    );
+  }
+  const { high_floor, medium_floor } = roles[0].detail;
+  const toneColor = (tone: string) => (tone === 'red' ? '#B91C1C' : tone === 'amber' ? '#B45309' : '#3C8A52');
+
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>High Risk Roles</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Calculation</div>
+        <div>Rate = (Incidents + Near Misses reported by that role&apos;s employees) ÷ Headcount in that role.</div>
+        <div className="mt-0.5 text-[11px]" style={{ color: '#6B7280' }}>
+          Top 4 roles by rate, highest first — all-time totals, not limited to the dashboard&apos;s selected period.
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Rating bands</div>
+        <div>Low below {medium_floor} · Medium at {medium_floor}+ · High at {high_floor}+ (events per employee)</div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>Fixed thresholds — not org-configurable.</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Raw values behind each row</div>
+        <div className="mt-1 space-y-1.5">
+          {roles.map((r) => (
+            <div key={r.role} className="rounded-md p-1.5" style={{ background: '#F8FAFC' }}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold truncate" style={{ color: '#111827' }}>{r.role}</span>
+                <span className="font-semibold" style={{ color: toneColor(r.tone) }}>{r.status}</span>
+              </div>
+              <div className="font-mono text-[11px]" style={{ color: '#6B7280' }}>
+                ({r.detail.incidents} + {r.detail.near_misses}) ÷ {r.detail.headcount} = {r.detail.rate}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── People Dashboard section ──────────────────────────────────────────────────
 
+interface PeopleKpiCardItem {
+  title: string;
+  value: string;
+  subtitle: string;
+  change: string;
+  tone: 'green' | 'amber' | 'red' | 'blue';
+  visual: 'spark' | 'gauge' | 'ring';
+  sparkline?: number[];
+  /** Optional Info-icon tooltip content — populated per-card below. */
+  info?: React.ReactNode;
+}
+
 function PeopleDashboardSection({ currentUserName, overview }: { currentUserName?: string; overview: PeopleOverview | null }) {
-  const peopleKpis = overview
+  const peopleKpis: PeopleKpiCardItem[] = overview
     ? ([
         {
           title: "Competency Coverage %",
@@ -190,6 +448,7 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
           tone: overview.competency_coverage.tone,
           visual: "spark" as const,
           sparkline: overview.competency_coverage.sparkline ?? [],
+          info: <CompetencyCoverageInfoContent metric={overview.competency_coverage} />,
         },
         {
           title: "Worker Exposure Index",
@@ -198,6 +457,7 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
           change: overview.worker_exposure_index.change,
           tone: overview.worker_exposure_index.tone,
           visual: "gauge" as const,
+          info: <WorkerExposureInfoContent metric={overview.worker_exposure_index} />,
         },
         {
           title: "Supervisor Safety Score",
@@ -206,6 +466,7 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
           change: overview.supervisor_safety_score.change,
           tone: overview.supervisor_safety_score.tone,
           visual: "ring" as const,
+          info: <SupervisorSafetyInfoContent metric={overview.supervisor_safety_score} />,
         },
       ])
     : [];
@@ -275,7 +536,14 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
           <div key={metric.title} className="rounded-2xl border bg-white p-4 shadow-[0_6px_20px_rgba(15,23,42,0.05)]" style={{ borderColor: "#DCE7F7" }}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[15px] font-semibold" style={{ color: "#111827" }}>{metric.title}</div>
+                <div className="flex items-center gap-1.5 text-[15px] font-semibold" style={{ color: "#111827" }}>
+                  {metric.title}
+                  {metric.info && (
+                    <InfoTooltip label={`${metric.title} — how this is calculated`}>
+                      {metric.info}
+                    </InfoTooltip>
+                  )}
+                </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className="text-[34px] leading-none" style={{ color: "#111827", fontWeight: 800 }}>{metric.value}</span>
                   <ToneChip tone={metric.tone}>{metric.change}</ToneChip>
@@ -387,7 +655,14 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
 
         {/* High risk roles */}
         <div className="xl:col-span-3 rounded-2xl border bg-white p-4" style={{ borderColor: "#DCE7F7", boxShadow: "0px 10px 24px rgba(15, 23, 42, 0.06)" }}>
-          <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>High Risk Roles</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>High Risk Roles</h3>
+            {highRiskRoles.length > 0 && (
+              <InfoTooltip label="High Risk Roles — how this is calculated">
+                <HighRiskRolesInfoContent roles={highRiskRoles} />
+              </InfoTooltip>
+            )}
+          </div>
           <div className="mt-3 overflow-hidden rounded-xl border" style={{ borderColor: "#E5EAF3" }}>
             <div className="grid grid-cols-[minmax(0,1fr)_88px] bg-[#F8FAFC] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.5px]" style={{ color: "#6B7280" }}>
               <div>Roles</div><div className="text-center">Status</div>

@@ -3,15 +3,33 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   getEquipmentSummary,
   getEquipmentList,
   getEquipmentFilterOptions,
+  createEquipment,
   type EquipmentSummary,
   type EquipmentRow,
+  type EquipmentInput,
 } from "../../services/equipment-register.service";
+
+const EMPTY_FORM: EquipmentInput = {
+  equipment_code: "",
+  equipment_name: "",
+  equipment_type: "",
+  location_station: "",
+  installation_date: "",
+  pm_interval_days: null,
+  last_pm_date: "",
+  next_pm_due: "",
+  operating_hours_ytd: null,
+  last_failure_date: "",
+  mtbf_hours_estimated: null,
+  safety_critical_sce: false,
+  status: "",
+};
 
 // ── Shared card wrapper — same pattern as VendorsPage/ActionsPage ──────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -102,6 +120,23 @@ export function EquipmentCertificationPage() {
   const [equipmentTypes, setEquipmentTypes] = useState<string[]>([]);
   const [equipmentStatuses, setEquipmentStatuses] = useState<string[]>([]);
 
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [form, setForm] = useState<EquipmentInput>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const refreshSummaryAndFilters = () => {
+    getEquipmentSummary()
+      .then(setSummary)
+      .catch(() => setError("Failed to load equipment data"));
+    getEquipmentFilterOptions()
+      .then((opts) => {
+        setEquipmentTypes(opts.types);
+        setEquipmentStatuses(opts.statuses);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     getEquipmentSummary()
       .then(setSummary)
@@ -114,6 +149,53 @@ export function EquipmentCertificationPage() {
       })
       .catch(() => {});
   }, []);
+
+  const reloadList = () => {
+    setEquipmentLoading(true);
+    getEquipmentList(currentPage, PAGE_SIZE, {
+      status: statusFilter,
+      equipment_type: typeFilter,
+      sce: sceFilter === "Safety-Critical Only" ? "Yes" : sceFilter === "Non-Critical Only" ? "No" : undefined,
+      q: searchTerm || undefined,
+    })
+      .then((res) => {
+        setEquipmentRows(res.data);
+        setEquipmentTotal(res.total);
+        setEquipmentTotalPages(res.totalPages);
+      })
+      .catch(() => {})
+      .finally(() => setEquipmentLoading(false));
+  };
+
+  const handleAddEquipment = async () => {
+    if (!form.equipment_code.trim() || !form.equipment_name.trim()) {
+      setFormError("Equipment ID and Equipment Name are required.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      const payload: EquipmentInput = {
+        ...form,
+        equipment_type: form.equipment_type || null,
+        location_station: form.location_station || null,
+        installation_date: form.installation_date || null,
+        last_pm_date: form.last_pm_date || null,
+        next_pm_due: form.next_pm_due || null,
+        last_failure_date: form.last_failure_date || null,
+        status: form.status || null,
+      };
+      await createEquipment(payload);
+      setShowAddModal(false);
+      setForm(EMPTY_FORM);
+      reloadList();
+      refreshSummaryAndFilters();
+    } catch {
+      setFormError("Could not save equipment. Please check the fields and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setSearchTerm(searchInput.trim()), searchInput ? 300 : 0);
@@ -270,7 +352,17 @@ export function EquipmentCertificationPage() {
 
       {/* Equipment Register */}
       <Card>
-        <CardTitle>Equipment Register</CardTitle>
+        <div className="flex items-center justify-between mb-3">
+          <CardTitle>Equipment Register</CardTitle>
+          <button
+            type="button"
+            onClick={() => { setForm(EMPTY_FORM); setFormError(null); setShowAddModal(true); }}
+            className="flex items-center gap-1.5 h-9 rounded-lg px-3.5 text-[13px] font-semibold text-white"
+            style={{ background: "#4A57B9" }}
+          >
+            <Plus className="w-4 h-4" /> Add Equipment
+          </button>
+        </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center mb-3">
           <input
             value={searchInput}
@@ -378,6 +470,108 @@ export function EquipmentCertificationPage() {
           </>
         )}
       </Card>
+
+      {/* Add Equipment Modal */}
+      {showAddModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowAddModal(false)} />
+          <div
+            className="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-1.5rem)] max-w-[640px] max-h-[90vh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white"
+            style={{ boxShadow: "0px 8px 32px rgba(0,0,0,0.16)" }}
+          >
+            <div className="px-8 py-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-[17px]" style={{ color: "#0A0A0A", fontWeight: 700 }}>Add Equipment</h2>
+                <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg" style={{ color: "#6B7280" }}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formError && (
+                <div className="mb-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: "#FEE2E2", color: "#B91C1C" }}>
+                  {formError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Equipment ID *">
+                  <input value={form.equipment_code} onChange={(e) => setForm({ ...form, equipment_code: e.target.value })} placeholder="EQ-001" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Equipment Name *">
+                  <input value={form.equipment_name} onChange={(e) => setForm({ ...form, equipment_name: e.target.value })} placeholder="Overhead Crane 1" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Equipment Type">
+                  <input value={form.equipment_type ?? ""} onChange={(e) => setForm({ ...form, equipment_type: e.target.value })} placeholder="Crane" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Location / Station">
+                  <input value={form.location_station ?? ""} onChange={(e) => setForm({ ...form, location_station: e.target.value })} placeholder="STN001" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Installation Date">
+                  <input type="date" value={form.installation_date ?? ""} onChange={(e) => setForm({ ...form, installation_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="PM Interval (days)">
+                  <input type="number" value={form.pm_interval_days ?? ""} onChange={(e) => setForm({ ...form, pm_interval_days: e.target.value ? Number(e.target.value) : null })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Last PM Date">
+                  <input type="date" value={form.last_pm_date ?? ""} onChange={(e) => setForm({ ...form, last_pm_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Next PM Due">
+                  <input type="date" value={form.next_pm_due ?? ""} onChange={(e) => setForm({ ...form, next_pm_due: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Operating Hours (YTD)">
+                  <input type="number" value={form.operating_hours_ytd ?? ""} onChange={(e) => setForm({ ...form, operating_hours_ytd: e.target.value ? Number(e.target.value) : null })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Last Failure Date">
+                  <input type="date" value={form.last_failure_date ?? ""} onChange={(e) => setForm({ ...form, last_failure_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="MTBF (hrs, estimated)">
+                  <input type="number" step="0.1" value={form.mtbf_hours_estimated ?? ""} onChange={(e) => setForm({ ...form, mtbf_hours_estimated: e.target.value ? Number(e.target.value) : null })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Status">
+                  <select value={form.status ?? ""} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full h-10 px-3 rounded-lg border bg-white text-[13px]" style={{ borderColor: "#D8E2F4" }}>
+                    <option value="">Select status</option>
+                    <option value="Operational">Operational</option>
+                    <option value="Under Maintenance">Under Maintenance</option>
+                    <option value="Decommissioned">Decommissioned</option>
+                  </select>
+                </FormField>
+                <label className="flex items-center gap-2 sm:col-span-2 text-[13px]" style={{ color: "#334155" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.safety_critical_sce}
+                    onChange={(e) => setForm({ ...form, safety_critical_sce: e.target.checked })}
+                  />
+                  Safety-Critical Equipment (SCE)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-lg text-[13px]" style={{ color: "#6B7280", fontWeight: 500 }}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleAddEquipment}
+                  className="px-6 py-2 rounded-lg text-white text-[13px] disabled:opacity-60"
+                  style={{ background: "#4A57B9", fontWeight: 600 }}
+                >
+                  {saving ? "Saving…" : "Add Equipment"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block mb-1.5 text-[12px]" style={{ color: "#4B5563", fontWeight: 600 }}>{label}</label>
+      {children}
     </div>
   );
 }

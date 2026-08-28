@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { useNavigate } from "react-router";
 import { AlertTriangle, ArrowDown, ArrowUp, CalendarDays, ChevronRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 import {
   getDashboardStats,
   getIncidentsByCategory,
@@ -20,17 +21,6 @@ import {
   type RecentSafetyWalk,
 } from "../../services/dashboard.service";
 
-// â”€â”€ date helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function toISO(d: Date) {
-  return d.toISOString().split("T")[0];
-}
-
-function subtractDays(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return toISO(d);
-}
-
 type Preset = "7D" | "30D" | "90D" | "1Y" | "ALL" | "CUSTOM";
 
 const PRESETS: { label: string; key: Preset }[] = [
@@ -42,15 +32,18 @@ const PRESETS: { label: string; key: Preset }[] = [
   { label: "Custom", key: "CUSTOM" },
 ];
 
-function presetDates(preset: Preset): { start?: string; end?: string } {
-  const today = toISO(new Date());
+// A preset button sends how many days back to look, not literal dates — the
+// backend resolves that against the org's own latest recorded data instead
+// of the real system clock (app/controllers/dashboard.py's _resolve_window),
+// so "7D" means the 7 most recent days of data, not 7 days that happen to be
+// empty because the browser's "today" has drifted past where the data is.
+function presetDays(preset: Preset): number | undefined {
   switch (preset) {
-    case "7D":  return { start: subtractDays(7),   end: today };
-    case "30D": return { start: subtractDays(30),  end: today };
-    case "90D": return { start: subtractDays(90),  end: today };
-    case "1Y":  return { start: subtractDays(365), end: today };
-    case "ALL": return {};
-    default:    return {};
+    case "7D":  return 7;
+    case "30D": return 30;
+    case "90D": return 90;
+    case "1Y":  return 365;
+    default:    return undefined; // ALL, CUSTOM
   }
 }
 
@@ -71,6 +64,104 @@ function formatFilterDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+interface KpiItem {
+  title: string;
+  value: string;
+  sub: string;
+  accent: string;
+  border: string;
+  inline: string;
+  trendDown: boolean;
+  /** Optional Info-icon tooltip content — only the Predictive Injury Risk
+   *  Score card sets this; every other card renders exactly as before. */
+  info?: React.ReactNode;
+}
+
+// ── Predictive Injury Risk Score — Info tooltip content ────────────────────────
+// Renders straight from LeadingIndicators (the same object the KPI card reads),
+// so the tooltip can never drift from the card: same score, same trend, same
+// selected period, same underlying counts.
+function PredictiveRiskInfoContent({ leading }: { leading: LeadingIndicators }) {
+  const d = leading.predictive_injury_risk_detail;
+  const current = leading.predictive_injury_risk_score;
+  const previous = leading.predictive_injury_risk_previous_score;
+  const trend = leading.predictive_injury_risk_trend;
+  const trendArrow = trend < 0 ? '↓' : trend > 0 ? '↑' : '→';
+  const pct = (n: number) => `${Math.abs(n)} percentage point${Math.abs(n) === 1 ? '' : 's'}`;
+  const plural = (n: number) => (n === 1 ? '' : 's');
+
+  const currentRange = `${formatFilterDate(d.current_window_start)} – ${formatFilterDate(d.current_window_end)}`;
+  const previousRange = `${formatFilterDate(d.previous_window_start)} – ${formatFilterDate(d.previous_window_end)}`;
+
+  const scoreFormula = (weightSum: number, count: number, score: number) =>
+    count === 0
+      ? 'No incidents recorded in this period → score defaults to 0%.'
+      : `(${weightSum} ÷ (${count} × 3)) × 100 = ${score}%`;
+
+  let interpretation: string;
+  if (d.current_incident_count === 0) {
+    interpretation = `No incidents were recorded in the current period (${currentRange}), so the score reads 0% — that reflects an absence of incident data in this window, not a confirmed absence of risk.`;
+  } else if (d.previous_incident_count === 0) {
+    interpretation = `No incidents were recorded in the previous comparable period (${previousRange}), so its score is 0%. The current period (${currentRange}) has ${d.current_incident_count} incident${plural(d.current_incident_count)}, weighted by severity, for a score of ${current}%.`;
+  } else if (trend === 0) {
+    interpretation = `The score is unchanged versus the previous period — ${d.current_incident_count} incident${plural(d.current_incident_count)} in the current window carried the same severity-weighted total as the ${d.previous_incident_count} in the previous one.`;
+  } else {
+    interpretation = `The score ${trend < 0 ? 'decreased' : 'increased'} by ${pct(trend)} versus the previous period: ${d.current_incident_count} incident${plural(d.current_incident_count)} (severity-weighted total ${d.current_weight_sum}) in the current window vs. ${d.previous_incident_count} incident${plural(d.previous_incident_count)} (${d.previous_weight_sum}) previously. A ${trend < 0 ? 'lower' : 'higher'} score means ${trend < 0 ? 'lower' : 'higher'} predicted injury risk based on incident severity in this window.`;
+  }
+
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Predictive Injury Risk Score</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Risk Score</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{current}%</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Change</div>
+        <div className="font-semibold" style={{ color: trend < 0 ? '#B91C1C' : trend > 0 ? '#3C8A52' : '#374151' }}>
+          {trendArrow} {pct(trend)}
+        </div>
+        <div className="text-[11px]" style={{ color: '#9CA3AF' }}>Current minus previous period score — a point difference, not a relative percentage.</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Comparison</div>
+        <div>Previous comparable period: {previousRange} ({d.previous_incident_count} incident{plural(d.previous_incident_count)}, {previous}%)</div>
+        <div>Current period: {currentRange} ({d.current_incident_count} incident{plural(d.current_incident_count)}, {current}%)</div>
+        {d.period_source === 'default_90d' && (
+          <div className="mt-1 italic" style={{ color: '#9CA3AF' }}>
+            No date range selected (&quot;All&quot;) — showing the default 90-day window anchored on your organisation&apos;s latest recorded data.
+          </div>
+        )}
+        {d.period_source === 'preset_anchor' && (
+          <div className="mt-1 italic" style={{ color: '#9CA3AF' }}>
+            Anchored on your organisation&apos;s latest recorded data, not today&apos;s date.
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Calculation</div>
+        <div>Score = (Σ severity weight ÷ (incident count × 3)) × 100, capped at 100%.</div>
+        <div className="mt-0.5 text-[11px]" style={{ color: '#6B7280' }}>Severity weights: Fatal 3 · Serious 2.5 · Significant 2 · Lost Time 1.5 · Moderate 1 · Other 0.5</div>
+        <div className="mt-1.5 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>
+          Current: {scoreFormula(d.current_weight_sum, d.current_incident_count, current)}
+        </div>
+        <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>
+          Previous: {scoreFormula(d.previous_weight_sum, d.previous_incident_count, previous)}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Interpretation</div>
+        <div>{interpretation}</div>
+      </div>
+    </div>
+  );
 }
 
 export function DashboardPage() {
@@ -95,7 +186,12 @@ export function DashboardPage() {
 
   const activeDates = preset === "CUSTOM"
     ? { start: customStart || undefined, end: customEnd || undefined }
-    : presetDates(preset);
+    : {};
+  // Every preset besides Custom sends `days`, resolved server-side against
+  // the org's own latest data (see presetDays above) — no client-computed
+  // dates for those, so there's nothing here that can disagree with the
+  // backend's answer.
+  const activeDays = preset === "CUSTOM" ? undefined : presetDays(preset);
 
   function handlePreset(key: Preset) {
     setPreset(key);
@@ -106,22 +202,25 @@ export function DashboardPage() {
   // actually counting — the period picker's own selection was shown once at
   // the top of the page but not repeated on the chart it governs, so a chart
   // read as "as of always" rather than "as of the period currently chosen".
-  const periodLabel = preset === "ALL"
-    ? "All time"
-    : activeDates.start
-      ? `${formatFilterDate(activeDates.start)} – ${activeDates.end ? formatFilterDate(activeDates.end) : "now"}`
-      : "";
+  // Built from stats.period_start/period_end — the window the backend
+  // actually applied — rather than re-deriving it client-side, so the label
+  // can never show a different range than what the tiles below it reflect.
+  const periodLabel = !stats
+    ? ""
+    : stats.period_start && stats.period_end
+      ? `${formatFilterDate(stats.period_start)} – ${formatFilterDate(stats.period_end)}`
+      : "All time";
 
   useEffect(() => {
     const { start, end } = activeDates;
     Promise.all([
-        getDashboardStats(start, end),
-        getIncidentsByCategory(start, end),
-        getCapaActions(5, start, end),
-        getOverdueCapa(4),
-        getLeadingIndicators(start, end),
-        getNearMissesRecent(4),
-        getSafetyWalksRecent(4),
+        getDashboardStats(start, end, activeDays),
+        getIncidentsByCategory(start, end, activeDays),
+        getCapaActions(5, start, end, activeDays),
+        getOverdueCapa(4, start, end, activeDays),
+        getLeadingIndicators(start, end, activeDays),
+        getNearMissesRecent(4, start, end, activeDays),
+        getSafetyWalksRecent(4, start, end, activeDays),
       ])
       .then(([s, cats, capas, overdue, lead, nm, sw]) => {
         setStats(s as DashboardStats);
@@ -137,7 +236,7 @@ export function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role, preset, customStart, customEnd]);
 
-  const leadingKpis = leading ? [
+  const leadingKpis: KpiItem[] = leading ? [
     {
       title: "Predictive Injury Risk Score",
       value: `${leading.predictive_injury_risk_score}%`,
@@ -148,6 +247,7 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: `${Math.abs(leading.predictive_injury_risk_trend)}%`,
       trendDown: leading.predictive_injury_risk_trend < 0,
+      info: <PredictiveRiskInfoContent leading={leading} />,
     },
     {
       title: "TRIR",
@@ -184,7 +284,7 @@ export function DashboardPage() {
     },
   ] : [];
 
-  const limitingKpis = leading ? [
+  const limitingKpis: KpiItem[] = leading ? [
     {
       title: "DART Rate",
       value: `${leading.dart_rate ?? 0}`,
@@ -251,7 +351,14 @@ export function DashboardPage() {
                   boxShadow: '0 4px 10px rgba(15, 23, 42, 0.08)',
                 }}
               >
-                <div className="text-[13px] leading-tight" style={{ color: '#1F2937', fontWeight: 600 }}>{item.title}</div>
+                <div className="flex items-center gap-1.5 text-[13px] leading-tight" style={{ color: '#1F2937', fontWeight: 600 }}>
+                  {item.title}
+                  {item.info && (
+                    <InfoTooltip label={`${item.title} — how this is calculated`}>
+                      {item.info}
+                    </InfoTooltip>
+                  )}
+                </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   <span className="text-[1.375rem] leading-none md:text-[1.5rem]" style={{ color: '#111827', fontWeight: 700 }}>{item.value}</span>
                   {item.inline && (
@@ -546,14 +653,12 @@ export function DashboardPage() {
             </button>
           ))}
 
-          {/* active date range label */}
-          {preset !== "CUSTOM" && preset !== "ALL" && activeDates.start && (
+          {/* active date range label — the window the backend actually
+              applied (period_start/period_end), not a client-side guess */}
+          {preset !== "CUSTOM" && periodLabel && (
             <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>
-              {formatFilterDate(activeDates.start)} → {activeDates.end ? formatFilterDate(activeDates.end) : ''}
+              {periodLabel}
             </span>
-          )}
-          {preset === "ALL" && (
-            <span className="text-[12px] ml-1" style={{ color: '#94A3B8' }}>All time</span>
           )}
         </div>
 

@@ -24,13 +24,31 @@ export interface EquipmentRow {
   equipment_type: string | null;
   location_station: string | null;
   installation_date: string | null;
+  pm_interval_days: number | null;
   last_pm_date: string | null;
   next_pm_due: string | null;
   pm_overdue: boolean;
   operating_hours_ytd: number | null;
+  last_failure_date: string | null;
   mtbf_hours_estimated: number | null;
   safety_critical_sce: boolean;
   status: string | null;
+}
+
+export interface EquipmentInput {
+  equipment_code: string;
+  equipment_name: string;
+  equipment_type?: string | null;
+  location_station?: string | null;
+  installation_date?: string | null;
+  pm_interval_days?: number | null;
+  last_pm_date?: string | null;
+  next_pm_due?: string | null;
+  operating_hours_ytd?: number | null;
+  last_failure_date?: string | null;
+  mtbf_hours_estimated?: number | null;
+  safety_critical_sce?: boolean;
+  status?: string | null;
 }
 
 export interface EquipmentPage {
@@ -60,3 +78,12 @@ export const getEquipmentList = (
   axiosInstance
     .get<EquipmentPage>('/equipment-register', { params: { page, pageSize, ...filters } })
     .then((r) => r.data);
+
+export const createEquipment = (payload: EquipmentInput) =>
+  axiosInstance.post<EquipmentRow>('/equipment-register', payload).then((r) => r.data);
+
+export const updateEquipment = (id: number, payload: EquipmentInput) =>
+  axiosInstance.put<EquipmentRow>(`/equipment-register/${id}`, payload).then((r) => r.data);
+
+export const deleteEquipment = (id: number) =>
+  axiosInstance.delete(`/equipment-register/${id}`);

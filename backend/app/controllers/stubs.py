@@ -15,6 +15,7 @@ from app.core.dependencies import get_current_user, CurrentUser
 from app.models.organisation_invite import OrganisationInvite
 from app.models.data_import import DataImport
 from app.models.validation_log import ValidationLog
+from app.utils.flexible_date import parse_flexible_date
 
 router = APIRouter(tags=["Stubs"])
 
@@ -108,19 +109,21 @@ def create_onboarding(payload: Any = None) -> dict:
 
 
 @router.get("/org-setup/progress")
-def org_setup_progress(db: Session = Depends(get_db)) -> dict:
+def org_setup_progress(request: Request, db: Session = Depends(get_db)) -> dict:
     from app.models.site import Site
     from app.models.organisation import Organisation
     steps_done = []
-    # Use _wizard_org_id (set after step 1 is saved) to scope DB queries.
-    # Before step 1 is saved, _wizard_org_id is None and the wizard is blank.
+    # Resolve via the logged-in user's own organisation_id first (survives a
+    # fresh login / backend restart) — the module-level wizard globals below
+    # are only a same-process fallback for a user with no organisation yet.
+    org_id = _resolve_wizard_org_id(request, db)
     if _wizard_step1:
         steps_done.append(1)
-    elif _wizard_org_id and db.query(Organisation).filter(Organisation.id == _wizard_org_id).first():
+    elif org_id and db.query(Organisation).filter(Organisation.id == org_id).first():
         steps_done.append(1)
     if _wizard_step2:
         steps_done.append(2)
-    if _wizard_org_id and db.query(Site).filter(Site.organisation_id == _wizard_org_id).first():
+    if org_id and db.query(Site).filter(Site.organisation_id == org_id).first():
         steps_done.append(3)
     if _wizard_users:
         steps_done.append(4)
@@ -139,14 +142,14 @@ def org_setup_progress(db: Session = Depends(get_db)) -> dict:
     }
 
 @router.get("/org-setup/step1")
-def org_setup_step1_get(db: Session = Depends(get_db)) -> dict:
+def org_setup_step1_get(request: Request, db: Session = Depends(get_db)) -> dict:
     if _wizard_step1:
         return _wizard_step1
-    # Only read org from DB if step 1 was already saved this session.
-    if not _wizard_org_id:
+    org_id = _resolve_wizard_org_id(request, db)
+    if not org_id:
         return {}
     from app.models.organisation import Organisation
-    org = db.query(Organisation).filter(Organisation.id == _wizard_org_id).first()
+    org = db.query(Organisation).filter(Organisation.id == org_id).first()
     if not org:
         return {}
     return {
@@ -170,7 +173,7 @@ def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(
     from app.models.organisation import Organisation
     from datetime import date as _date
     est_date = None
-    est = str(d.get("establishmentDate") or "")[:10]
+    est = parse_flexible_date(d.get("establishmentDate"))
     if est:
         try:
             est_date = _date.fromisoformat(est)
@@ -181,9 +184,13 @@ def org_setup_step1_post(request: Request, payload: dict, db: Session = Depends(
         num_employees = int(ne) if ne else None
     except Exception:
         num_employees = None
-    if _wizard_org_id:
-        # Same wizard session — update this org's details (user editing step 1)
-        org = db.query(Organisation).filter(Organisation.id == _wizard_org_id).first()
+    # Prefer the logged-in user's own organisation over the in-memory global —
+    # the global is lost on restart/new session, which used to make a returning
+    # admin's step1 re-submit silently create a second "New Organisation" row.
+    existing_org_id = _wizard_org_id or _resolve_wizard_org_id(request, db)
+    if existing_org_id:
+        # Same admin, resumed session — update this org's details
+        org = db.query(Organisation).filter(Organisation.id == existing_org_id).first()
         if org:
             name = (d.get("organisationName") or "").strip()
             if name:
@@ -310,6 +317,14 @@ async def org_setup_parse_excel(file: UploadFile = File(...)) -> dict:
             val = row[idx] if idx < len(row) else None
             return str(val).strip() if val is not None and str(val).strip() else ""
 
+        def _date_cell(idx: int) -> str:
+            val = row[idx] if idx < len(row) else None
+            # Source sheets write dates in whatever format the author used
+            # (e.g. "15-Mar-2015"), not the ISO format <input type="date">
+            # and date.fromisoformat() require — normalize here so the
+            # wizard's date field actually shows the imported value.
+            return parse_flexible_date(val) or _cell(idx)
+
         return {
             "organisationId":       _cell(0),
             "organisationName":     _cell(1),
@@ -320,7 +335,7 @@ async def org_setup_parse_excel(file: UploadFile = File(...)) -> dict:
             "parentCompany":        _cell(6),
             "iso45001Status":       _cell(7),
             "regulatoryAuthority":  _cell(8),
-            "establishmentDate":    _cell(9),
+            "establishmentDate":    _date_cell(9),
         }
 
     except Exception as exc:
@@ -483,20 +498,21 @@ def _parse_sites_file(content: bytes, filename: str) -> List[dict]:
 
 
 @router.get("/org-setup/step3/sites")
-def org_setup_step3_sites(db: Session = Depends(get_db)) -> list:
+def org_setup_step3_sites(request: Request, db: Session = Depends(get_db)) -> list:
     from app.models.site import Site
-    if not _wizard_org_id:
+    org_id = _wizard_org_id or _resolve_wizard_org_id(request, db)
+    if not org_id:
         return []
-    sites = db.query(Site).filter(Site.organisation_id == _wizard_org_id).order_by(Site.id.asc()).all()
+    sites = db.query(Site).filter(Site.organisation_id == org_id).order_by(Site.id.asc()).all()
     return [_site_to_dict(s) for s in sites]
 
 
 @router.post("/org-setup/step3/site")
-def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) -> dict:
+def org_setup_step3_create_site(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
     from app.models.site import Site
     from app.models.organisation import Organisation
     d = payload.get("data", payload)
-    org_id = _wizard_org_id
+    org_id = _wizard_org_id or _resolve_wizard_org_id(request, db)
     if not org_id:
         org = db.query(Organisation).order_by(Organisation.id.desc()).first()
         org_id = org.id if org else None
@@ -520,7 +536,7 @@ def org_setup_step3_create_site(payload: dict, db: Session = Depends(get_db)) ->
 
 
 @router.post("/org-setup/step3/bulk")
-async def org_setup_step3_bulk(file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
+async def org_setup_step3_bulk(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)) -> dict:
     from app.models.site import Site
     if not file.filename:
         return {"count": 0, "error": "No file received"}
@@ -542,7 +558,7 @@ async def org_setup_step3_bulk(file: UploadFile = File(...), db: Session = Depen
         return {"count": 0, "error": "No site rows found in the file. Check the sheet name and column format."}
 
     from app.models.organisation import Organisation
-    org_id = _wizard_org_id
+    org_id = _wizard_org_id or _resolve_wizard_org_id(request, db)
     if not org_id:
         org = db.query(Organisation).order_by(Organisation.id.desc()).first()
         org_id = org.id if org else None
@@ -633,11 +649,14 @@ _WIZARD_ROLE_MAP = {
 }
 
 
-def _step4_org_id(request: Request, db: Session) -> Optional[int]:
+def _resolve_wizard_org_id(request: Request, db: Session) -> Optional[int]:
     """Resolve the wizard organisation from persisted user state.
 
     The module-level wizard id is only a fallback: it is not shared between
-    backend workers and is lost on restart.
+    backend workers, is lost on restart, and is shared by every admin
+    mid-onboarding at once. Preferring the authenticated user's own
+    organisation_id means the wizard resumes on the same step after a
+    fresh login even when the in-memory globals have been wiped.
     """
     from app.models.user import User
     from app.services.auth_service import decode_access_token
@@ -755,7 +774,7 @@ def org_setup_step4_users(request: Request, db: Session = Depends(get_db)) -> li
     from app.models.app_role import AppRole
     from app.models.organisation import Organisation
 
-    org_id = _step4_org_id(request, db)
+    org_id = _resolve_wizard_org_id(request, db)
     if not org_id:
         return list(_wizard_users)
 
@@ -789,7 +808,7 @@ def org_setup_step4_users(request: Request, db: Session = Depends(get_db)) -> li
 @router.post("/org-setup/step4/user")
 def org_setup_step4_create_user(request: Request, payload: dict, db: Session = Depends(get_db)) -> dict:
     d = payload.get("data", payload)
-    result = _create_wizard_user(d, db, _step4_org_id(request, db))
+    result = _create_wizard_user(d, db, _resolve_wizard_org_id(request, db))
     if not result:
         return {"id": _next_user_id(), "name": d.get("name",""), "email": d.get("email",""),
                 "role": d.get("role",""), "department": d.get("department",""), "status": "active"}
@@ -818,7 +837,7 @@ async def org_setup_step4_bulk(request: Request, file: UploadFile = File(...), d
         return {"count": 0, "error": "No user rows found. Expected columns: Name, Email, Role, Department"}
 
     imported_users = []
-    org_id = _step4_org_id(request, db)
+    org_id = _resolve_wizard_org_id(request, db)
     for d in user_dicts:
         result = _create_wizard_user(d, db, org_id)
         if result:
@@ -923,6 +942,10 @@ _MODULE_SHEET = {
     "safety_walks":         "Safety_Walks",
     "capa_actions":         "CAPA_Actions",
     "shift_schedule":       "Shift_Schedule",
+    "equipment":            "Equipment_Register",
+    "contractor_companies": "Contractor_Companies",
+    "contractor_workers":   "Contractor_Workers",
+    "contractor_hours":     "Contractor_Hours",
     # compliance_standards maps to policies table (Category/Jurisdiction = ISO/OSHA)
     "compliance_standards": "Policies",
 }
@@ -942,6 +965,8 @@ async def org_setup_onboarding_bulk(
         _insert_hazard_categories, _insert_hazards, _insert_training_programs,
         _insert_permits_to_work, _insert_incidents, _insert_near_misses,
         _insert_safety_walks, _insert_capa_actions, _insert_shift_schedule,
+        _insert_equipment_register,
+        _insert_contractor_companies, _insert_contractor_workers, _insert_contractor_hours,
         capture_tenant_table_max_ids, link_new_rows_to_org,
     )
     _INSERT_FNS = {
@@ -961,6 +986,10 @@ async def org_setup_onboarding_bulk(
         "safety_walks": _insert_safety_walks,
         "capa_actions": _insert_capa_actions,
         "shift_schedule": _insert_shift_schedule,
+        "equipment": _insert_equipment_register,
+        "contractor_companies": _insert_contractor_companies,
+        "contractor_workers": _insert_contractor_workers,
+        "contractor_hours": _insert_contractor_hours,
         # compliance_standards imports into policies table
         "compliance_standards": _insert_policies,
     }
@@ -1197,6 +1226,33 @@ _CSV_TEMPLATES: Dict[str, Tuple[str, str]] = {
         "id,employee_id,shift_date,shift_type,shift_start,shift_end,"
         "actual_hours_worked,station_id,supervisor_id\n",
         "shift_schedule_template.csv",
+    ),
+    "equipment": (
+        "equipment_id,equipment_name,equipment_type,location_station,installation_date,"
+        "pm_interval_days,last_pm_date,next_pm_due,operating_hours_ytd,last_failure_date,"
+        "mtbf_hours_estimated,safety_critical_sce,status\n"
+        "EQ-001,Overhead Crane 1,Crane,STN001,2018-06-01,90,2024-01-15,2024-04-15,"
+        "1450,2023-11-02,620.5,Yes,Operational\n",
+        "equipment_template.csv",
+    ),
+    "contractor_companies": (
+        "contractor_id,company_name,service_type,contract_start_date,contract_end_date,"
+        "prequalification_status,iso_45001_certified,last_safety_audit_date,"
+        "safety_performance_score_0_100,active_y_n\n"
+        "CONT001,Apex Scaffolding Ltd,Scaffolding,2023-01-01,2025-12-31,"
+        "Approved,Yes,2024-06-01,82.5,Yes\n",
+        "contractor_companies_template.csv",
+    ),
+    "contractor_workers": (
+        "worker_id,contractor_id,full_name,badge_no,trade,"
+        "induction_date,induction_valid_until,site_access_status\n"
+        "CW001,CONT001,John Doe,B-100,Scaffolder,2024-01-01,2025-01-01,granted\n",
+        "contractor_workers_template.csv",
+    ),
+    "contractor_hours": (
+        "row_id,contractor_id,year,month,hours_worked\n"
+        "CH001,CONT001,2024,1,500\n",
+        "contractor_hours_template.csv",
     ),
     "permits_to_work": (
         "id,permit_type_id,date_issued,time_issued,location_station_id,work_description,"

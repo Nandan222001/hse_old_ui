@@ -1,6 +1,7 @@
 from typing import List, Optional
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,11 +15,105 @@ router = APIRouter(prefix="/vendors", tags=["Vendors"])
 
 MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+_PREQUAL_STATUSES = {"approved", "conditional", "barred", "pending"}
+
 
 def _org_filter(query, model, org_id):
     if org_id is not None:
         return query.filter(model.organisation_id == org_id)
     return query
+
+
+def _company_dict(c: ContractorCompany, safety_score: Optional[float] = None) -> dict:
+    return {
+        "id": c.id,
+        "company_name": c.company_name,
+        "service_type": c.service_type,
+        "prequalification_status": c.prequalification_status,
+        "iso_45001_certified": bool(c.iso_45001_certified),
+        "active": not bool(c.suspended),
+        "contract_start_date": c.contract_start_date.isoformat() if c.contract_start_date else None,
+        "contract_end_date": c.contract_end_date.isoformat() if c.contract_end_date else None,
+        "last_safety_audit_date": c.last_safety_audit_date.isoformat() if c.last_safety_audit_date else None,
+        "safety_score": safety_score,
+    }
+
+
+class ContractorCompanyInput(BaseModel):
+    company_name: str
+    service_type: Optional[str] = None
+    contract_start_date: Optional[date] = None
+    contract_end_date: Optional[date] = None
+    prequalification_status: str = "pending"
+    iso_45001_certified: bool = False
+    last_safety_audit_date: Optional[date] = None
+    active: bool = True
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_vendor(
+    payload: ContractorCompanyInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    pq = payload.prequalification_status if payload.prequalification_status in _PREQUAL_STATUSES else "pending"
+    row = ContractorCompany(
+        organisation_id=current_user.org_id,
+        company_name=payload.company_name,
+        service_type=payload.service_type,
+        contract_start_date=payload.contract_start_date,
+        contract_end_date=payload.contract_end_date,
+        prequalification_status=pq,
+        iso_45001_certified=1 if payload.iso_45001_certified else 0,
+        last_safety_audit_date=payload.last_safety_audit_date,
+        suspended=0 if payload.active else 1,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _company_dict(row)
+
+
+@router.put("/{vendor_id}")
+def update_vendor(
+    vendor_id: int,
+    payload: ContractorCompanyInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    row = _org_filter(
+        db.query(ContractorCompany).filter(ContractorCompany.id == vendor_id),
+        ContractorCompany, current_user.org_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    pq = payload.prequalification_status if payload.prequalification_status in _PREQUAL_STATUSES else "pending"
+    row.company_name = payload.company_name
+    row.service_type = payload.service_type
+    row.contract_start_date = payload.contract_start_date
+    row.contract_end_date = payload.contract_end_date
+    row.prequalification_status = pq
+    row.iso_45001_certified = 1 if payload.iso_45001_certified else 0
+    row.last_safety_audit_date = payload.last_safety_audit_date
+    row.suspended = 0 if payload.active else 1
+    db.commit()
+    db.refresh(row)
+    return _company_dict(row)
+
+
+@router.delete("/{vendor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vendor(
+    vendor_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    row = _org_filter(
+        db.query(ContractorCompany).filter(ContractorCompany.id == vendor_id),
+        ContractorCompany, current_user.org_id,
+    ).first()
+    if row:
+        db.delete(row)
+        db.commit()
 
 
 @router.get("/summary")
@@ -170,21 +265,7 @@ def get_vendor_summary(
             })
 
     # ── Register table ────────────────────────────────────────────────────────
-    register = [
-        {
-            "id": c.id,
-            "company_name": c.company_name,
-            "service_type": c.service_type,
-            "prequalification_status": c.prequalification_status,
-            "iso_45001_certified": bool(c.iso_45001_certified),
-            "active": not bool(c.suspended),
-            "contract_start_date": c.contract_start_date.isoformat() if c.contract_start_date else None,
-            "contract_end_date": c.contract_end_date.isoformat() if c.contract_end_date else None,
-            "last_safety_audit_date": c.last_safety_audit_date.isoformat() if c.last_safety_audit_date else None,
-            "safety_score": latest_scores.get(c.id),
-        }
-        for c in companies
-    ]
+    register = [_company_dict(c, latest_scores.get(c.id)) for c in companies]
 
     return {
         "total_contractors": len(companies),

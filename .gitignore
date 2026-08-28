@@ -43,6 +43,7 @@ desktop.ini
 # Database files
 *.sqlite
 *.db
+_local_backups/
 
 # Compiled assets
 *.pyc

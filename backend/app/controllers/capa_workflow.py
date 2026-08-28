@@ -1472,13 +1472,20 @@ def list_all_capa(
     "View All Overdue CAPA" links — every action for this org, not just the
     top-N preview shown on the dashboard.
 
-    overdue_only filters on the CapaAction.status field rather than a
-    due_date-vs-today comparison — see get_dashboard_stats in dashboard.py
-    for why that comparison is unreliable against this seed data's dates.
+    overdue_only mirrors is_overdue in capa_lifecycle.describe(): due date has
+    passed and the action hasn't reached a terminal status. Real data never
+    sets a literal status of "Overdue" — the lifecycle here treats lateness as
+    a property of the due date, not a state — so filtering on that string
+    matched zero rows for anything but the original demo dataset.
     """
     q = db.query(CapaAction).filter(CapaAction.organisation_id == current_user.org_id)
     if overdue_only:
-        q = q.filter(CapaAction.status == "Overdue")
+        today = date.today()
+        q = q.filter(
+            CapaAction.due_date.isnot(None),
+            CapaAction.due_date < today,
+            func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)),
+        )
     elif not include_closed:
         q = q.filter(func.lower(func.coalesce(CapaAction.status, "")).notin_(list(lc.TERMINAL)))
     if unassigned_only:

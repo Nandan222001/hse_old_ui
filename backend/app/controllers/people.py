@@ -91,7 +91,8 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             CapaAction, org_id,
         ).all()
     }
-    flagged_now = training_capa_employee_ids | {r[0] for r in training_incident_rows}
+    training_incident_employee_ids = {r[0] for r in training_incident_rows}
+    flagged_now = training_capa_employee_ids | training_incident_employee_ids
     competency_pct = round((total_employees - len(flagged_now)) / total_employees * 100) if total_employees else 0
 
     sparkline = []
@@ -120,21 +121,27 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         db.query(NearMiss).filter(NearMiss.event_date_time.isnot(None), NearMiss.event_date_time >= cutoff_90),
         NearMiss, org_id,
     ).count()
-    exposure_index = round(min(100, (recent_incidents + recent_near_misses) / total_employees * 100)) if total_employees else 0
+    exposure_raw_pct = (recent_incidents + recent_near_misses) / total_employees * 100 if total_employees else 0.0
+    exposure_index = round(min(100, exposure_raw_pct))
     exposure_subtitle, exposure_tone = label_and_tone(exposure_index, rating_labels, "workforce_exposure_risk")
+    exposure_cfg = rating_labels["workforce_exposure_risk"]
 
     # Join through employee's actual role to check safety_signatory directly,
     # avoiding org mismatch when employees reference roles from another org.
-    avg_supervisor_compliance = (
-        db.query(func.avg(SafetyWalk.compliance_rating))
-        .join(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
-        .join(Role, Employee.role_id == Role.id)
-        .filter(
-            Role.safety_signatory == "Yes",
-            *([SafetyWalk.organisation_id == org_id] if org_id is not None else []),
+    def _supervisor_walks_query():
+        return (
+            db.query(SafetyWalk, Employee)
+            .join(Employee, org_scoped_join(SafetyWalk.inspector_id == Employee.id, Employee.organisation_id, org_id))
+            .join(Role, Employee.role_id == Role.id)
+            .filter(
+                Role.safety_signatory == "Yes",
+                *([SafetyWalk.organisation_id == org_id] if org_id is not None else []),
+            )
         )
-        .scalar()
-    )
+
+    avg_supervisor_compliance = _supervisor_walks_query().with_entities(func.avg(SafetyWalk.compliance_rating)).scalar()
+    supervisor_walk_count = _supervisor_walks_query().count()
+    supervisor_count = _supervisor_walks_query().with_entities(SafetyWalk.inspector_id).distinct().count()
     supervisor_score = round(float(avg_supervisor_compliance) / 5 * 100) if avg_supervisor_compliance else 0
     supervisor_subtitle = "Highly Effective" if supervisor_score >= 90 else ("Effective" if supervisor_score >= 70 else "Needs Coaching")
     # Was hardcoded "blue" below regardless of which of the three subtitles
@@ -258,23 +265,40 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
         .group_by(Role.role_name)
         .all()
     )
+    HIGH_RISK_ROLE_HIGH_FLOOR = 3
+    HIGH_RISK_ROLE_MEDIUM_FLOOR = 1.5
     role_rates = sorted(
         (
-            (name, (role_incidents.get(name, 0) + role_near_misses.get(name, 0)) / headcount)
+            (name, headcount, role_incidents.get(name, 0), role_near_misses.get(name, 0),
+             (role_incidents.get(name, 0) + role_near_misses.get(name, 0)) / headcount)
             for name, headcount in role_headcount.items()
             if headcount
         ),
-        key=lambda item: (-item[1], item[0]),
+        key=lambda item: (-item[4], item[0]),
     )
     high_risk_roles = []
-    for name, rate in role_rates[:4]:
-        if rate >= 3:
+    for name, headcount, incidents, near_misses, rate in role_rates[:4]:
+        if rate >= HIGH_RISK_ROLE_HIGH_FLOOR:
             status, tone = "High", "red"
-        elif rate >= 1.5:
+        elif rate >= HIGH_RISK_ROLE_MEDIUM_FLOOR:
             status, tone = "Medium", "amber"
         else:
             status, tone = "Low", "green"
-        high_risk_roles.append({"role": name, "status": status, "tone": tone})
+        high_risk_roles.append({
+            "role": name,
+            "status": status,
+            "tone": tone,
+            # Raw inputs behind status, for the section's Info tooltip — same
+            # values already computed above, not a separate/re-derived figure.
+            "detail": {
+                "headcount": headcount,
+                "incidents": incidents,
+                "near_misses": near_misses,
+                "rate": round(rate, 3),
+                "high_floor": HIGH_RISK_ROLE_HIGH_FLOOR,
+                "medium_floor": HIGH_RISK_ROLE_MEDIUM_FLOOR,
+            },
+        })
 
     programs = _of(db.query(TrainingProgram).filter(TrainingProgram.expiry_months > 0), TrainingProgram, org_id).all()
     employees_with_induction = _of(db.query(Employee).filter(Employee.induction_date.isnot(None)), Employee, org_id).all()
@@ -386,6 +410,7 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             "priority": "High" if is_overdue else "Priority",
         })
 
+    competency_cfg = rating_labels["workforce_competency"]
     return {
         "competency_coverage": {
             "value": competency_pct,
@@ -393,18 +418,58 @@ def get_people_overview(db: Session = Depends(get_db), current_user: CurrentUser
             "tone": competency_tone,
             "change": f"{'▲' if competency_tone != 'red' else '▼'} {competency_pct}%",
             "sparkline": sparkline,
+            # Raw inputs behind competency_pct, for the KPI's Info tooltip —
+            # same sets already computed above, not a separate/re-derived figure.
+            "detail": {
+                "total_employees": total_employees,
+                "flagged_employees": len(flagged_now),
+                "flagged_from_incidents": len(training_incident_employee_ids),
+                "flagged_from_capa": len(training_capa_employee_ids),
+                "high_floor": competency_cfg["high_floor"],
+                "high_label": competency_cfg["high_label"],
+                "mid_floor": competency_cfg["mid_floor"],
+                "mid_label": competency_cfg["mid_label"],
+                "low_label": competency_cfg["low_label"],
+                "sparkline_months": 9,
+            },
         },
         "worker_exposure_index": {
             "value": exposure_index,
             "subtitle": exposure_subtitle,
             "tone": exposure_tone,
             "change": f"{'▲' if exposure_tone == 'green' else '⚠'}" + (f" {exposure_index}%" if exposure_tone == "green" else ""),
+            # Raw inputs behind exposure_index, for the KPI's Info tooltip —
+            # same values already computed above, not a separate/re-derived figure.
+            "detail": {
+                "total_employees": total_employees,
+                "recent_incidents": recent_incidents,
+                "recent_near_misses": recent_near_misses,
+                "window_days": 90,
+                "window_start": cutoff_90.date().isoformat(),
+                "window_end": activity_anchor.date().isoformat(),
+                "raw_pct": round(exposure_raw_pct, 2),
+                "capped": exposure_raw_pct > 100,
+                "high_floor": exposure_cfg["high_floor"],
+                "high_label": exposure_cfg["high_label"],
+                "mid_floor": exposure_cfg["mid_floor"],
+                "mid_label": exposure_cfg["mid_label"],
+                "low_label": exposure_cfg["low_label"],
+            },
         },
         "supervisor_safety_score": {
             "value": supervisor_score,
             "subtitle": supervisor_subtitle,
             "tone": supervisor_tone,
             "change": f"{'▲' if supervisor_tone != 'red' else '▼'} {supervisor_score}%",
+            # Raw inputs behind supervisor_score, for the KPI's Info tooltip —
+            # same query already run above, not a separate/re-derived figure.
+            "detail": {
+                "avg_compliance_rating_1_5": round(float(avg_supervisor_compliance), 2) if avg_supervisor_compliance else None,
+                "safety_walk_count": supervisor_walk_count,
+                "supervisor_count": supervisor_count,
+                "highly_effective_floor": 90,
+                "effective_floor": 70,
+            },
         },
         "fatigue_trend": fatigue_trend,
         "fatigue_trend_range": fatigue_trend_range,

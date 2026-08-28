@@ -8,7 +8,7 @@ import {
   PenLine, Plug, Server, UserCheck, Timer, Wifi, Building2,
   Code2, Plus, Trash2, ChevronRight, CheckSquare, Save,
   RotateCcw, Link, X, FolderOpen, Presentation, BookMarked,
-  GraduationCap, AlertOctagon, CalendarClock, ExternalLink,
+  GraduationCap, AlertOctagon, CalendarClock, ExternalLink, Wrench,
 } from "lucide-react";
 import {
   useListImportsQuery,
@@ -657,6 +657,10 @@ const AI_DATA_TYPES = [
   { key: "safety_walks",      label: "Safety Walks",       icon: CheckCircle2 },
   { key: "capa_actions",      label: "CAPA Actions",       icon: Zap          },
   { key: "shift_schedule",    label: "Shift Schedule",     icon: CalendarClock},
+  { key: "equipment",         label: "Equipment Register", icon: Wrench       },
+  { key: "contractor_companies", label: "Contractor Companies", icon: Shield  },
+  { key: "contractor_workers",   label: "Contractor Workers",   icon: UserCheck},
+  { key: "contractor_hours",     label: "Contractor Hours",     icon: Timer   },
 ];
 
 type AiFieldDef = { label: string; key: string; type: string; placeholder?: string; options?: string[]; required?: boolean };
@@ -1232,7 +1236,7 @@ function FullImportCard() {
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div><h2 className="text-[16px] font-bold" style={{ color: "#111827" }}>Full Data Import</h2><p className="text-[13px] mt-1" style={{ color: "#6B7280" }}>Upload your complete 17-sheet HSE Excel file — all data is automatically routed to the correct agent.</p></div>
+        <div><h2 className="text-[16px] font-bold" style={{ color: "#111827" }}>Full Data Import</h2><p className="text-[13px] mt-1" style={{ color: "#6B7280" }}>Upload your complete 21-sheet HSE Excel file — all data is automatically routed to the correct agent.</p></div>
         <button onClick={onDownloadTemplate} disabled={downloading} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold border transition-colors hover:bg-blue-50" style={{ borderColor: "#4A57B9", color: "#4A57B9", background: "#fff" }}>
           <Download className="w-4 h-4" />{downloading ? "Downloading…" : "Download Full Template (.xlsx)"}
         </button>
@@ -1248,8 +1252,8 @@ function FullImportCard() {
       <div onDragOver={e => e.preventDefault()} onDrop={handleDrop} onClick={() => fileRef.current?.click()}
         className="border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-10 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50" style={{ borderColor: "#C7D2FE" }}>
         <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        {isLoading ? <div className="flex flex-col items-center gap-3"><RefreshCw className="w-8 h-8 animate-spin" style={{ color: "#4A57B9" }} /><span className="text-[13px] font-semibold" style={{ color: "#4A57B9" }}>Processing all 17 sheets…</span></div>
-          : <><FileSpreadsheet className="w-10 h-10 mb-3" style={{ color: "#4A57B9" }} /><span className="text-[14px] font-bold" style={{ color: "#111827" }}>Drop your Excel file here or click to browse</span><span className="text-[12px] mt-1" style={{ color: "#9CA3AF" }}>Accepts .xlsx — all 17 sheets processed automatically</span></>}
+        {isLoading ? <div className="flex flex-col items-center gap-3"><RefreshCw className="w-8 h-8 animate-spin" style={{ color: "#4A57B9" }} /><span className="text-[13px] font-semibold" style={{ color: "#4A57B9" }}>Processing all 21 sheets…</span></div>
+          : <><FileSpreadsheet className="w-10 h-10 mb-3" style={{ color: "#4A57B9" }} /><span className="text-[14px] font-bold" style={{ color: "#111827" }}>Drop your Excel file here or click to browse</span><span className="text-[12px] mt-1" style={{ color: "#9CA3AF" }}>Accepts .xlsx — all 21 sheets processed automatically</span></>}
       </div>
       {error && <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ borderColor: "#FCA5A5", background: "#FEF2F2" }}><XCircle className="w-4 h-4 flex-shrink-0" style={{ color: "#DC2626" }} /><span className="text-[13px]" style={{ color: "#DC2626" }}>{error}</span></div>}
       {result && (

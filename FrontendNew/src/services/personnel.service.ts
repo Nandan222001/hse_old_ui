@@ -94,6 +94,43 @@ export interface PeopleKpiMetric {
   sparkline?: number[];
 }
 
+export interface CompetencyCoverageDetail {
+  total_employees: number;
+  flagged_employees: number;
+  flagged_from_incidents: number;
+  flagged_from_capa: number;
+  high_floor: number;
+  high_label: string;
+  mid_floor: number;
+  mid_label: string;
+  low_label: string;
+  sparkline_months: number;
+}
+
+export interface WorkerExposureDetail {
+  total_employees: number;
+  recent_incidents: number;
+  recent_near_misses: number;
+  window_days: number;
+  window_start: string;
+  window_end: string;
+  raw_pct: number;
+  capped: boolean;
+  high_floor: number;
+  high_label: string;
+  mid_floor: number;
+  mid_label: string;
+  low_label: string;
+}
+
+export interface SupervisorSafetyDetail {
+  avg_compliance_rating_1_5: number | null;
+  safety_walk_count: number;
+  supervisor_count: number;
+  highly_effective_floor: number;
+  effective_floor: number;
+}
+
 export interface PeopleFatiguePoint {
   week: string;
   week_start: string;
@@ -107,10 +144,20 @@ export interface PeopleToolboxPoint {
   meetings: number;
 }
 
+export interface HighRiskRoleDetail {
+  headcount: number;
+  incidents: number;
+  near_misses: number;
+  rate: number;
+  high_floor: number;
+  medium_floor: number;
+}
+
 export interface PeopleHighRiskRole {
   role: string;
   status: string;
   tone: 'green' | 'amber' | 'red' | 'blue';
+  detail: HighRiskRoleDetail;
 }
 
 export interface PeopleTrainingExpiry {
@@ -132,9 +179,9 @@ export interface PeopleActionItem {
 }
 
 export interface PeopleOverview {
-  competency_coverage: PeopleKpiMetric;
-  worker_exposure_index: PeopleKpiMetric;
-  supervisor_safety_score: PeopleKpiMetric;
+  competency_coverage: PeopleKpiMetric & { detail: CompetencyCoverageDetail };
+  worker_exposure_index: PeopleKpiMetric & { detail: WorkerExposureDetail };
+  supervisor_safety_score: PeopleKpiMetric & { detail: SupervisorSafetyDetail };
   fatigue_trend: PeopleFatiguePoint[];
   fatigue_trend_range: string;
   toolbox_trend: PeopleToolboxPoint[];

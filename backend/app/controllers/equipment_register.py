@@ -1,7 +1,8 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,46 @@ def _org_filter(query, model, org_id):
     if org_id is not None:
         return query.filter(model.organisation_id == org_id)
     return query
+
+
+def _row_dict(r: Equipment, today: date) -> dict:
+    return {
+        "id": r.id,
+        "equipment_code": r.equipment_code,
+        "equipment_name": r.equipment_name,
+        "equipment_type": r.equipment_type,
+        "location_station": r.location_station,
+        "installation_date": r.installation_date.isoformat() if r.installation_date else None,
+        "pm_interval_days": r.pm_interval_days,
+        "last_pm_date": r.last_pm_date.isoformat() if r.last_pm_date else None,
+        "next_pm_due": r.next_pm_due.isoformat() if r.next_pm_due else None,
+        "pm_overdue": bool(r.next_pm_due and r.next_pm_due < today),
+        "operating_hours_ytd": r.operating_hours_ytd,
+        "last_failure_date": r.last_failure_date.isoformat() if r.last_failure_date else None,
+        "mtbf_hours_estimated": float(r.mtbf_hours_estimated) if r.mtbf_hours_estimated is not None else None,
+        "safety_critical_sce": bool(r.safety_critical_sce),
+        "status": r.status,
+    }
+
+
+class EquipmentCreate(BaseModel):
+    equipment_code: str
+    equipment_name: str
+    equipment_type: Optional[str] = None
+    location_station: Optional[str] = None
+    installation_date: Optional[date] = None
+    pm_interval_days: Optional[int] = None
+    last_pm_date: Optional[date] = None
+    next_pm_due: Optional[date] = None
+    operating_hours_ytd: Optional[int] = None
+    last_failure_date: Optional[date] = None
+    mtbf_hours_estimated: Optional[float] = None
+    safety_critical_sce: bool = False
+    status: Optional[str] = None
+
+
+class EquipmentUpdate(EquipmentCreate):
+    pass
 
 
 @router.get("/summary")
@@ -147,24 +188,7 @@ def list_equipment(
         .all()
     )
 
-    data = [
-        {
-            "id": r.id,
-            "equipment_code": r.equipment_code,
-            "equipment_name": r.equipment_name,
-            "equipment_type": r.equipment_type,
-            "location_station": r.location_station,
-            "installation_date": r.installation_date.isoformat() if r.installation_date else None,
-            "last_pm_date": r.last_pm_date.isoformat() if r.last_pm_date else None,
-            "next_pm_due": r.next_pm_due.isoformat() if r.next_pm_due else None,
-            "pm_overdue": bool(r.next_pm_due and r.next_pm_due < today),
-            "operating_hours_ytd": r.operating_hours_ytd,
-            "mtbf_hours_estimated": float(r.mtbf_hours_estimated) if r.mtbf_hours_estimated is not None else None,
-            "safety_critical_sce": bool(r.safety_critical_sce),
-            "status": r.status,
-        }
-        for r in rows
-    ]
+    data = [_row_dict(r, today) for r in rows]
 
     return {
         "data": data,
@@ -173,3 +197,49 @@ def list_equipment(
         "pageSize": pageSize,
         "totalPages": (total + pageSize - 1) // pageSize if total else 0,
     }
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_equipment(
+    payload: EquipmentCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    row = Equipment(organisation_id=current_user.org_id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _row_dict(row, date.today())
+
+
+@router.put("/{equipment_id}")
+def update_equipment(
+    equipment_id: int,
+    payload: EquipmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    row = _org_filter(
+        db.query(Equipment).filter(Equipment.id == equipment_id), Equipment, current_user.org_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    for field, value in payload.model_dump().items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return _row_dict(row, date.today())
+
+
+@router.delete("/{equipment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_equipment(
+    equipment_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    row = _org_filter(
+        db.query(Equipment).filter(Equipment.id == equipment_id), Equipment, current_user.org_id
+    ).first()
+    if row:
+        db.delete(row)
+        db.commit()

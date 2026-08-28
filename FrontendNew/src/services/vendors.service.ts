@@ -45,5 +45,25 @@ export interface VendorSummary {
   register: ContractorRegisterRow[];
 }
 
+export interface VendorInput {
+  company_name: string;
+  service_type?: string | null;
+  contract_start_date?: string | null;
+  contract_end_date?: string | null;
+  prequalification_status?: string;
+  iso_45001_certified?: boolean;
+  last_safety_audit_date?: string | null;
+  active?: boolean;
+}
+
 export const getVendorSummary = () =>
   axiosInstance.get<VendorSummary>('/vendors/summary').then(r => r.data);
+
+export const createVendor = (payload: VendorInput) =>
+  axiosInstance.post<ContractorRegisterRow>('/vendors', payload).then(r => r.data);
+
+export const updateVendor = (id: number, payload: VendorInput) =>
+  axiosInstance.put<ContractorRegisterRow>(`/vendors/${id}`, payload).then(r => r.data);
+
+export const deleteVendor = (id: number) =>
+  axiosInstance.delete(`/vendors/${id}`);

@@ -3,7 +3,8 @@ import { useNavigate } from "react-router";
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2,
   ArrowRight, X, ChevronDown, ChevronUp, ShieldCheck, Info,
-  Building2, MapPin, Users, ClipboardList, Activity, BarChart3,
+  Building2, MapPin, Users, ClipboardList, Activity, BarChart3, Wrench,
+  HardHat, Clock,
 } from "lucide-react";
 import {
   uploadExcelStream,
@@ -85,6 +86,34 @@ const SHEET_SCHEMAS: SheetSchema[] = [
     required: ["Station_Name", "Site_ID"],
     optional: ["Department", "Zone_Classification", "Primary_Hazards", "Staffing_Requirement", "Equipment_List", "Permit_Types_Required", "Access_Restrictions"],
     note: "Primary_Hazards must reference a valid Hazards row (e.g. HAZ001).",
+  },
+  {
+    key: "equipment", excelName: "Equipment_Register", label: "Equipment Register",
+    icon: Wrench, color: "#0EA5E9",
+    required: ["Equipment_ID", "Equipment_Name"],
+    optional: ["Equipment_Type", "Location_Station", "Installation_Date", "PM_Interval_Days", "Last_PM_Date", "Next_PM_Due", "Operating_Hours_YTD", "Last_Failure_Date", "MTBF_Hours_Estimated", "Safety_Critical_SCE", "Status"],
+    note: "Location_Station is a free-text code (e.g. STN001) — not linked to the Working_Stations sheet. Safety_Critical_SCE is Yes/No.",
+  },
+  {
+    key: "contractor_companies", excelName: "Contractor_Companies", label: "Contractor Companies",
+    icon: HardHat, color: "#B45309",
+    required: ["Contractor_ID", "Company_Name"],
+    optional: ["Service_Type", "Contract_Start_Date", "Contract_End_Date", "Prequalification_Status", "ISO_45001_Certified", "Last_Safety_Audit_Date", "Safety_Performance_Score_0_100", "Active_Y_N"],
+    note: "Prequalification_Status is one of Approved/Conditional/Barred/Pending. Safety_Performance_Score_0_100 becomes this quarter's Contractor Scorecard entry.",
+  },
+  {
+    key: "contractor_workers", excelName: "Contractor_Workers", label: "Contractor Workers",
+    icon: Users, color: "#B45309",
+    required: ["Worker_ID", "Contractor_ID", "Full_Name"],
+    optional: ["Badge_No", "Trade", "Induction_Date", "Induction_Valid_Until", "Site_Access_Status"],
+    note: "Contractor_ID must reference a valid Contractor_Companies row (e.g. CONT001).",
+  },
+  {
+    key: "contractor_hours", excelName: "Contractor_Hours", label: "Contractor Hours",
+    icon: Clock, color: "#B45309",
+    required: ["Row_ID", "Contractor_ID", "Year", "Month"],
+    optional: ["Hours_Worked"],
+    note: "Contractor_ID must reference a valid Contractor_Companies row (e.g. CONT001). One row per contractor per calendar month.",
   },
   {
     key: "employees", excelName: "Employees", label: "Employees",
@@ -465,7 +494,7 @@ export function OrgSetupPage() {
               </h1>
               <p style={{ margin: "0 0 28px", color: "#6B7280", fontSize: 14, lineHeight: 1.6 }}>
                 Upload the EHSERA Intelligence Excel workbook to import all your organisation data at once.
-                The file must contain all 17 sheets listed on the right.
+                The file must contain all {SHEET_SCHEMAS.length} sheets listed on the right.
               </p>
 
               {/* Drop zone */}
@@ -532,7 +561,7 @@ export function OrgSetupPage() {
               <div style={{ background: "#F0F4FF", border: "1px solid #C7D7FD", borderRadius: 10, padding: "14px 16px", marginBottom: 24 }}>
                 <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.4px" }}>What happens after upload</p>
                 <ul style={{ margin: 0, padding: "0 0 0 16px", fontSize: 13, color: "#374151", lineHeight: 1.7 }}>
-                  <li>All 17 sheets are imported in the correct order (respecting foreign keys)</li>
+                  <li>All {SHEET_SCHEMAS.length} sheets are imported in the correct order (respecting foreign keys)</li>
                   <li>String ID prefixes (EMP001, SITE001, STN001…) are automatically stripped</li>
                   <li>Each sheet is processed and validated individually in the queue</li>
                   <li>Errors are shown per sheet — other sheets continue even if one fails</li>

@@ -24,6 +24,8 @@ from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from app.utils.flexible_date import parse_flexible_date
+
 try:
     import openpyxl
 except ImportError:
@@ -107,10 +109,12 @@ def _remember(db: Session, id_maps: IdMaps, table_key: str, declared_id: Optiona
 
 
 def _fmt_date(val) -> Optional[str]:
-    if val is None:
-        return None
-    s = str(val).strip()[:10]
-    return s if s else None
+    # Source sheets write dates in whatever format the author used (e.g.
+    # "15-Mar-2015"), not the ISO "YYYY-MM-DD" the `date` columns need —
+    # a naive [:10] truncation silently produced an invalid date string
+    # that MySQL then dropped. Normalize through the same flexible parser
+    # the org-setup wizard uses.
+    return parse_flexible_date(val)
 
 
 def _fmt_datetime(val) -> Optional[str]:
@@ -149,7 +153,9 @@ TENANT_TABLES = (
     "sites", "departments", "employees", "incidents", "near_misses",
     "safety_walks", "capa_actions", "permits_to_work", "shift_schedule",
     "working_stations", "roles", "hazard_categories", "hazards",
-    "permit_types", "training_programs", "policies",
+    "permit_types", "training_programs", "policies", "equipment",
+    "contractor_companies", "contractor_workers", "contractor_hours",
+    "contractor_scorecards",
 )
 
 
@@ -385,6 +391,156 @@ def _insert_working_stations(db: Session, wb, id_maps: IdMaps, org_id: Optional[
     return count
 
 
+def _insert_equipment_register(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = None) -> int:
+    """Module 4 (Assets & Operations) asset register — see app/models/equipment.py.
+    equipment_code is the client's own code (e.g. "EQ-001"), not a declared row
+    id, so unlike most sheets this one has no id_maps entry — nothing else
+    references an equipment row by id.
+    """
+    if not _check_sheet(wb, "Equipment_Register"):
+        return 0
+    count = 0
+    for r in _rows(wb["Equipment_Register"]):
+        if not any(c for c in r):
+            continue
+        if not r[0] or not r[1]:
+            continue
+        db.execute(
+            text("""INSERT INTO equipment
+                 (equipment_code,equipment_name,equipment_type,location_station,
+                  installation_date,pm_interval_days,last_pm_date,next_pm_due,
+                  operating_hours_ytd,last_failure_date,mtbf_hours_estimated,
+                  safety_critical_sce,status)
+                 VALUES (:ec,:en,:et,:ls,:id,:pid,:lpd,:npd,:ohy,:lfd,:mtbf,:sce,:st)"""),
+            dict(
+                ec=r[0], en=r[1], et=r[2], ls=r[3],
+                id=_fmt_date(r[4]), pid=r[5], lpd=_fmt_date(r[6]), npd=_fmt_date(r[7]),
+                ohy=r[8], lfd=_fmt_date(r[9]), mtbf=r[10],
+                sce=1 if r[11] == "Yes" else 0, st=r[12],
+            ),
+        )
+        count += 1
+    return count
+
+
+_PREQUAL_STATUSES = {"approved", "conditional", "barred", "pending"}
+
+
+def _insert_contractor_companies(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = None) -> int:
+    """Module 5 (Contractors & Vendors) register — see app/models/contractor.py.
+    Columns match the client's own SD_ContractorRegister sheet exactly.
+    Contractor_ID is this sheet's declared id — Contractor_Workers and
+    Contractor_Hours reference it via id_maps, same pattern as every other
+    parent/child sheet pair (e.g. Hazard_Categories -> Hazards).
+
+    Safety_Performance_Score_0_100 has no column on contractor_companies —
+    it's the client's current-quarter score, so it becomes a ContractorScorecard
+    row (same as import_module5_contractor_sample.py does), which is what the
+    Vendors page's "Contractor Safety Score" KPI actually reads.
+    """
+    if not _check_sheet(wb, "Contractor_Companies"):
+        return 0
+    from datetime import date, datetime
+    from app.services.hse_formulae import contractor_scorecard_verdict
+
+    today = date.today()
+    count = 0
+    for r in _rows(wb["Contractor_Companies"]):
+        if not any(c for c in r):
+            continue
+        if not r[1]:
+            continue
+        declared_id = _strip_id(r[0])
+        pq = str(r[5]).strip().lower() if r[5] else "pending"
+        if pq not in _PREQUAL_STATUSES:
+            pq = "pending"
+        db.execute(
+            text("""INSERT INTO contractor_companies
+                 (company_name,service_type,contract_start_date,contract_end_date,
+                  prequalification_status,iso_45001_certified,last_safety_audit_date,
+                  suspended)
+                 VALUES (:cn,:st,:csd,:ced,:pq,:iso,:lsad,:sus)"""),
+            dict(
+                cn=r[1], st=r[2], csd=_fmt_date(r[3]), ced=_fmt_date(r[4]),
+                pq=pq, iso=1 if r[6] == "Yes" else 0, lsad=_fmt_date(r[7]),
+                sus=0 if r[9] == "Yes" else 1,
+            ),
+        )
+        company_id = _remember(db, id_maps, "contractor_companies", declared_id)
+
+        if r[8] not in (None, ""):
+            score = float(r[8])
+            db.execute(
+                text("""INSERT INTO contractor_scorecards
+                     (contractor_company_id,period_year,period_quarter,score,
+                      incident_count,permit_violations,verdict,computed_at)
+                     VALUES (:cid,:yr,:qtr,:sc,0,0,:vd,:ca)"""),
+                dict(
+                    cid=company_id, yr=today.year, qtr=(today.month - 1) // 3 + 1,
+                    sc=score, vd=contractor_scorecard_verdict(score), ca=datetime.now(),
+                ),
+            )
+        count += 1
+    return count
+
+
+def _insert_contractor_workers(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = None) -> int:
+    """Contractor induction / site-access roll-call — contractor_company_id is
+    NOT NULL, so a row whose Contractor_ID doesn't resolve to a company from
+    this same import (or an existing row in this org) is dropped.
+    """
+    if not _check_sheet(wb, "Contractor_Workers"):
+        return 0
+    count = 0
+    for r in _rows(wb["Contractor_Workers"]):
+        if not any(c for c in r):
+            continue
+        if not r[2]:
+            continue
+        company_id = _resolve(id_maps, "contractor_companies", r[1], db, org_id)
+        if company_id is None:
+            continue
+        db.execute(
+            text("""INSERT INTO contractor_workers
+                 (contractor_company_id,full_name,badge_no,trade,
+                  induction_date,induction_valid_until,site_access_status)
+                 VALUES (:cid,:fn,:bn,:tr,:idt,:ivu,:sas)"""),
+            dict(
+                cid=company_id, fn=r[2], bn=r[3], tr=r[4],
+                idt=_fmt_date(r[5]), ivu=_fmt_date(r[6]),
+                sas=r[7] if r[7] in ("granted", "revoked", "pending") else "pending",
+            ),
+        )
+        count += 1
+    return count
+
+
+def _insert_contractor_hours(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = None) -> int:
+    """Monthly hours worked per contractor company — the TRIR denominator.
+    contractor_company_id is NOT NULL with a real FK constraint, so an
+    unresolved Contractor_ID drops the row rather than raising.
+    """
+    if not _check_sheet(wb, "Contractor_Hours"):
+        return 0
+    count = 0
+    for r in _rows(wb["Contractor_Hours"]):
+        if not any(c for c in r):
+            continue
+        if not r[2] or not r[3]:
+            continue
+        company_id = _resolve(id_maps, "contractor_companies", r[1], db, org_id)
+        if company_id is None:
+            continue
+        db.execute(
+            text("""INSERT INTO contractor_hours
+                 (contractor_company_id,period_year,period_month,hours_worked)
+                 VALUES (:cid,:yr,:mo,:hw)"""),
+            dict(cid=company_id, yr=r[2], mo=r[3], hw=r[4] or 0),
+        )
+        count += 1
+    return count
+
+
 def _insert_employees(db: Session, wb, id_maps: IdMaps, org_id: Optional[int] = None) -> int:
     if not _check_sheet(wb, "Employees"):
         return 0
@@ -595,6 +751,10 @@ SHEET_STEPS = [
     ("Policies",              "policies",           _insert_policies),
     ("Departments",           "departments",        _insert_departments),
     ("Working_Stations",      "working_stations",   _insert_working_stations),
+    ("Equipment_Register",    "equipment",          _insert_equipment_register),
+    ("Contractor_Companies",  "contractor_companies", _insert_contractor_companies),
+    ("Contractor_Workers",    "contractor_workers",  _insert_contractor_workers),
+    ("Contractor_Hours",      "contractor_hours",    _insert_contractor_hours),
     ("Employees",             "employees",          _insert_employees),
     ("Departments (managers)","dept_managers",      _update_department_managers),
     ("Permits_To_Work",       "permits_to_work",    _insert_permits_to_work),

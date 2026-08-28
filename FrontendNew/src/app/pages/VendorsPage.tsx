@@ -3,12 +3,25 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
+import { AlertTriangle, ShieldCheck, Loader2, Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
   getVendorSummary,
+  createVendor,
   type VendorSummary,
+  type VendorInput,
 } from "../../services/vendors.service";
+
+const EMPTY_FORM: VendorInput = {
+  company_name: "",
+  service_type: "",
+  contract_start_date: "",
+  contract_end_date: "",
+  prequalification_status: "pending",
+  iso_45001_certified: false,
+  last_safety_audit_date: "",
+  active: true,
+};
 
 // ── Shared card wrapper ───────────────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -83,6 +96,15 @@ const PREQUAL_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   pending: "slate",
 };
 
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block mb-1.5 text-[12px]" style={{ color: "#4B5563", fontWeight: 600 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function VendorsPage() {
   const { user } = useAuth();
@@ -90,12 +112,48 @@ export function VendorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [form, setForm] = useState<VendorInput>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const loadSummary = () => {
+    getVendorSummary()
+      .then(setData)
+      .catch(() => setError("Failed to load vendor data"));
+  };
+
   useEffect(() => {
     getVendorSummary()
       .then(setData)
       .catch(() => setError("Failed to load vendor data"))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleAddVendor = async () => {
+    if (!form.company_name.trim()) {
+      setFormError("Company Name is required.");
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await createVendor({
+        ...form,
+        service_type: form.service_type || null,
+        contract_start_date: form.contract_start_date || null,
+        contract_end_date: form.contract_end_date || null,
+        last_safety_audit_date: form.last_safety_audit_date || null,
+      });
+      setShowAddModal(false);
+      setForm(EMPTY_FORM);
+      loadSummary();
+    } catch {
+      setFormError("Could not save vendor. Please check the fields and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -260,7 +318,17 @@ export function VendorsPage() {
 
         {/* Contractor Register */}
         <Card>
-          <CardTitle>Contractor Register</CardTitle>
+          <div className="flex items-center justify-between mb-3">
+            <CardTitle>Contractor Register</CardTitle>
+            <button
+              type="button"
+              onClick={() => { setForm(EMPTY_FORM); setFormError(null); setShowAddModal(true); }}
+              className="flex items-center gap-1.5 h-9 rounded-lg px-3.5 text-[13px] font-semibold text-white"
+              style={{ background: "#4A57B9" }}
+            >
+              <Plus className="w-4 h-4" /> Add Vendor
+            </button>
+          </div>
           {register.length === 0 ? (
             <EmptyState text="No contractor companies registered" />
           ) : (
@@ -298,6 +366,81 @@ export function VendorsPage() {
           </div>
         )}
       </Card>
+
+      {/* Add Vendor Modal */}
+      {showAddModal && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowAddModal(false)} />
+          <div
+            className="fixed top-1/2 left-1/2 z-50 w-[calc(100vw-1.5rem)] max-w-[560px] max-h-[90vh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white"
+            style={{ boxShadow: "0px 8px 32px rgba(0,0,0,0.16)" }}
+          >
+            <div className="px-8 py-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-[17px]" style={{ color: "#0A0A0A", fontWeight: 700 }}>Add Vendor</h2>
+                <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg" style={{ color: "#6B7280" }}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {formError && (
+                <div className="mb-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: "#FEE2E2", color: "#B91C1C" }}>
+                  {formError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Company Name *">
+                  <input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} placeholder="Apex Scaffolding Ltd" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Service Type">
+                  <input value={form.service_type ?? ""} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="Scaffolding" className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Contract Start Date">
+                  <input type="date" value={form.contract_start_date ?? ""} onChange={(e) => setForm({ ...form, contract_start_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Contract End Date">
+                  <input type="date" value={form.contract_end_date ?? ""} onChange={(e) => setForm({ ...form, contract_end_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <FormField label="Prequalification Status">
+                  <select value={form.prequalification_status} onChange={(e) => setForm({ ...form, prequalification_status: e.target.value })} className="w-full h-10 px-3 rounded-lg border bg-white text-[13px]" style={{ borderColor: "#D8E2F4" }}>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="conditional">Conditional</option>
+                    <option value="barred">Barred</option>
+                  </select>
+                </FormField>
+                <FormField label="Last Safety Audit Date">
+                  <input type="date" value={form.last_safety_audit_date ?? ""} onChange={(e) => setForm({ ...form, last_safety_audit_date: e.target.value })} className="w-full h-10 px-3 rounded-lg border text-[13px]" style={{ borderColor: "#D8E2F4" }} />
+                </FormField>
+                <label className="flex items-center gap-2 text-[13px]" style={{ color: "#334155" }}>
+                  <input type="checkbox" checked={!!form.iso_45001_certified} onChange={(e) => setForm({ ...form, iso_45001_certified: e.target.checked })} />
+                  ISO 45001 Certified
+                </label>
+                <label className="flex items-center gap-2 text-[13px]" style={{ color: "#334155" }}>
+                  <input type="checkbox" checked={!!form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+                  Active (unchecked = Suspended)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-lg text-[13px]" style={{ color: "#6B7280", fontWeight: 500 }}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleAddVendor}
+                  className="px-6 py-2 rounded-lg text-white text-[13px] disabled:opacity-60"
+                  style={{ background: "#4A57B9", fontWeight: 600 }}
+                >
+                  {saving ? "Saving…" : "Add Vendor"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

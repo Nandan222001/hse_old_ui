@@ -53,13 +53,19 @@ axiosInstance.interceptors.response.use(
     }
 
     const message =
+      error.response?.data?.detail ||
       error.response?.data?.error ||
+      error.response?.data?.message ||
       error.response?.statusText ||
       error.message ||
       'Request failed';
-    const apiError = new Error(`API Error ${status}: ${message}`);
     console.error(`API request failed [${status}]:`, message);
-    return Promise.reject(apiError);
+
+    // Keep the original axios error (with .response.data.detail intact) so
+    // callers that read the backend's actual error detail still can — only
+    // enrich .message for code that just wants a readable string.
+    error.message = typeof message === 'string' ? message : `API Error ${status}`;
+    return Promise.reject(error);
   },
 );
 
