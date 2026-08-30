@@ -55,10 +55,7 @@ const navGroups: NavGroup[] = [
         path: "/violations",
       },
       {
-        // Was "Audits" — the client's own naming for this item is "Audit
-        // Trail". Same page (/audits — WF-05 register/programme/report),
-        // no new page was needed for this one.
-        name: "Audit Trail",
+        name: "Audits",
         icon: ShieldCheck,
         path: "/audits",
       },

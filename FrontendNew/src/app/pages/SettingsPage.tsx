@@ -317,7 +317,6 @@ export function SettingsPage() {
     { id: "branding", label: "Branding" },
     { id: "knowledge", label: "AI Knowledge Base" },
     { id: "formula", label: "Formula & Rules" },
-    { id: "audit", label: "Audit Trail" },
   ];
 
   const fetchDocs = useCallback(async () => {
