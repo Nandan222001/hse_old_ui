@@ -87,19 +87,25 @@ export function ComplianceDashboard() {
 
         <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
           <div className="mb-2 text-[18px]" style={{ color: "#111827", fontWeight: 700 }}>Audit Findings by Severity</div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={findingsBySeverity}>
-              <CartesianGrid stroke="#E2E8F0" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "#334155", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis hide />
-              <Tooltip />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                {findingsBySeverity.map((entry) => (
-                  <Bar key={entry.name} dataKey="value" fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {findingsBySeverity.every((f) => f.value === 0) ? (
+            <div className="flex items-center justify-center text-[13px]" style={{ height: 250, color: "#9CA3AF" }}>
+              No audit findings recorded yet.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={findingsBySeverity}>
+                <CartesianGrid stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: "#334155", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {findingsBySeverity.map((entry) => (
+                    <Bar key={entry.name} dataKey="value" fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 

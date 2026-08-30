@@ -17,6 +17,16 @@ class ContractorCompanyCreate(BaseModel):
     ltifr_3yr: Optional[float] = None
     trir_3yr: Optional[float] = None
     approved_site_ids: Optional[List[int]] = None
+    # Module 5 register fields — same columns the Excel importer's
+    # _insert_contractor_companies fills from SD_ContractorRegister, exposed
+    # here too so Manual Entry can capture the same register in full.
+    service_type: Optional[str] = None
+    contract_start_date: Optional[date] = None
+    contract_end_date: Optional[date] = None
+    prequalification_status: Optional[str] = Field(None, pattern="^(approved|conditional|barred|pending)$")
+    iso_45001_certified: Optional[bool] = None
+    last_safety_audit_date: Optional[date] = None
+    suspended: Optional[bool] = None
 
 
 class ContractorCompanyResponse(BaseModel):
@@ -158,6 +168,23 @@ class ScorecardResponse(BaseModel):
     ltifr: Optional[float] = None
     verdict: str
     computed_at: Optional[datetime] = None
+
+
+class ContractorHoursCreate(BaseModel):
+    contractor_company_id: int
+    period_year: int
+    period_month: int = Field(..., ge=1, le=12)
+    hours_worked: int = Field(0, ge=0)
+
+
+class ContractorHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    contractor_company_id: int
+    period_year: int
+    period_month: int
+    hours_worked: int
 
 
 class IogpBenchmarkCreate(BaseModel):

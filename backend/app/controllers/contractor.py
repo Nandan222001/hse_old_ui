@@ -31,6 +31,7 @@ from app.controllers.workflow_common import (
 from app.core.dependencies import CurrentUser, get_current_user
 from app.models.contractor import (
     ContractorCompany,
+    ContractorHours,
     ContractorScorecard,
     ContractorWorker,
     IogpBenchmark,
@@ -39,6 +40,8 @@ from app.models.contractor import (
 from app.schemas.contractor import (
     ContractorCompanyCreate,
     ContractorCompanyResponse,
+    ContractorHoursCreate,
+    ContractorHoursResponse,
     ContractorWorkerCreate,
     ContractorWorkerResponse,
     IogpBenchmarkCreate,
@@ -109,7 +112,10 @@ def create_contractor(
         organisation_id=current_user.org_id,
         source_system="mobile",
         last_reviewed_at=datetime.now(),
-        **payload.model_dump(),
+        # exclude_none so an omitted field falls back to the column's own
+        # default (e.g. prequalification_status, suspended are NOT NULL)
+        # instead of an explicit None blowing up the insert.
+        **payload.model_dump(exclude_none=True),
     )
     db.add(row)
     db.commit()
@@ -252,6 +258,24 @@ def create_worker(
     db.commit()
     db.refresh(row)
     return ContractorWorkerResponse.model_validate(row)
+
+
+@router.post("/hours", response_model=ContractorHoursResponse, status_code=201)
+def create_contractor_hours(
+    payload: ContractorHoursCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Monthly hours worked per contractor company — the TRIR denominator
+    (see ContractorHours model). Excel import writes this same table via
+    _insert_contractor_hours; this is the single-record equivalent."""
+    require_role(current_user.role, SUPERVISOR_ROLES | MANAGER_ROLES, "log contractor hours")
+    _get_company(db, payload.contractor_company_id, current_user.org_id)
+    row = ContractorHours(organisation_id=current_user.org_id, **payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return ContractorHoursResponse.model_validate(row)
 
 
 @router.get("/workers/by-badge/{badge_no}", response_model=ContractorWorkerResponse)

@@ -738,23 +738,48 @@ function PeopleDashboardSection({ currentUserName, overview }: { currentUserName
         <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "#DCE7F7", boxShadow: "0px 10px 24px rgba(15, 23, 42, 0.06)" }}>
           <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>Coaching Actions</h3>
           <div className="mt-3 space-y-3">
-            {coachingActions.map((item) => (
-              <div key={item.title} className="rounded-xl border px-3 py-2.5" style={{ borderColor: "#EEF2F7", background: "#FBFCFE" }}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold" style={{ color: "#111827" }}>{item.title}</div>
-                    <div className="mt-0.5 text-[12px]" style={{ color: "#6B7280" }}>{item.detail}</div>
-                  </div>
-                  <ToneChip tone={item.tone}>{item.detail === "Overdue" ? "Overdue" : "Open"}</ToneChip>
-                </div>
+            {coachingActions.length === 0 ? (
+              <div className="text-[12px]" style={{ color: "#6B7280" }}>
+                No coaching sessions logged yet.
               </div>
-            ))}
+            ) : (
+              coachingActions.map((item) => (
+                <div key={item.title} className="rounded-xl border px-3 py-2.5" style={{ borderColor: "#EEF2F7", background: "#FBFCFE" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold" style={{ color: "#111827" }}>{item.title}</div>
+                      <div className="mt-0.5 text-[12px]" style={{ color: "#6B7280" }}>{item.detail}</div>
+                    </div>
+                    <ToneChip tone={item.tone}>{item.detail === "Overdue" ? "Overdue" : "Open"}</ToneChip>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         {/* Open actions */}
         <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "#DCE7F7", boxShadow: "0px 10px 24px rgba(15, 23, 42, 0.06)" }}>
-          <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>Open Actions</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[18px] font-semibold" style={{ color: "#111827" }}>Open Actions</h3>
+            <InfoTooltip label="Open Actions — how this is calculated">
+              <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+                <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>Open Actions</div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Source</div>
+                  <div>CAPA actions not yet marked Completed, across the organisation.</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Sort &amp; limit</div>
+                  <div>Nearest due date first (undated actions last) — top 3 shown.</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Tag &amp; color</div>
+                  <div>High (red) = past due date · Priority (amber) = due within 7 days · Priority (blue) = due later or undated.</div>
+                </div>
+              </div>
+            </InfoTooltip>
+          </div>
           <div className="mt-3 space-y-3">
             {openActions.map((item) => (
               <div key={item.title} className="rounded-xl border px-3 py-2.5" style={{ borderColor: "#EEF2F7", background: "#FBFCFE" }}>
