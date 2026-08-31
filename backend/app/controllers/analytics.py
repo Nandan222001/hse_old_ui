@@ -1239,6 +1239,7 @@ def get_compliance_summary(db: Session = Depends(get_db), current_user: CurrentU
     non_conformance_rows = [
         {
             "id": f"NC-{c.id:03d}",
+            "capa_id": c.id,
             "action": _clean_capa_description(c),
             "owner": emp.full_name if emp else "Unassigned",
             "due": c.due_date.strftime("%b %d, %Y") if c.due_date else "No Date",

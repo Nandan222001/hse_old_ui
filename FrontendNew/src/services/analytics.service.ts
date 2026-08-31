@@ -120,6 +120,7 @@ export const getPermitFilterOptions = () =>
 
 export interface NonConformanceRow {
   id: string;
+  capa_id: number;
   action: string;
   owner: string;
   due: string;
