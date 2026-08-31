@@ -9,6 +9,7 @@ import {
 } from "../../services/analytics.service";
 import { useAuth } from "../context/AuthContext";
 import { RiskTabBar } from "../components/audits/RiskTabBar";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 
 const matrixCols = ["Frequent 5", "Probable 4", "Occasional 3", "Remote 2", "Improbable 1"];
 const matrixRows = ["Catastrophic 5", "Significant 4", "Moderate 3", "Low 2", "Negligible 1"];
@@ -107,10 +108,62 @@ function toneStyle(tone: string) {
   return                        { bg: "#16A34A", text: "#FFFFFF" }; // Green = Acceptable
 }
 
-function KpiCard({ title, value, subtitle, hint, valueColor = "#1F2937" }: Readonly<{ title: string; value: string; subtitle: string; hint: string; valueColor?: string }>) {
+// Shared formula/definition Info tooltip content for this page's KPI cards —
+// same pattern as the Dashboard, Equipment, Vendors and Compliance pages'
+// Info tooltips: shows the live current value alongside the definition/
+// formula so it can never disagree with the number on the card itself.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
+}: {
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula?: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      {formula && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+          <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+        </div>
+      )}
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ title, value, subtitle, hint, valueColor = "#1F2937", info }: Readonly<{ title: string; value: string; subtitle: string; hint: string; valueColor?: string; info?: React.ReactNode }>) {
   return (
     <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
-      <div className="mb-1 text-[14px]" style={{ color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</div>
+      <div className="mb-1 flex items-center gap-1.5 text-[14px]" style={{ color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {title}
+        {info && (
+          <InfoTooltip label={`${title} — how this is calculated`}>
+            {info}
+          </InfoTooltip>
+        )}
+      </div>
       <div className="text-[48px] leading-none mt-2" style={{ color: valueColor, fontWeight: 700 }}>{value}</div>
       <div className="mt-2 text-[13px]" style={{ color: '#64748B' }}>{subtitle}</div>
       {hint && <div className="mt-1 text-[12px]" style={{ color: '#2F8C77', fontWeight: 600 }}>{hint}</div>}
@@ -200,9 +253,48 @@ export function RiskPage() {
 
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <KpiCard title="Corrective Action Closure Rate" value={kpis ? kpis.control_effectiveness : "—"} subtitle="CAPA actions completed" hint="Client KPI — same metric as Compliance page" />
-        <KpiCard title="Open CAPA Actions"               value={kpis ? String(kpis.unverified_controls) : "—"} subtitle="Pending closure" hint="Not a control-verification record" />
-        <KpiCard title="Overdue CAPA Actions ⚠"          value={kpis ? String(kpis.risk_escalations) : "—"} subtitle="Requires Immediate Action" hint="" />
+        <KpiCard
+          title="Corrective Action Closure Rate"
+          value={kpis ? kpis.control_effectiveness : "—"}
+          subtitle="CAPA actions completed"
+          hint="Client KPI — same metric as Compliance page"
+          info={
+            <MetricFormulaInfo
+              title="Corrective Action Closure Rate"
+              currentValue={kpis ? kpis.control_effectiveness : "—"}
+              definition="The share of CAPA (Corrective and Preventive Action) actions marked Completed, Closed, Verified, or Done, out of every CAPA action raised. Same metric as the Compliance page's Corrective Action Closure Rate card."
+              formula="(CAPA Actions Completed ÷ Total CAPA Actions) × 100"
+            />
+          }
+        />
+        <KpiCard
+          title="Open CAPA Actions"
+          value={kpis ? String(kpis.unverified_controls) : "—"}
+          subtitle="Pending closure"
+          hint="Not a control-verification record"
+          info={
+            <MetricFormulaInfo
+              title="Open CAPA Actions"
+              currentValue={kpis ? String(kpis.unverified_controls) : "—"}
+              definition="The count of CAPA actions with no status on file, or a status other than Completed/Closed/Verified/Done — i.e. still pending closure. This counts open actions, not verified controls."
+              formula="Count of CAPA actions where status is not Completed/Closed/Verified/Done"
+            />
+          }
+        />
+        <KpiCard
+          title="Overdue CAPA Actions ⚠"
+          value={kpis ? String(kpis.risk_escalations) : "—"}
+          subtitle="Requires Immediate Action"
+          hint=""
+          info={
+            <MetricFormulaInfo
+              title="Overdue CAPA Actions"
+              currentValue={kpis ? String(kpis.risk_escalations) : "—"}
+              definition="The count of CAPA actions whose status is explicitly Overdue — past their due date without being closed."
+              formula={'Count of CAPA actions where status = "Overdue"'}
+            />
+          }
+        />
       </div>
 
       {/* Row 2: Residual Trend | Risk Matrix | Zone Risk */}

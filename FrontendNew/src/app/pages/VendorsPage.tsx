@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { AlertTriangle, ShieldCheck, Loader2, Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 import {
   getVendorSummary,
   createVendor,
@@ -52,16 +53,68 @@ function EmptyState({ text }: { text: string }) {
 // ── Module 5 KPI card — client's own formula in the subtitle, not a
 // re-classification of it ("Needs Attention"-style labels caused the same
 // complaint on the Compliance page — see analytics.py's compliance_label). ──
-function KpiCard({
-  title, value, unit, note, tone,
+// Shared formula/definition Info tooltip content for the Module 5 KPI cards —
+// same pattern as the Dashboard and Equipment pages' Info tooltips: shows the
+// live current value alongside the definition/formula so it can never
+// disagree with the number on the card itself.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
 }: {
-  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral";
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula?: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      {formula && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+          <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+        </div>
+      )}
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({
+  title, value, unit, note, tone, info,
+}: {
+  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral"; info?: React.ReactNode;
 }) {
   const color = value === null ? "#9CA3AF"
     : tone === "good" ? "#166534" : tone === "warn" ? "#B45309" : tone === "bad" ? "#B91C1C" : "#111827";
   return (
     <Card>
-      <CardTitle>{title}</CardTitle>
+      <div className="mb-3 flex items-center gap-1.5 text-[15px]" style={{ color: "#111827", fontWeight: 700 }}>
+        {title}
+        {info && (
+          <InfoTooltip label={`${title} — how this is calculated`}>
+            {info}
+          </InfoTooltip>
+        )}
+      </div>
       <div className="text-[40px] leading-none" style={{ color, fontWeight: 700 }}>
         {value === null ? "N/A" : `${value}${unit}`}
       </div>
@@ -230,6 +283,15 @@ export function VendorsPage() {
           unit=""
           note={`${kpis.contractor_trir.contractor_injuries} injuries × 200,000 ÷ ${kpis.contractor_trir.contractor_hours.toLocaleString()} hrs. ${kpis.contractor_trir.note}`}
           tone={kpis.contractor_trir.value === null ? "neutral" : kpis.contractor_trir.value === 0 ? "good" : "warn"}
+          info={
+            <MetricFormulaInfo
+              title="Contractor TRIR — Total Recordable Incident Rate"
+              currentValue={kpis.contractor_trir.value === null ? "N/A" : `${kpis.contractor_trir.value}`}
+              definition="Recordable injuries among contractor-employed workers, per 200,000 hours worked by contractors — the same TRIR standard used site-wide, scoped to contractors only."
+              formula="(Contractor Injuries × 200,000) ÷ Contractor Hours Worked"
+              note={`${kpis.contractor_trir.contractor_injuries} injuries, ${kpis.contractor_trir.contractor_hours.toLocaleString()} logged contractor hours. ${kpis.contractor_trir.note}.`}
+            />
+          }
         />
         <KpiCard
           title="Induction Compliance"
@@ -241,6 +303,15 @@ export function VendorsPage() {
               : kpis.induction_compliance_pct.value >= 90 ? "good"
               : kpis.induction_compliance_pct.value >= 60 ? "warn" : "bad"
           }
+          info={
+            <MetricFormulaInfo
+              title="Induction Compliance"
+              currentValue={kpis.induction_compliance_pct.value === null ? "N/A" : `${kpis.induction_compliance_pct.value}%`}
+              definition="The share of registered contractor workers whose site induction is still valid as of today."
+              formula="(Workers with induction_valid_until ≥ today ÷ Total contractor workers) × 100"
+              note={`${kpis.induction_compliance_pct.valid} of ${kpis.induction_compliance_pct.total} inductions valid today. ${kpis.induction_compliance_pct.note}.`}
+            />
+          }
         />
         <KpiCard
           title="Incident Contribution"
@@ -248,6 +319,15 @@ export function VendorsPage() {
           unit="%"
           note={`${kpis.incident_contribution_pct.contractor_injuries} of ${kpis.incident_contribution_pct.total_site_injuries} site injuries. ${kpis.incident_contribution_pct.note}`}
           tone={kpis.incident_contribution_pct.value === null ? "neutral" : kpis.incident_contribution_pct.value > 30 ? "bad" : "good"}
+          info={
+            <MetricFormulaInfo
+              title="Incident Contribution"
+              currentValue={kpis.incident_contribution_pct.value === null ? "N/A" : `${kpis.incident_contribution_pct.value}%`}
+              definition="What share of all site injuries were reported by a worker whose employment type is Contractor, out of every injury recorded org-wide."
+              formula="(Contractor Injuries ÷ Total Site Injuries) × 100"
+              note={`${kpis.incident_contribution_pct.contractor_injuries} of ${kpis.incident_contribution_pct.total_site_injuries} site injuries. ${kpis.incident_contribution_pct.note}.`}
+            />
+          }
         />
         <KpiCard
           title="Contractor Safety Score"
@@ -258,6 +338,15 @@ export function VendorsPage() {
             kpis.safety_score.value === null ? "neutral"
               : kpis.safety_score.value >= 75 ? "good"
               : kpis.safety_score.value >= 60 ? "warn" : "bad"
+          }
+          info={
+            <MetricFormulaInfo
+              title="Contractor Safety Score"
+              currentValue={kpis.safety_score.value === null ? "N/A" : `${kpis.safety_score.value}/100`}
+              definition="The average of each contractor company's latest safety scorecard (0-100), giving one figure across all active contractors. Same calculation shown on the Dashboard's leading-indicators panel."
+              formula="Average of latest scorecard score, per contractor company"
+              note={`Averaged across ${kpis.safety_score.company_count} companies. ${kpis.safety_score.note}.`}
+            />
           }
         />
       </div>

@@ -164,6 +164,50 @@ function PredictiveRiskInfoContent({ leading }: { leading: LeadingIndicators }) 
   );
 }
 
+// ── Shared formula/definition Info tooltip content for the KPI cards that
+// don't carry their own detailed breakdown (Predictive Injury Risk Score is
+// the exception — it renders PredictiveRiskInfoContent above instead).
+// Shows the live current value alongside the standard definition/formula so
+// the tooltip can never disagree with the number on the card itself.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
+}: {
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+        <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+      </div>
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -257,6 +301,15 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="TRIR — Total Recordable Incident Rate"
+          currentValue={`${leading.trir}`}
+          definition="The number of recordable injuries per 200,000 hours worked (equivalent to 100 employees working a full year) — a standard rate used to compare injury frequency across workforces of any size."
+          formula="(Recordable Incidents × 200,000) ÷ Total Hours Worked"
+          note="Recordable incidents are incidents logged with type “Injury”, for the selected period."
+        />
+      ),
     },
     {
       // Title said "LTIFR" — the "incorrect 'RF' reference" the meeting
@@ -270,6 +323,15 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="LTIF — Lost Time Injury Frequency Rate"
+          currentValue={`${leading.ltif}`}
+          definition="The number of injuries resulting in lost time per 1,000,000 hours worked."
+          formula="(Lost Time Incidents × 1,000,000) ÷ Total Hours Worked"
+          note="Lost time incidents are injury incidents with severity “Lost Time”, for the selected period."
+        />
+      ),
     },
     {
       title: "Audit Readiness Score",
@@ -281,6 +343,15 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="Audit Readiness Score"
+          currentValue={`${leading.audit_readiness_score}% / ${leading.audit_readiness_label}`}
+          definition="A blended, all-time score of the organisation's audit/inspection posture, combining Safety Walk compliance ratings and Auditor-app Audit compliance scores onto a common 0-100 scale. Same score shown on the Compliance page."
+          formula="Average of: (Safety Walk rating ÷ 5 × 100) and (Audit compliance score)"
+          note="Ready ≥ 80% · Needs Attention 60–79% · Not Ready < 60%. Deliberately all-time — not limited to the date range selected above — so it reflects overall posture rather than a short-term trend."
+        />
+      ),
     },
   ] : [];
 
@@ -293,6 +364,15 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="DART Rate — Days Away, Restricted, or Transferred"
+          currentValue={`${leading.dart_rate ?? 0}`}
+          definition="The number of lost-time injuries per 200,000 hours worked — the portion of TRIR made up of injuries serious enough to cause days away from work, restricted duty, or job transfer."
+          formula="(Lost Time Incidents × 200,000) ÷ Total Hours Worked"
+          note="Lost time incidents are injury incidents with severity “Lost Time”, for the selected period."
+        />
+      ),
     },
     {
       title: "Near Miss Ratio",
@@ -302,6 +382,14 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="Near Miss Ratio"
+          currentValue={`${leading.near_miss_ratio ?? "0 : 1"}`}
+          definition="How many near misses are reported for every recordable incident in the selected period. A higher ratio generally reflects healthier proactive reporting, not more risk."
+          formula="Near Misses ÷ Recordable Incidents"
+        />
+      ),
     },
     {
       title: "FAR",
@@ -311,6 +399,14 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="FAR — Fatal Accident Rate"
+          currentValue={`${leading.far ?? 0}`}
+          definition="The number of workplace fatalities per 100,000,000 hours worked — the standard rate for very rare, high-severity events, scaled up so a single fatality is still meaningfully represented."
+          formula="(Fatalities × 100,000,000) ÷ Total Hours Worked"
+        />
+      ),
     },
     {
       title: "Contractor Safety Score",
@@ -325,6 +421,19 @@ export function DashboardPage() {
       border: "#E5E7EB",
       inline: "",
       trendDown: false,
+      info: (
+        <MetricFormulaInfo
+          title="Contractor Safety Score"
+          currentValue={leading.contractor_safety_score != null ? `${leading.contractor_safety_score}/100` : "N/A"}
+          definition="The average of each contractor company's latest safety scorecard (0-100), giving one figure across all active contractors. Same calculation used on the Vendors page's Safety Score KPI."
+          formula="Average of latest scorecard score, per contractor company"
+          note={
+            leading.contractor_safety_company_count
+              ? `Averaged across ${leading.contractor_safety_company_count} companies.`
+              : "No contractor scorecards recorded yet."
+          }
+        />
+      ),
     },
   ] : [];
 

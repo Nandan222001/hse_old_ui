@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { AlertTriangle, Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 import {
   getEquipmentSummary,
   getEquipmentList,
@@ -57,16 +58,68 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-function KpiCard({
-  title, value, unit, note, tone,
+// Shared formula/definition Info tooltip content for the Module 4 KPI cards —
+// same pattern as the Dashboard and People pages' Info tooltips: shows the
+// live current value alongside the definition/formula so it can never
+// disagree with the number on the card itself.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
 }: {
-  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral";
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula?: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      {formula && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+          <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+        </div>
+      )}
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({
+  title, value, unit, note, tone, info,
+}: {
+  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral"; info?: React.ReactNode;
 }) {
   const color = value === null ? "#9CA3AF"
     : tone === "good" ? "#166534" : tone === "warn" ? "#B45309" : tone === "bad" ? "#B91C1C" : "#111827";
   return (
     <Card>
-      <CardTitle>{title}</CardTitle>
+      <div className="mb-3 flex items-center gap-1.5 text-[15px]" style={{ color: "#111827", fontWeight: 700 }}>
+        {title}
+        {info && (
+          <InfoTooltip label={`${title} — how this is calculated`}>
+            {info}
+          </InfoTooltip>
+        )}
+      </div>
       <div className="text-[40px] leading-none" style={{ color, fontWeight: 700 }}>
         {value === null ? "N/A" : `${value}${unit}`}
       </div>
@@ -286,6 +339,14 @@ export function EquipmentCertificationPage() {
           unit=""
           note={`${operationalCount} operational, ${underMaintenanceCount} under maintenance`}
           tone="neutral"
+          info={
+            <MetricFormulaInfo
+              title="Total Equipment"
+              currentValue={`${totalEquipment}`}
+              definition="The count of every equipment item registered in the organisation's asset register, regardless of status or type."
+              note={`${operationalCount} currently Operational, ${underMaintenanceCount} Under Maintenance.`}
+            />
+          }
         />
         <KpiCard
           title="PM Compliance"
@@ -297,6 +358,15 @@ export function EquipmentCertificationPage() {
               : pmCompliance >= 90 ? "good"
               : pmCompliance >= 60 ? "warn" : "bad"
           }
+          info={
+            <MetricFormulaInfo
+              title="PM Compliance"
+              currentValue={pmCompliance === null ? "N/A" : `${pmCompliance}%`}
+              definition="The share of equipment (with a Next PM Due date on file) that is not yet past that date."
+              formula="(Equipment not past Next PM Due ÷ Equipment with a Next PM Due date) × 100"
+              note={summary.pm_compliance_note}
+            />
+          }
         />
         <KpiCard
           title="Fleet MTBF"
@@ -304,6 +374,14 @@ export function EquipmentCertificationPage() {
           unit=" hrs"
           note="Mean time between failures, averaged across the register"
           tone={mtbfAvg === null ? "neutral" : "good"}
+          info={
+            <MetricFormulaInfo
+              title="Fleet MTBF — Mean Time Between Failures"
+              currentValue={mtbfAvg === null ? "N/A" : `${mtbfAvg} hrs`}
+              definition="The average estimated operating time between failures, across all equipment that has an MTBF estimate on file. A higher number means equipment runs longer, on average, before failing."
+              formula="Average of MTBF_Hours_Estimated across the register"
+            />
+          }
         />
         <KpiCard
           title="SCE Overdue"
@@ -311,6 +389,14 @@ export function EquipmentCertificationPage() {
           unit={` of ${sceCount}`}
           note="Safety-critical equipment past its PM due date"
           tone={sceOverdueCount === 0 ? "good" : sceOverdueCount >= sceCount / 2 ? "bad" : "warn"}
+          info={
+            <MetricFormulaInfo
+              title="SCE Overdue — Safety-Critical Equipment"
+              currentValue={`${sceOverdueCount} of ${sceCount}`}
+              definition="Of the equipment flagged Safety-Critical (SCE), how many are past their own Next PM Due date."
+              formula="Count of SCE-flagged equipment where Next PM Due < today"
+            />
+          }
         />
       </div>
 

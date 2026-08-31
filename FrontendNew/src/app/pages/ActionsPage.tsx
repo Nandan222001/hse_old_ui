@@ -11,6 +11,7 @@ import {
   type WorkByType,
 } from "../../services/analytics.service";
 import { useAuth } from "../context/AuthContext";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
 
 const PERMIT_LIST_PAGE_SIZE = 25;
 
@@ -22,11 +23,63 @@ function permitStatusTone(status: string) {
   return { bg: "#F3F4F6", color: "#4B5563", border: "#E5E7EB" };
 }
 
-function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A" }: Readonly<{ title: string; value: string; subtitle: string; delta: string; valueColor?: string }>) {
+// Shared formula/definition Info tooltip content for this page's KPI boxes —
+// same pattern as the Dashboard, Equipment, Vendors, Compliance and Risk
+// pages' Info tooltips: shows the live current value alongside the
+// definition/formula so it can never disagree with the number on the card.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
+}: {
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula?: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      {formula && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+          <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+        </div>
+      )}
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
+
+function KpiBox({ title, value, subtitle, delta, valueColor = "#0F172A", info }: Readonly<{ title: string; value: string; subtitle: string; delta: string; valueColor?: string; info?: React.ReactNode }>) {
   const deltaColor = delta.includes("↓") ? "#B45309" : "#0F766E";
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: '#D8E2F4' }}>
-      <div className="text-[28px]" style={{ color: '#111827', fontWeight: 700 }}>{title}</div>
+      <div className="flex items-center gap-1.5 text-[28px]" style={{ color: '#111827', fontWeight: 700 }}>
+        {title}
+        {info && (
+          <InfoTooltip label={`${title} — how this is calculated`}>
+            {info}
+          </InfoTooltip>
+        )}
+      </div>
       <div className="mt-3 flex items-end gap-3">
         <div className="text-[52px] leading-none" style={{ color: valueColor, fontWeight: 700 }}>{value}</div>
         <div className="pb-2 text-[14px]" style={{ color: deltaColor, fontWeight: 600 }}>{delta}</div>
@@ -132,6 +185,14 @@ export function ActionsPage() {
           delta=""
           subtitle="Permits Currently in Progress"
           valueColor="#0F766E"
+          info={
+            <MetricFormulaInfo
+              title="Active Permits"
+              currentValue={activePermits !== null ? String(activePermits) : "—"}
+              definition="The count of Permits to Work (PTW) whose status is currently Active — work in progress right now, org-wide."
+              formula={'Count of Permits to Work where status = "Active"'}
+            />
+          }
         />
         <KpiBox
           title="Work Exposure Hours"
@@ -139,6 +200,14 @@ export function ActionsPage() {
           delta=""
           subtitle="Total Hours Across Active Permits"
           valueColor="#A16207"
+          info={
+            <MetricFormulaInfo
+              title="Work Exposure Hours"
+              currentValue={workExposureHours !== null ? workExposureHours.toLocaleString() : "—"}
+              definition="The total worker-hours of exposure represented by every currently Active permit — each permit's requested duration multiplied by how many workers it covers, summed across all active permits."
+              formula="Σ (Duration Requested (hrs) × Number of Workers), across Active permits"
+            />
+          }
         />
         <KpiBox
           title="Permit Compliance %"
@@ -146,6 +215,14 @@ export function ActionsPage() {
           delta=""
           subtitle="No Deviation or Incident Reported"
           valueColor="#39498F"
+          info={
+            <MetricFormulaInfo
+              title="Permit Compliance %"
+              currentValue={permitCompliancePct !== null ? `${permitCompliancePct}%` : "—"}
+              definition="The share of every permit ever issued that has been formally Closed out. Same PTW Compliance Rate shown on the Compliance page."
+              formula="(Closed Permits ÷ Total Permits) × 100"
+            />
+          }
         />
       </div>
 

@@ -28,21 +28,74 @@ import {
 } from "../components/audit/AuditPrimitives";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { InfoTooltip } from "../components/shared/InfoTooltip";
+
+// Shared formula/definition Info tooltip content for the Module 8 KPI tiles —
+// same pattern as the Dashboard, Equipment, Vendors, Compliance, Risk and
+// Actions pages' Info tooltips: shows the live current value alongside the
+// definition/formula so it can never disagree with the number on the tile.
+function MetricFormulaInfo({
+  title,
+  currentValue,
+  definition,
+  formula,
+  note,
+}: {
+  title: string;
+  currentValue: string;
+  definition: string;
+  formula?: string;
+  note?: string;
+}) {
+  return (
+    <div className="space-y-2.5 text-[12px] leading-snug" style={{ color: '#374151' }}>
+      <div className="text-[13px] font-semibold" style={{ color: '#111827' }}>{title}</div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Current Value</div>
+        <div className="text-[15px] font-bold" style={{ color: '#111827' }}>{currentValue}</div>
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Definition</div>
+        <div>{definition}</div>
+      </div>
+
+      {formula && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9CA3AF' }}>Formula</div>
+          <div className="mt-1 rounded-md p-1.5 font-mono text-[11px]" style={{ background: '#F8FAFC', color: '#111827' }}>{formula}</div>
+        </div>
+      )}
+
+      {note && (
+        <div className="text-[11px]" style={{ color: '#6B7280' }}>{note}</div>
+      )}
+    </div>
+  );
+}
 
 // ── Module 8 KPI tile — same visual language as the Assets/Equipment
 // register page (white card, big tone-coloured number, one-line note), per
 // the client's own reference for this section. Named distinctly from the
 // shadcn `Card` this page already imports so the two don't collide. ────────
 function KpiTile({
-  title, value, unit, note, tone,
+  title, value, unit, note, tone, info,
 }: {
-  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral";
+  title: string; value: number | null; unit: string; note: string; tone: "good" | "warn" | "bad" | "neutral"; info?: React.ReactNode;
 }) {
   const color = value === null ? "#9CA3AF"
     : tone === "good" ? "#166534" : tone === "warn" ? "#B45309" : tone === "bad" ? "#B91C1C" : "#111827";
   return (
     <div className="rounded-2xl border bg-white p-5 shadow-[0_6px_16px_rgba(15,23,42,0.08)]" style={{ borderColor: "#D8E2F4" }}>
-      <div className="mb-3 text-[15px]" style={{ color: "#111827", fontWeight: 700 }}>{title}</div>
+      <div className="mb-3 flex items-center gap-1.5 text-[15px]" style={{ color: "#111827", fontWeight: 700 }}>
+        {title}
+        {info && (
+          <InfoTooltip label={`${title} — how this is calculated`}>
+            {info}
+          </InfoTooltip>
+        )}
+      </div>
       <div className="text-[40px] leading-none" style={{ color, fontWeight: 700 }}>
         {value === null ? "N/A" : `${value}${unit}`}
       </div>
@@ -149,6 +202,15 @@ export function AuditRegisterPage() {
           unit="%"
           note={kpis ? `${kpis.detail.audits_completed} of ${kpis.detail.audits_planned} audits completed` : "Target: 100%"}
           tone={pctTone(kpis?.audit_completion_rate_pct ?? null, 90, 70)}
+          info={
+            <MetricFormulaInfo
+              title="Audit Completion Rate"
+              currentValue={kpis?.audit_completion_rate_pct != null ? `${kpis.audit_completion_rate_pct}%` : "N/A"}
+              definition="The share of planned audits that have been closed out (closed_at set) or explicitly marked completed, out of every audit scheduled."
+              formula="(Audits Completed ÷ Audits Planned) × 100"
+              note={kpis ? `${kpis.detail.audits_completed} of ${kpis.detail.audits_planned} audits completed. Target: 100%.` : "Target: 100%."}
+            />
+          }
         />
         <KpiTile
           title="Finding Closure Rate"
@@ -156,6 +218,15 @@ export function AuditRegisterPage() {
           unit="%"
           note={kpis ? `${kpis.detail.findings_closed} of ${kpis.detail.total_findings} findings closed` : "Target: 80%+ within 90 days"}
           tone={pctTone(kpis?.finding_closure_rate_pct ?? null, 80, 50)}
+          info={
+            <MetricFormulaInfo
+              title="Finding Closure Rate"
+              currentValue={kpis?.finding_closure_rate_pct != null ? `${kpis.finding_closure_rate_pct}%` : "N/A"}
+              definition="The share of every audit finding (all classifications) that has reached a closed status, out of every finding ever raised."
+              formula="(Findings Closed ÷ Total Findings) × 100"
+              note={kpis ? `${kpis.detail.findings_closed} of ${kpis.detail.total_findings} findings closed. Target: 80%+ within 90 days.` : "Target: 80%+ within 90 days."}
+            />
+          }
         />
         <KpiTile
           title="NC Closure Rate"
@@ -163,6 +234,15 @@ export function AuditRegisterPage() {
           unit="%"
           note={kpis ? `${kpis.detail.ncs_closed} of ${kpis.detail.total_ncs} non-conformances closed` : "Target: 100% within SLA"}
           tone={pctTone(kpis?.nc_closure_rate_pct ?? null, 90, 60)}
+          info={
+            <MetricFormulaInfo
+              title="NC Closure Rate"
+              currentValue={kpis?.nc_closure_rate_pct != null ? `${kpis.nc_closure_rate_pct}%` : "N/A"}
+              definition="The share of findings classified as a non-conformance (major or minor NC) that have reached a closed status, out of every non-conformance raised."
+              formula="(Non-Conformances Closed ÷ Total Non-Conformances) × 100"
+              note={kpis ? `${kpis.detail.ncs_closed} of ${kpis.detail.total_ncs} non-conformances closed. Target: 100% within SLA.` : "Target: 100% within SLA."}
+            />
+          }
         />
         <KpiTile
           title="Regulatory Compliance"
@@ -170,6 +250,15 @@ export function AuditRegisterPage() {
           unit="%"
           note="Proxy from audit NC closure — no separate legal register exists yet to check against"
           tone={pctTone(kpis?.regulatory_compliance_rate_pct ?? null, 95, 80)}
+          info={
+            <MetricFormulaInfo
+              title="Regulatory Compliance"
+              currentValue={kpis?.regulatory_compliance_rate_pct != null ? `${kpis.regulatory_compliance_rate_pct}%` : "N/A"}
+              definition="A proxy for regulatory compliance, computed identically to NC Closure Rate — the org has no separate legal/regulatory register yet to check findings against, so audit non-conformance closure stands in for it."
+              formula="(Non-Conformances Closed ÷ Total Non-Conformances) × 100"
+              note="Proxy from audit NC closure — no separate legal register exists yet to check against."
+            />
+          }
         />
         <KpiTile
           title="Overdue Findings"
@@ -177,6 +266,15 @@ export function AuditRegisterPage() {
           unit=""
           note="Corrective action past due, still open. Target: 0"
           tone={kpis == null ? "neutral" : kpis.overdue_findings_count === 0 ? "good" : "bad"}
+          info={
+            <MetricFormulaInfo
+              title="Overdue Findings"
+              currentValue={kpis?.overdue_findings_count != null ? String(kpis.overdue_findings_count) : "N/A"}
+              definition="The count of findings that are still open (not in a closed status) and whose corrective action due date has already passed."
+              formula="Count of findings where status is not closed AND corrective_action_due < today"
+              note="Target: 0."
+            />
+          }
         />
       </div>
 
