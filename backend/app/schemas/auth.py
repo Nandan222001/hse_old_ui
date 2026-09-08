@@ -7,6 +7,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str  # re-confirm identity before a destructive self-delete
+
+
 class TokenData(BaseModel):
     user_id: int
     username: str

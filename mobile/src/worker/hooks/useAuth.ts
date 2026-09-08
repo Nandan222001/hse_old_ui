@@ -5,7 +5,7 @@ import { ChangePasswordRequest, LoginRequest } from '../types';
 export function useAuth() {
   const {
     user, isAuthenticated, isLoading, error, mustChangePassword,
-    login, logout, changePassword, restoreSession, clearError,
+    login, logout, deleteAccount, changePassword, restoreSession, clearError,
   } = useAuthStore();
 
   const handleLogin = useCallback(async (credentials: LoginRequest) => {
@@ -15,6 +15,10 @@ export function useAuth() {
   const handleLogout = useCallback(async () => {
     await logout();
   }, [logout]);
+
+  const handleDeleteAccount = useCallback(async (password: string) => {
+    await deleteAccount(password);
+  }, [deleteAccount]);
 
   const handleChangePassword = useCallback(async (payload: ChangePasswordRequest) => {
     await changePassword(payload);
@@ -28,6 +32,7 @@ export function useAuth() {
     mustChangePassword,
     login: handleLogin,
     logout: handleLogout,
+    deleteAccount: handleDeleteAccount,
     changePassword: handleChangePassword,
     restoreSession,
     clearError,

@@ -1,8 +1,11 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
-import { Briefcase, Building2, IdCard, LogOut, ListChecks, ChevronRight } from 'lucide-react-native';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Linking } from 'react-native';
+import { Briefcase, Building2, IdCard, LogOut, ListChecks, ChevronRight, FileText, ShieldCheck } from 'lucide-react-native';
 import type { ScreenProps } from '../types';
 import { useAuth } from '../../../hooks/useAuth';
 import { Avatar } from '../../../components';
+import { DeleteAccountModal } from '../../../components/DeleteAccountModal';
+import { LEGAL_LINKS } from '../../../constants/config';
 
 function roleLabel(role?: string): string {
   const r = (role || '').toLowerCase();
@@ -12,13 +15,22 @@ function roleLabel(role?: string): string {
 }
 
 export function Tab_Profile({ setCurrentScreen, showToast }: ScreenProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const name = user?.name || 'HSE Manager';
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
   const signOut = () => {
     try { logout(); } catch { /* ignore */ }
     setCurrentScreen('login');
     showToast?.('Signed out successfully');
+  };
+
+  const openLink = (url: string) => { Linking.openURL(url).catch(() => {}); };
+
+  const handleDeleteAccount = async (password: string) => {
+    await deleteAccount(password);
+    setCurrentScreen('login');
+    showToast?.('Account deleted');
   };
 
   const info = [
@@ -85,14 +97,43 @@ export function Tab_Profile({ setCurrentScreen, showToast }: ScreenProps) {
           })}
         </View>
 
+        {/* Legal */}
+        <Text style={styles.sectionTitle}>Legal</Text>
+        <View style={styles.menu}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => openLink(LEGAL_LINKS.TERMS)} activeOpacity={0.8}>
+            <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}><FileText size={20} color="#004AC6" /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Terms of Service</Text>
+            </View>
+            <ChevronRight size={18} color="#A0AEC0" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={() => openLink(LEGAL_LINKS.PRIVACY)} activeOpacity={0.8}>
+            <View style={[styles.actionIcon, { backgroundColor: '#F0FDF4' }]}><ShieldCheck size={20} color="#16A34A" /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Privacy Policy</Text>
+            </View>
+            <ChevronRight size={18} color="#A0AEC0" />
+          </TouchableOpacity>
+        </View>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={signOut} activeOpacity={0.85}>
           <LogOut size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Sign Out from HSE Portal</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)} activeOpacity={0.85}>
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <Text style={styles.versionText}>SafetyCore HSE v2.4.1 (Build 1804)</Text>
       </ScrollView>
+
+      <DeleteAccountModal
+        visible={deleteModalVisible}
+        onCancel={() => setDeleteModalVisible(false)}
+        onConfirm={handleDeleteAccount}
+      />
     </View>
   );
 }
@@ -133,5 +174,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, borderRadius: 16, paddingVertical: 14, marginBottom: 32,
   },
   logoutText: { fontSize: 13, fontWeight: '700', color: '#EF4444' },
+  deleteAccountBtn: { alignItems: 'center', justifyContent: 'center', marginBottom: 16, paddingVertical: 6 },
+  deleteAccountText: { fontSize: 12, fontWeight: '600', color: '#A8AFBF', textDecorationLine: 'underline' },
   versionText: { fontSize: 11, color: '#A8AFBF', textAlign: 'center' },
 });

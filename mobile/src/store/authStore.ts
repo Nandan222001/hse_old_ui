@@ -9,6 +9,7 @@ interface AuthStore extends AuthState {
   login: (data: LoginRequest) => Promise<void>;
   changePassword: (payload: ChangePasswordRequest) => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: (password: string) => Promise<void>;
   restoreSession: () => Promise<void>;
   clearError: () => void;
 }
@@ -77,6 +78,20 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       await authService.logout();
     } finally {
       set({ user: null, accessToken: null, isAuthenticated: false, selectedRole: null, mustChangePassword: false, isLoading: false });
+    }
+  },
+
+  deleteAccount: async (password) => {
+    set({ isLoading: true, error: null });
+    try {
+      await authService.deleteAccount(password);
+      set({ user: null, accessToken: null, isAuthenticated: false, selectedRole: null, mustChangePassword: false, isLoading: false });
+    } catch (err: any) {
+      set({
+        error: err?.response?.data?.detail ?? 'Could not delete account',
+        isLoading: false,
+      });
+      throw err;
     }
   },
 

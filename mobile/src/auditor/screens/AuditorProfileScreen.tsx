@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { authService, EmployeeProfile } from '../../worker/services/authService';
+import { DeleteAccountModal } from '../../components/DeleteAccountModal';
+import { LEGAL_LINKS } from '../../constants/config';
 
 export function AuditorProfileScreen({ navigation }: any) {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const [profile, setProfile] = useState<EmployeeProfile | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -23,6 +26,8 @@ export function AuditorProfileScreen({ navigation }: any) {
   const dept = profile?.department_name || user?.department || '—';
   const email = profile?.email || '—';
   const initials = name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+
+  const openLink = (url: string) => { Linking.openURL(url).catch(() => {}); };
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Sign out of the audit portal?', [
@@ -56,12 +61,29 @@ export function AuditorProfileScreen({ navigation }: any) {
           <Row icon="document-text-outline" tint="#16A34A" bg="#F0FDF4" label="Audit History" onPress={() => navigation.navigate('Audits')} />
         </View>
 
+        <Text style={styles.section}>Legal</Text>
+        <View style={styles.menu}>
+          <Row icon="document-text-outline" tint="#2563EB" bg="#EFF6FF" label="Terms of Service" onPress={() => openLink(LEGAL_LINKS.TERMS)} />
+          <Row icon="shield-checkmark-outline" tint="#16A34A" bg="#F0FDF4" label="Privacy Policy" onPress={() => openLink(LEGAL_LINKS.PRIVACY)} />
+        </View>
+
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
           <Ionicons name="log-out-outline" size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)} activeOpacity={0.85}>
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <Text style={styles.version}>HSE Audit Pro v4.8.2 (Build 1804)</Text>
       </ScrollView>
+
+      <DeleteAccountModal
+        visible={deleteModalVisible}
+        onCancel={() => setDeleteModalVisible(false)}
+        onConfirm={deleteAccount}
+      />
     </SafeAreaView>
   );
 }
@@ -114,5 +136,7 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#EF4444', borderRadius: 14, height: 50, marginTop: 24 },
   logoutText: { fontSize: 14, color: '#EF4444', fontWeight: '800' },
+  deleteAccountBtn: { alignItems: 'center', justifyContent: 'center', marginTop: 14, paddingVertical: 6 },
+  deleteAccountText: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textDecorationLine: 'underline' },
   version: { textAlign: 'center', fontSize: 11, color: '#94A3B8', marginTop: 18 },
 });

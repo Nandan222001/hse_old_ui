@@ -24,3 +24,8 @@ export const STORAGE_KEYS = {
   REFRESH_TOKEN: 'sup_refresh_token',
   USER: 'sup_user',
 } as const;
+
+export const LEGAL_LINKS = {
+  TERMS: 'https://ehsera.com/terms',
+  PRIVACY: 'https://ehsera.com/privacy',
+} as const;

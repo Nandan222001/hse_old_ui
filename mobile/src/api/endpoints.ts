@@ -3,6 +3,7 @@ export const ENDPOINTS = {
     LOGIN: '/auth/login',
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/me',
+    DELETE_ACCOUNT: '/auth/me',
     CHANGE_PASSWORD: '/auth/change-password',
   },
   PERMITS: {

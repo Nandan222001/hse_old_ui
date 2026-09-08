@@ -5,6 +5,7 @@ export const ENDPOINTS = {
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/employee/refresh',
     PROFILE: '/auth/me',
+    DELETE_ACCOUNT: '/auth/me',
     CHANGE_PASSWORD: '/auth/change-password',
     /** Full employee record for the signed-in user (role, department, manager, dates). */
     MY_EMPLOYEE_PROFILE: '/employees/me',

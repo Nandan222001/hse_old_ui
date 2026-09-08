@@ -106,6 +106,14 @@ export const authService = {
     }
   },
 
+  /** Permanently deletes the signed-in account. Backend re-checks the password.
+   *  Unlike logout, tokens are cleared only on success — a wrong-password
+   *  rejection must leave the session intact so the user can retry. */
+  async deleteAccount(password: string): Promise<void> {
+    await apiClient.delete(ENDPOINTS.AUTH.DELETE_ACCOUNT, { data: { password } });
+    await TokenStorage.clearAll();
+  },
+
   async getProfile(): Promise<User> {
     const { data } = await apiClient.get<User>(ENDPOINTS.AUTH.PROFILE);
     return data;

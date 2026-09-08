@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
+from app.core.dependencies import get_current_user, CurrentUser
 from app.models.user import User
 from app.models.app_role import AppRole
-from app.schemas.auth import LoginRequest, TokenData, TokenResponse
+from app.schemas.auth import DeleteAccountRequest, LoginRequest, TokenData, TokenResponse
+from app.services.audit_log import record_audit, resolve_employee_id
 from app.services.auth_service import verify_password, create_access_token, decode_access_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -102,6 +104,38 @@ def get_me(request: Request):
         "role": payload.get("role"),
         "role_level": payload.get("role_level"),
     }
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT, summary="Self: permanently delete my own account")
+def delete_my_account(
+    payload: DeleteAccountRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Self-service account deletion — requires re-entering the password.
+    Mirrors org_users.remove_user's admin-block, but here the actor is the
+    account holder themselves rather than an org admin."""
+    user = db.query(User).filter(User.id == current_user.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    role = db.query(AppRole).filter(AppRole.id == user.app_role_id).first()
+    if role and role.name in ("admin", "superadmin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin accounts cannot self-delete — ask another admin to remove this account",
+        )
+
+    record_audit(
+        db, user.organisation_id, resolve_employee_id(db, user.id),
+        action="delete", module="User Account", record_id=user.id,
+        previous_value=user.email, new_value="self-deleted",
+    )
+    db.delete(user)
+    db.commit()
 
 
 @router.post("/employee/refresh")

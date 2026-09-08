@@ -165,6 +165,13 @@ export const authService = {
     await WorkerTokenStorage.clearAll();
   },
 
+  /** Permanently deletes the signed-in account. Backend re-checks the password. */
+  async deleteAccount(password: string): Promise<void> {
+    await apiClient.delete(ENDPOINTS.AUTH.DELETE_ACCOUNT, { data: { password } });
+    await TokenStorage.clearAll();
+    await WorkerTokenStorage.clearAll();
+  },
+
   async getProfile(): Promise<User> {
     const res = await apiClient.get<User>(ENDPOINTS.AUTH.PROFILE);
     return res.data;

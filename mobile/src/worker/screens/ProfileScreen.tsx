@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Image, TextInput,
+  Alert, ActivityIndicator, Image, TextInput, Linking,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
 import { Colors } from '../theme/colors';
@@ -11,11 +11,14 @@ import { useProfilePhoto } from '../hooks/useProfilePhoto';
 import { Toast, ToastKind } from '../components/feedback/Toast';
 import { authService, EmployeeProfile } from '../services/authService';
 import { sosService } from '../services/sosService';
+import { DeleteAccountModal } from '../../components/DeleteAccountModal';
+import { LEGAL_LINKS } from '../../constants/config';
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
   const [sosLoading, setSosLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
   const { change: changePhoto, uploading } = useProfilePhoto();
   const [photo, setPhoto] = useState<string | null>(null);
@@ -85,12 +88,17 @@ export default function ProfileScreen({ navigation }: any) {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          navigation.replace('Login');
-        },
+        onPress: logout,
       },
     ]);
+  };
+
+  const handleDeleteAccount = async (password: string) => {
+    await deleteAccount(password);
+  };
+
+  const openLink = (url: string) => {
+    Linking.openURL(url).catch(() => setToast({ msg: 'Could not open link', kind: 'error' }));
   };
 
   return (
@@ -312,6 +320,25 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
+        {/* Legal */}
+        <View style={styles.card}>
+          <Text style={[styles.cardSectionTitle, { marginBottom: 12 }]}>Legal</Text>
+          <TouchableOpacity style={styles.legalRow} onPress={() => openLink(LEGAL_LINKS.TERMS)} activeOpacity={0.7}>
+            <View style={styles.inlineBtnContent}>
+              <Icon name="file-text" size={16} color="#475569" style={styles.inlineBtnIcon} />
+              <Text style={styles.legalRowText}>Terms of Service</Text>
+            </View>
+            <Icon name="external-link" size={15} color="#94A3B8" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.legalRow, { borderBottomWidth: 0 }]} onPress={() => openLink(LEGAL_LINKS.PRIVACY)} activeOpacity={0.7}>
+            <View style={styles.inlineBtnContent}>
+              <Icon name="shield" size={16} color="#475569" style={styles.inlineBtnIcon} />
+              <Text style={styles.legalRowText}>Privacy Policy</Text>
+            </View>
+            <Icon name="external-link" size={15} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
         {/* Settings / Logs */}
         <TouchableOpacity style={styles.changePasswordBtn} onPress={() => navigation.navigate('ChangePassword')}>
           <View style={styles.inlineBtnContent}>
@@ -324,6 +351,10 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModalVisible(true)}>
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <View style={{ height: 60 }} />
       </ScrollView>
 
@@ -331,6 +362,12 @@ export default function ProfileScreen({ navigation }: any) {
         message={toast?.msg ?? null}
         kind={toast?.kind}
         onHide={() => setToast(null)}
+      />
+
+      <DeleteAccountModal
+        visible={deleteModalVisible}
+        onCancel={() => setDeleteModalVisible(false)}
+        onConfirm={handleDeleteAccount}
       />
     </ScreenLayout>
   );
@@ -747,5 +784,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#EF4444',
     fontWeight: '700',
+  },
+  deleteAccountBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 40,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  legalRowText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
   },
 });

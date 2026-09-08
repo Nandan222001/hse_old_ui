@@ -1,17 +1,22 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { Avatar } from '../components';
+import { DeleteAccountModal } from '../components/DeleteAccountModal';
+import { LEGAL_LINKS } from '../constants/config';
 
 interface Props {
   navigation: any;
 }
 
 export function ProfileScreen({ navigation }: Props) {
-  const { user, logout } = useAuth();
+  const { user, logout, deleteAccount } = useAuth();
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+
+  const openLink = (url: string) => { Linking.openURL(url).catch(() => {}); };
 
   const handleLogout = () => {
     Alert.alert(
@@ -129,6 +134,38 @@ export function ProfileScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
+        {/* Legal */}
+        <Text style={styles.sectionTitle}>Legal</Text>
+        <View style={styles.menu}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => openLink(LEGAL_LINKS.TERMS)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#EEF2FF' }]}>
+                <Ionicons name="document-text-outline" size={20} color="#004AC6" />
+              </View>
+              <Text style={styles.menuName}>Terms of Service</Text>
+            </View>
+            <Ionicons name="open-outline" size={17} color={Colors.textLight} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuItem, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}
+            onPress={() => openLink(LEGAL_LINKS.PRIVACY)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#16A34A" />
+              </View>
+              <Text style={styles.menuName}>Privacy Policy</Text>
+            </View>
+            <Ionicons name="open-outline" size={17} color={Colors.textLight} />
+          </TouchableOpacity>
+        </View>
+
         {/* Logout Button */}
         <TouchableOpacity
           style={styles.logoutBtn}
@@ -139,9 +176,24 @@ export function ProfileScreen({ navigation }: Props) {
           <Text style={styles.logoutText}>Sign Out from Site Portal</Text>
         </TouchableOpacity>
 
+        {/* Delete Account */}
+        <TouchableOpacity
+          style={styles.deleteAccountBtn}
+          onPress={() => setDeleteModalVisible(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         {/* App Version */}
         <Text style={styles.versionText}>SafetyCore HSE v2.4.1 (Build 1804)</Text>
       </ScrollView>
+
+      <DeleteAccountModal
+        visible={deleteModalVisible}
+        onCancel={() => setDeleteModalVisible(false)}
+        onConfirm={deleteAccount}
+      />
     </SafeAreaView>
   );
 }
@@ -261,6 +313,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#EF4444',
+  },
+  deleteAccountBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    paddingVertical: 6,
+  },
+  deleteAccountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#A8AFBF',
+    textDecorationLine: 'underline',
   },
   versionText: {
     fontSize: 11,
