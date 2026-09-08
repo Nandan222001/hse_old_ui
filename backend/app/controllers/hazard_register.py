@@ -67,7 +67,7 @@ from app.controllers.workflow_common import (
 from app.models.hazard import Hazard
 from app.utils import report_media
 from app.services import risk_assessment as risk_assessment_svc
-from app.services import event_assessment, hazard_next_action, workflow_stages
+from app.services import department_scope, event_assessment, hazard_next_action, workflow_stages
 from app.schemas.hazard_register import (
     HIERARCHY,
     HazardAssess,

@@ -99,6 +99,10 @@ ADMIN_ROLES = {"admin", "superadmin", "director", "isms_director"}
 ASSIGNER_ROLES = SAFETY_MANAGER_ROLES | ADMIN_ROLES
 SUPERVISOR_ROLES = {"supervisor"}
 
+# audit_scope column (migration 062) is VARCHAR(30) holding one of these codes,
+# never free text.
+AUDIT_SCOPES = {"inspection", "full_audit", "re_audit"}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Checklist templates
@@ -656,6 +660,15 @@ def create_audit(
     trigger = payload.trigger_type or "scheduled_programme"
     if trigger not in audit_programme.TRIGGERS:
         raise HTTPException(status_code=400, detail=f"Unknown trigger '{trigger}'")
+
+    # audit_scope is a short code, not free text — the column is VARCHAR(30)
+    # (migration 062). Reject anything else here rather than letting a caller's
+    # sentence reach the DB and fail as an unhandled 500 on insert.
+    if payload.audit_scope and payload.audit_scope not in AUDIT_SCOPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown audit_scope '{payload.audit_scope}' — use one of {sorted(AUDIT_SCOPES)}",
+        )
 
     band_row = None
     if payload.site_id:
