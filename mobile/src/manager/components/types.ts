@@ -23,7 +23,8 @@ export type ManagerScreen =
   | "human_readiness"
   | "contractor_oversight"
   | "transport_oversight"
-  | "ai_governance";
+  | "ai_governance"
+  | "training";
 
 export interface ScreenProps {
   currentScreen: ManagerScreen;

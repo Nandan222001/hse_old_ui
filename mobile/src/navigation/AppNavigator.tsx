@@ -60,6 +60,8 @@ import TeamSpsScreen from '../screens/TeamSpsScreen';
 import { AppSettingsScreen } from '../screens/AppSettingsScreen';
 import { ReportsAnalyticsScreen } from '../screens/ReportsAnalyticsScreen';
 import { SiteMonitoringOverviewScreen } from '../screens/SiteMonitoringOverviewScreen';
+import { TrainingScreen } from '../screens/TrainingScreen';
+import { TrainingDetailScreen } from '../screens/TrainingDetailScreen';
 
 // ==========================================
 // 3. WORKER SCREENS
@@ -334,6 +336,8 @@ export function AppNavigator() {
               <Stack.Screen name="ContractorSiteControl" component={ContractorSiteControlScreen} />
               <Stack.Screen name="CheckInMonitor" component={CheckInMonitorScreen} />
               <Stack.Screen name="TeamSps" component={TeamSpsScreen} />
+              <Stack.Screen name="Training" component={TrainingScreen} />
+              <Stack.Screen name="TrainingDetail" component={TrainingDetailScreen} />
             </>
           ) : (
             // ==========================================

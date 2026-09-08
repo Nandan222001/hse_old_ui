@@ -47,6 +47,7 @@ import { OrgSetupPage } from "./pages/OrgSetupPage";
 import { OrgSetupWizardPage } from "./pages/OrgSetupWizardPage";
 import { DataManagementPage } from "./pages/DataManagementPage";
 import { VendorsPage } from "./pages/VendorsPage";
+import { TrainingPage } from "./pages/TrainingPage";
 import { SuperAdminInvitationsPage } from "./pages/SuperAdminInvitationsPage";
 import { SuperAdminTenantsPage } from "./pages/SuperAdminTenantsPage";
 import { SuperAdminUsersPage } from "./pages/SuperAdminUsersPage";
@@ -250,6 +251,7 @@ export const router = createBrowserRouter([
       { path: "org-setup-wizard", Component: OrgSetupWizardPage },
       { path: "data-management", Component: DataManagementPage },
       { path: "vendors", Component: VendorsPage },
+      { path: "training", Component: TrainingPage },
     ],
   },
   {

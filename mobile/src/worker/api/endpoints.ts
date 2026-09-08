@@ -127,11 +127,10 @@ export const ENDPOINTS = {
     SUBMISSIONS: '/checklists/submissions',
   },
 
-  // Training
+  // Training — admin-curated videos targeted at the caller's own role.
   TRAINING: {
-    LIST: '/worker/training',
-    DETAIL: (id: string) => `/worker/training/${id}`,
-    ASSESSMENT: (id: string) => `/worker/training/${id}/assessment`,
+    LIST: '/training-videos/mine',
+    COMMENTS: (id: number) => `/training-videos/${id}/comments`,
   },
 
   // Notifications

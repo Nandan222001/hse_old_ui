@@ -968,48 +968,5 @@ def list_notifications(
 
     return {"success": True, "data": {"items": items, "total": len(items)}}
 
-
-# ─── Training Endpoints ────────────────────────────────────────────────────────
-
-@router.get("/training")
-def list_training(
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
-) -> dict:
-    rows = db.execute(
-        text("SELECT * FROM training_programs WHERE organisation_id = :org_id"),
-        {"org_id": current_user.org_id}
-    ).mappings().all()
-
-    items = []
-    for r in rows:
-        # training_programs has no free-text description column; build a short
-        # subtitle from frequency + certification so the UI has something real.
-        parts = [str(r["frequency"]) if r["frequency"] else None,
-                 f"Certification: {r['certification']}" if r["certification"] else None]
-        description = " • ".join([p for p in parts if p])
-        estimated_minutes = int(float(r["duration_hours"]) * 60) if r["duration_hours"] else 15
-        items.append({
-            "id": str(r["id"]),
-            "title": r["training_name"] or "Safety Module",
-            "description": description,
-            "estimated_minutes": estimated_minutes,
-            "xp_reward": 50,
-            "is_mandatory": True,
-            "status": "pending"
-        })
-
-    if not items:
-        items = [
-            {
-                "id": "tr1",
-                "title": "Heat Stress Prevention",
-                "description": "Essential safety protocols for working in high-temperature environments.",
-                "estimated_minutes": 15,
-                "xp_reward": 50,
-                "is_mandatory": True,
-                "status": "pending"
-            }
-        ]
-
-    return {"success": True, "data": {"items": items, "total": len(items)}}
+# Training is now served by app.controllers.training_video (GET /training-videos/mine),
+# which replaces this stub with real videos, descriptions, and per-role targeting.

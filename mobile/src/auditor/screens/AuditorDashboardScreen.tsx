@@ -233,6 +233,7 @@ export function AuditorDashboardScreen({ navigation }: any) {
               { r: 'CompetenceEvidenceAudit', i: 'school', t: 'Competence', s: 'WF-07' },
               { r: 'ContractorAudit', i: 'business', t: 'Contractor', s: 'WF-09' },
               { r: 'TransportVehicleAudit', i: 'car', t: 'Vehicle', s: 'WF-10' },
+              { r: 'Training', i: 'play-circle', t: 'Training', s: 'Safety videos' },
             ].map((x) => (
               <TouchableOpacity key={x.r} style={styles.quick} onPress={() => navigation.navigate(x.r)} activeOpacity={0.9}>
                 <View style={styles.quickIcon}><Ionicons name={x.i as any} size={18} color={C.brand} /></View>

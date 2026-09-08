@@ -29,6 +29,8 @@ import GateOverrideAuditScreen from './screens/GateOverrideAuditScreen';
 import DataIntegrityScreen from './screens/DataIntegrityScreen';
 import ContractorAuditScreen from './screens/ContractorAuditScreen';
 import TransportVehicleAuditScreen from './screens/TransportVehicleAuditScreen';
+import TrainingScreen from './screens/TrainingScreen';
+import TrainingDetailScreen from './screens/TrainingDetailScreen';
 import ChangePasswordScreen from '../worker/screens/ChangePasswordScreen';
 import { AiChatScreen } from '../components/AiAssistant';
 
@@ -104,6 +106,8 @@ export function AuditorAppRoot() {
       <Stack.Screen name="DataIntegrity" component={DataIntegrityScreen} />
       <Stack.Screen name="ContractorAudit" component={ContractorAuditScreen} />
       <Stack.Screen name="TransportVehicleAudit" component={TransportVehicleAuditScreen} />
+      <Stack.Screen name="Training" component={TrainingScreen} />
+      <Stack.Screen name="TrainingDetail" component={TrainingDetailScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="AiAssistant" component={AiChatScreen} />
     </Stack.Navigator>

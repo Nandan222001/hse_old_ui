@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from "react-router";
-import { BookOpenText, Database, Lightbulb, Settings as SettingsIcon } from "lucide-react";
+import { BookOpenText, Database, Lightbulb, PlayCircle, Settings as SettingsIcon } from "lucide-react";
 
 const FAMILIES = [
   { name: "Settings", icon: SettingsIcon, path: "/settings", prefixes: ["/settings"] },
   { name: "Checklists", icon: BookOpenText, path: "/checklists", prefixes: ["/checklists"] },
   { name: "Data", icon: Database, path: "/data-management", prefixes: ["/data-management"] },
   { name: "Intelligence", icon: Lightbulb, path: "/ai-agent", prefixes: ["/ai-agent"] },
+  { name: "Training", icon: PlayCircle, path: "/training", prefixes: ["/training"] },
 ];
 
 /**

@@ -43,6 +43,25 @@ def require_role(user_role: str, allowed: set, action: str) -> None:
         )
 
 
+def mobile_role_bucket(role: str) -> Optional[str]:
+    """Map a raw org role name to the mobile app's 4-role vocabulary.
+
+    Checked manager-first: "Safety Manager" sits in both SUPERVISOR_ROLES and
+    MANAGER_ROLES, and mobile's normalizeRole() (mobile/src/utils/roles.ts)
+    resolves it to 'manager' — this must agree or a manager's own uploads
+    would silently vanish from their own training feed.
+    """
+    if role_matches(role, MANAGER_ROLES):
+        return "manager"
+    if role_matches(role, SUPERVISOR_ROLES):
+        return "supervisor"
+    if role_matches(role, WORKER_ROLES):
+        return "worker"
+    if role_matches(role, AUDITOR_ROLES):
+        return "auditor"
+    return None
+
+
 def employee_id_for(db: Session, user_id: int) -> Optional[int]:
     row = db.execute(
         text("SELECT employee_id FROM users WHERE id = :uid"), {"uid": user_id}

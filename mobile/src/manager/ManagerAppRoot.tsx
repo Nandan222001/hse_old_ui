@@ -43,6 +43,7 @@ import MgrHumanReadiness from "./components/MgrHumanReadiness";
 import MgrContractorOversight from "./components/MgrContractorOversight";
 import MgrTransportOversight from "./components/MgrTransportOversight";
 import MgrAiGovernance from "./components/MgrAiGovernance";
+import { MgrTraining } from "./components/MgrTraining";
 
 export function ManagerAppRoot() {
   const { logout } = useAuth();
@@ -371,6 +372,8 @@ export function ManagerAppRoot() {
         return <MgrTransportOversight {...sharedProps} />;
       case "ai_governance":
         return <MgrAiGovernance {...sharedProps} />;
+      case "training":
+        return <MgrTraining {...sharedProps} />;
       case "permit_approvals":
         return <PermitApprovalsView {...sharedProps} />;
       case "ai_assistant":

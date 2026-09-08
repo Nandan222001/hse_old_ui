@@ -19,6 +19,7 @@ import {
   Truck,
   BrainCircuit,
   UserPlus,
+  PlayCircle,
 } from "lucide-react-native";
 import type { ScreenProps } from "./types";
 import { useAuth } from "../../hooks/useAuth";
@@ -52,6 +53,7 @@ export function AppContainerView(props: ScreenProps) {
     { label: "Contractor Oversight", desc: "Pre-qualification & scorecards", icon: Building2, color: "#8B5CF6", bg: "#FAF5FF", go: () => setCurrentScreen("contractor_oversight") },
     { label: "Transport & Change", desc: "Journey KPIs & MOC-Lite log", icon: Truck, color: "#0891B2", bg: "#ECFEFF", go: () => setCurrentScreen("transport_oversight") },
     { label: "AI Governance", desc: "PIRS, learning loop, model version", icon: BrainCircuit, color: "#7C3AED", bg: "#F5F3FF", go: () => setCurrentScreen("ai_governance") },
+    { label: "Training", desc: "Safety training videos & discussion", icon: PlayCircle, color: "#0891B2", bg: "#ECFEFF", go: () => setCurrentScreen("training") },
   ];
 
   const openTool = (go: () => void) => { setMenuOpen(false); go(); };

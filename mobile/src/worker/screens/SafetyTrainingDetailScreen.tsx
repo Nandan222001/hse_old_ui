@@ -1,25 +1,35 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Icon } from '../components/display/Icon';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Image, Alert, Platform,
+  TextInput, Linking, ActivityIndicator,
 } from 'react-native';
 import { ScreenLayout } from '../components/layout/ScreenLayout';
-import { Colors } from '../theme/colors';
+import { useTraining } from '../hooks/useTraining';
+import { TrainingCourse } from '../types';
 
 export default function SafetyTrainingDetailScreen({ route, navigation }: any) {
-  const course = route.params?.course;
+  const course: TrainingCourse = route.params?.course;
+  const { comments, isLoadingComments, fetchComments, postComment } = useTraining();
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
 
-  const title = course?.title ?? 'Heat Stress Prevention';
-  const desc = course?.description ?? 'Essential safety protocols for working in high-temperature environments. 15-minute scheduled talk.';
+  useEffect(() => { fetchComments(course.id); }, [course.id]);
 
-  const handleStartAssessment = () => {
-    Alert.alert('Training Completed', 'You have acknowledged and completed this training module.');
+  const submitComment = async () => {
+    const text = draft.trim();
+    if (!text || posting) return;
+    setPosting(true);
+    try {
+      await postComment(course.id, text);
+      setDraft('');
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
     <ScreenLayout bg="#F8FAFC">
-      {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Icon emoji="←" style={styles.headerIcon} />
@@ -31,158 +41,50 @@ export default function SafetyTrainingDetailScreen({ route, navigation }: any) {
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Breadcrumb Row */}
-        <View style={styles.breadcrumbRow}>
-          <Text style={styles.breadcrumbText}>Safety Portal  &gt;  Toolbox Talks</Text>
-          <View style={styles.statusBadge}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>In Progress</Text>
-          </View>
-        </View>
+        <Text style={styles.titleText}>{course.title}</Text>
+        {course.description ? <Text style={styles.descText}>{course.description}</Text> : null}
 
-        {/* Title & Subtitle */}
-        <Text style={styles.titleText}>{title}</Text>
-        <Text style={styles.descText}>{desc}</Text>
-
-        {/* Video Player Card */}
-        <View style={styles.videoCard}>
-          <View style={styles.videoThumbnailContainer}>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?q=80&w=600' }}
-              style={styles.videoThumbnail as any}
-            />
-            {/* Play Button Overlay */}
-            <View style={styles.playBtn}>
-              <Text style={styles.playIcon}>▶</Text>
-            </View>
-            {/* Control Bar Overlay */}
-            <View style={styles.videoControlBar}>
-              <Text style={styles.videoControlTitle}>Training Module 04: Heat Response</Text>
-              <Text style={styles.videoControlTime}>08:42 / 12:00</Text>
-            </View>
-          </View>
-
-          {/* Action Bar */}
-          <View style={styles.videoActionBar}>
-            <TouchableOpacity style={styles.actionBtn}>
-              <Icon emoji="📥" style={styles.actionBtnIcon} />
-              <Text style={styles.actionBtnText}>Download PDF</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn}>
-              <Icon emoji="💬" style={styles.actionBtnIcon} />
-              <Text style={styles.actionBtnText}>Subtitles</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Key Topics Section */}
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Icon emoji="📖" style={styles.keyTopicsTitleIcon} />
-            <Text style={styles.cardSectionTitle}>Key Topics</Text>
-          </View>
-
-          <View style={styles.topicsList}>
-            {/* Topic 1 */}
-            <View style={styles.topicItem}>
-              <View style={styles.numberBox}><Text style={styles.numberText}>01</Text></View>
-              <View style={styles.topicContent}>
-                <Text style={styles.topicTitle}>Acclimatization</Text>
-                <Text style={styles.topicDesc}>Gradually increasing exposure to hot environments over 7-14 days.</Text>
-              </View>
-            </View>
-
-            {/* Topic 2 */}
-            <View style={styles.topicItem}>
-              <View style={styles.numberBox}><Text style={styles.numberText}>02</Text></View>
-              <View style={styles.topicContent}>
-                <Text style={styles.topicTitle}>Hydration Cycle</Text>
-                <Text style={styles.topicDesc}>Drink 1 cup (8 oz) of water every 15-20 minutes, even if not thirsty.</Text>
-              </View>
-            </View>
-
-            {/* Topic 3 */}
-            <View style={styles.topicItem}>
-              <View style={styles.numberBox}><Text style={styles.numberText}>03</Text></View>
-              <View style={styles.topicContent}>
-                <Text style={styles.topicTitle}>Warning Signs</Text>
-                <Text style={styles.topicDesc}>Identify dizziness, heavy sweating, and elevated heart rate immediately.</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Urgent Care Alert */}
-          <View style={styles.urgentCareCard}>
-            <Text style={styles.urgentCareTitle}>* URGENT CARE</Text>
-            <Text style={styles.urgentCareText}>If heat stroke is suspected, call site emergency Ext. 999 immediately.</Text>
-          </View>
-        </View>
-
-        {/* Team Attendance Section */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <View>
-              <Text style={styles.cardSectionTitle}>Team Attendance</Text>
-              <Text style={styles.cardSectionSub}>12 of 14 team members present</Text>
-            </View>
-            <TouchableOpacity style={styles.addMemberBtn}>
-              <Text style={styles.addMemberText}>Add Member</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Attendance Table */}
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableCol, { flex: 1.5 }]}>Employee Name</Text>
-              <Text style={styles.tableCol}>Role</Text>
-              <Text style={[styles.tableCol, { textAlign: 'right' }]}>Verification</Text>
-            </View>
-
-            {/* Row 1 */}
-            <View style={styles.tableRow}>
-              <View style={[styles.tableCol, { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                <Image
-                  source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=100' }}
-                  style={styles.avatar as any}
-                />
-                <Text style={styles.empName}>Marco Rossi</Text>
-              </View>
-              <Text style={styles.tableCellText}>Pipefitter</Text>
-              <Text style={[styles.verificationText, { color: '#15803D' }]}>Facial ID Confirmed</Text>
-            </View>
-
-            {/* Row 2 */}
-            <View style={styles.tableRow}>
-              <View style={[styles.tableCol, { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                <Image
-                  source={{ uri: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=100' }}
-                  style={styles.avatar as any}
-                />
-                <Text style={styles.empName}>Elena Rodriguez</Text>
-              </View>
-              <Text style={styles.tableCellText}>Safety Tech</Text>
-              <Text style={[styles.verificationText, { color: '#2563EB' }]}>Mobile Auth</Text>
-            </View>
-
-            {/* Row 3 */}
-            <View style={styles.tableRow}>
-              <View style={[styles.tableCol, { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                <Image
-                  source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100' }}
-                  style={styles.avatar as any}
-                />
-                <Text style={styles.empName}>James Miller</Text>
-              </View>
-              <Text style={styles.tableCellText}>Electrician</Text>
-              <Text style={[styles.verificationText, { color: '#64748B' }]}>—</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Complete Talk Button */}
-        <TouchableOpacity style={styles.completeBtn} onPress={handleStartAssessment}>
-          <Text style={styles.completeBtnText}>Acknowledge & Complete Talk</Text>
+        <TouchableOpacity style={styles.watchBtn} onPress={() => Linking.openURL(course.video_url)}>
+          <Icon emoji="▶" style={styles.watchIcon} />
+          <Text style={styles.watchBtnText}>Watch Video</Text>
         </TouchableOpacity>
+
+        <View style={styles.card}>
+          <Text style={styles.cardSectionTitle}>Comments ({comments.length})</Text>
+
+          {isLoadingComments ? (
+            <ActivityIndicator color="#2563EB" style={{ marginVertical: 16 }} />
+          ) : comments.length === 0 ? (
+            <Text style={styles.noComments}>Be the first to comment.</Text>
+          ) : (
+            comments.map((c) => (
+              <View key={c.id} style={styles.commentRow}>
+                <Text style={styles.commentAuthor}>{c.author_name ?? 'Anonymous'}</Text>
+                <Text style={styles.commentText}>{c.comment_text}</Text>
+                <Text style={styles.commentTime}>{new Date(c.created_at).toLocaleString()}</Text>
+              </View>
+            ))
+          )}
+
+          <View style={styles.composerRow}>
+            <TextInput
+              style={styles.composerInput}
+              placeholder="Write a comment…"
+              placeholderTextColor="#94A3B8"
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              editable={!posting}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, (!draft.trim() || posting) && styles.sendBtnDisabled]}
+              onPress={submitComment}
+              disabled={!draft.trim() || posting}
+            >
+              {posting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendBtnText}>Post</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -223,39 +125,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  breadcrumbRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  breadcrumbText: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAF5FF',
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#A855F7',
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#A855F7',
-  },
   titleText: {
     fontSize: 22,
     fontWeight: '800',
@@ -269,88 +138,24 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontWeight: '500',
   },
-  videoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  watchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    height: 48,
+    gap: 8,
     marginBottom: 20,
   },
-  videoThumbnailContainer: {
-    width: '100%',
-    height: 180,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  playBtn: {
-    position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    elevation: 4,
-  },
-  playIcon: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    marginLeft: 4,
-  },
-  videoControlBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  videoControlTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  videoControlTime: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#E2E8F0',
-  },
-  videoActionBar: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
-    borderRightWidth: 1,
-    borderRightColor: '#F1F5F9',
-  },
-  actionBtnIcon: {
+  watchIcon: {
     fontSize: 14,
-    color: '#2563EB',
+    color: '#FFFFFF',
   },
-  actionBtnText: {
-    fontSize: 13,
+  watchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
-    color: '#2563EB',
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -360,159 +165,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  keyTopicsTitleIcon: {
-    fontSize: 18,
-    color: '#2563EB',
-  },
   cardSectionTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
+    marginBottom: 12,
   },
-  topicsList: {
-    gap: 14,
-  },
-  topicItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  numberBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numberText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#2563EB',
-  },
-  topicContent: {
-    flex: 1,
-  },
-  topicTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  topicDesc: {
-    fontSize: 12,
-    color: '#475569',
-    marginTop: 2,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
-  urgentCareCard: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 18,
-  },
-  urgentCareTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#EF4444',
-  },
-  urgentCareText: {
-    fontSize: 12,
-    color: '#7F1D1D',
-    fontWeight: '600',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardSectionSub: {
-    fontSize: 12,
+  noComments: {
+    fontSize: 13,
     color: '#64748B',
-    fontWeight: '600',
-    marginTop: 2,
+    fontStyle: 'italic',
   },
-  addMemberBtn: {
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addMemberText: {
-    color: '#2563EB',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  table: {
-    marginTop: 6,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#E2E8F0',
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  tableCol: {
-    flex: 1,
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#64748B',
-    textTransform: 'uppercase',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  commentRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
-  avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  empName: {
-    fontSize: 12,
+  commentAuthor: {
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#0F172A',
   },
-  tableCellText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
+  commentText: {
+    fontSize: 13,
+    color: '#334155',
+    marginTop: 2,
+    lineHeight: 18,
   },
-  verificationText: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'right',
+  commentTime: {
+    fontSize: 10.5,
+    color: '#94A3B8',
+    marginTop: 4,
   },
-  completeBtn: {
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 12,
+  },
+  composerInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13.5,
+    color: '#0F172A',
+  },
+  sendBtn: {
     backgroundColor: '#2563EB',
-    borderRadius: 12,
-    height: 48,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  completeBtnText: {
+  sendBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  sendBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '700',
+    fontSize: 13,
   },
 });

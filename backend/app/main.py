@@ -22,6 +22,7 @@ from app.controllers import (
     role, employee, policy, permit_type, hazard_category,
     hazard, training_program, permit_to_work, incident,
     near_miss, safety_walk, capa_action, shift_schedule,
+    training_video as training_video_controller,
     auth as auth_controller, dashboard as dashboard_controller,
     superadmin as superadmin_controller,
     organisation_setup as organisation_setup_controller,
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(vendor_controller.router, prefix=prefix)
     app.include_router(ai_controller.router, prefix=prefix)
     app.include_router(worker_controller.router, prefix=prefix)
+    app.include_router(training_video_controller.router, prefix=prefix)
     app.include_router(assigned_tasks_controller.router, prefix=prefix)
     app.include_router(team_controller.router, prefix=prefix)
     app.include_router(incident_workflow_controller.router, prefix=prefix)

@@ -240,6 +240,17 @@ export function DashboardScreen({ navigation }: Props) {
 
           <TouchableOpacity
             style={styles.gridCard}
+            onPress={() => navigation.navigate('Training')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.gridIcon, { backgroundColor: '#ECFEFF' }]}>
+              <Ionicons name="play-circle-outline" size={24} color="#0891B2" />
+            </View>
+            <Text style={styles.gridLabel}>Training</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.gridCard}
             onPress={() => navigation.navigate('SessionManagement')}
             activeOpacity={0.8}
           >

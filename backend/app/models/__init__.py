@@ -8,6 +8,7 @@ from app.models.role import Role
 from app.models.site import Site
 from app.models.permit_type import PermitType
 from app.models.training_program import TrainingProgram
+from app.models.training_video import TrainingVideo, TrainingVideoComment
 from app.models.policy import Policy
 from app.models.department import Department
 from app.models.working_station import WorkingStation
@@ -116,7 +117,7 @@ from app.models.emergency import (
 
 __all__ = [
     "Base", "Organisation", "HazardCategory", "Hazard", "Role",
-    "Site", "PermitType", "TrainingProgram", "Policy", "Department",
+    "Site", "PermitType", "TrainingProgram", "TrainingVideo", "TrainingVideoComment", "Policy", "Department",
     "WorkingStation", "Employee", "PermitToWork", "Incident", "NearMiss",
     "UnsafeAct", "RiskReport",
     "SafetyWalk", "CapaAction", "ShiftSchedule", "AppRole", "User",
