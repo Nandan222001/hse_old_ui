@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 CREDENTIALS = {
-    "worker01":     "Worker@123",
-    "supervisor01": "Supervisor@123",
-    "manager01":    "Manager@123",
-    "auditor01":    "Auditor@123",
+    "worker_test":     "Worker@123",
+    "supervisor_test": "Supervisor@123",
+    "manager_test":    "Manager@123",
+    "auditor_test":    "Auditor@123",
 }
 
 DB = dict(

@@ -22,7 +22,7 @@ export function LoginScreen() {
   const { login, isLoading, error, clearError, selectedRole, setSelectedRole } = useAuth();
   // Defaults match the initial role below (supervisor); see the role tabs for
   // the per-role credentials, which mirror backend/migrations/reset_mobile_passwords.py.
-  const [employeeId, setEmployeeId] = useState('supervisor01');
+  const [employeeId, setEmployeeId] = useState('supervisor_test');
   const [password, setPassword] = useState('Supervisor@123');
 
   // Initialize with supervisor if none is selected
@@ -93,16 +93,16 @@ export function LoginScreen() {
                       clearError();
                       // Pre-fill credentials based on selection for fast testing
                       if (role === 'manager') {
-                        setEmployeeId('manager01');
+                        setEmployeeId('manager_test');
                         setPassword('Manager@123');
                       } else if (role === 'supervisor') {
-                        setEmployeeId('supervisor01');
+                        setEmployeeId('supervisor_test');
                         setPassword('Supervisor@123');
                       } else if (role === 'auditor') {
-                        setEmployeeId('auditor01');
+                        setEmployeeId('auditor_test');
                         setPassword('Auditor@123');
                       } else {
-                        setEmployeeId('worker01');
+                        setEmployeeId('worker_test');
                         setPassword('Worker@123');
                       }
                     }}
@@ -117,11 +117,11 @@ export function LoginScreen() {
             </View>
           </View>
 
-          {/* Backend usernames are lowercase (worker01, supervisor01, …), so the
-              field must not auto-capitalize what the user types. */}
+          {/* Backend usernames are lowercase (worker_test, supervisor_test, …), so
+              the field must not auto-capitalize what the user types. */}
           <Input
             label="Employee ID"
-            placeholder="e.g. worker01"
+            placeholder="e.g. worker_test"
             value={employeeId}
             onChangeText={handleEmployeeId}
             autoCapitalize="none"
