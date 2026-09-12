@@ -346,8 +346,19 @@ def org_setup_api_connect(payload: Any = None) -> dict:
     return {"data": {}}
 
 @router.get("/org-setup/step1/template")
-def org_setup_step1_template() -> dict:
-    return {}
+def org_setup_step1_template():
+    """Return a downloadable CSV template for the Organisation details step."""
+    from fastapi.responses import Response
+    header = (
+        "org_id,org_name,country,industry_sector,num_employees,hq_location,"
+        "parent_company,iso_45001_status,regulatory_authority,establishment_date\n"
+    )
+    example = "ORG001,Acme Manufacturing,United Kingdom,Manufacturing,250,London,,Certified,HSE,2010-01-01\n"
+    return Response(
+        content=(header + example).encode(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=org_details_template.csv"},
+    )
 
 @router.get("/org-setup/step2")
 def org_setup_step2_get(db: Session = Depends(get_db)) -> dict:
